@@ -1,0 +1,26 @@
+[functions.telegram-auth-start]
+verify_jwt = false
+
+[functions.telegram-auth-status]
+verify_jwt = false
+
+[functions.telegram-bot-webhook]
+verify_jwt = false
+
+[functions.submit-test-order]
+verify_jwt = true
+
+[functions.kyc-status]
+verify_jwt = true
+
+[functions.upload-kyc-capture]
+verify_jwt = true
+
+[functions.submit-kyc]
+verify_jwt = true
+
+[functions.admin-kyc-documents]
+verify_jwt = true
+
+[functions.review-kyc]
+verify_jwt = true
