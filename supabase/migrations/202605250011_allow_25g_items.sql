@@ -75,7 +75,7 @@ begin
   from jsonb_array_elements(p_items) item
   join public.products product on product.id = (item ->> 'product_id')::uuid and product.published;
   if v_valid_count <> jsonb_array_length(p_items) or v_subtotal is null then raise exception 'ITEM_UNAVAILABLE'; end if;
-  if v_units > 1000 then raise exception 'MAXIMUM_UNITS_SUPPORTED:1000'; end if;
+  if v_units > 10000 then raise exception 'MAXIMUM_UNITS_SUPPORTED:10000'; end if;
 
   if p_scenario_type = 'delivery_italia' then
     select * into v_area from public.service_areas where scenario_type = 'delivery_italia' and active limit 1;

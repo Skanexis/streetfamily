@@ -54,7 +54,7 @@ export function CartDrawer({ open, onClose, cart, removeFromCart, tokens, servic
   }
   const continueDetails = () => {
     const min = scenarioType === 'delivery_italia' ? 500 : selectedAreas.find(area => area.city === city)?.minimumUnits
-    if (totalUnits > 1000) return setError('Sono supportati al massimo 1000 g per ordine.')
+    if (totalUnits > 10000) return setError('Sono supportati al massimo 10000 g per ordine.')
     if (!city.trim()) return setError('Seleziona o inserisci una città.')
     if ((scenarioType !== 'meetup') && !street.trim()) return setError('Inserisci una via.')
     if (min && totalUnits < min) return setError(`Questo servizio richiede almeno ${min} g.`)

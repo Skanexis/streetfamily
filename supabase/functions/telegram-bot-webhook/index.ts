@@ -1,4 +1,4 @@
-import { adminClient, answerTelegramCallbackQuery, envAdminIds, json, publicErrorMessage, sendTelegramMessage, sendTelegramMessageWithOptions, setTelegramMiniAppMenu, sha256 } from '../_shared/clients.ts'
+import { adminClient, answerTelegramCallbackQuery, editTelegramMessage, envAdminIds, json, publicErrorMessage, sendTelegramMessage, sendTelegramMessageWithOptions, setTelegramMiniAppMenu, sha256 } from '../_shared/clients.ts'
 
 interface TelegramUpdate {
   message?: {
@@ -10,6 +10,11 @@ interface TelegramUpdate {
     id: string
     from: { id: number; username?: string; first_name?: string }
     data?: string
+    message?: {
+      chat: { id: number }
+      message_id: number
+      text?: string
+    }
   }
 }
 
@@ -50,6 +55,15 @@ Deno.serve(async req => {
     if (result.error) {
       await answerTelegramCallbackQuery(callback.id, publicErrorMessage(result.error.message, 'Aggiornamento ordine non riuscito.'))
       return json({ ok: true })
+    }
+    const statusText = action === 'accept' ? 'ORDINE ACCETTATO' : 'ORDINE RIFIUTATO'
+    if (callback.message) {
+      const currentText = callback.message.text ?? 'Ordine Street Family'
+      await editTelegramMessage(
+        String(callback.message.chat.id),
+        callback.message.message_id,
+        `${currentText}\n\n${statusText}`,
+      )
     }
     await answerTelegramCallbackQuery(callback.id, action === 'accept' ? 'Ordine accettato.' : 'Ordine rifiutato.')
     return json({ ok: true })

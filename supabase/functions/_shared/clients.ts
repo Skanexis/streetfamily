@@ -77,6 +77,22 @@ export async function answerTelegramCallbackQuery(callbackQueryId: string, text:
   if (!response.ok) throw new Error(`Risposta azione Telegram non riuscita: ${response.status}`)
 }
 
+export async function editTelegramMessage(chatId: string, messageId: number, text: string) {
+  const token = Deno.env.get('TELEGRAM_BOT_TOKEN')
+  if (!token) throw new Error('Token del bot Telegram non configurato')
+  const response = await fetch(`https://api.telegram.org/bot${token}/editMessageText`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      chat_id: chatId,
+      message_id: messageId,
+      text,
+      reply_markup: { inline_keyboard: [] },
+    }),
+  })
+  if (!response.ok) throw new Error(`Aggiornamento messaggio Telegram non riuscito: ${response.status}`)
+}
+
 export async function setTelegramMiniAppMenu(chatId: string, url: string) {
   const token = Deno.env.get('TELEGRAM_BOT_TOKEN')
   if (!token) throw new Error('Token del bot Telegram non configurato')
