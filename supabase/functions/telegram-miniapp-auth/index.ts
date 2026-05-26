@@ -7,7 +7,7 @@ type TelegramUser = {
   photo_url?: string
 }
 
-async function hmac(key: Uint8Array, value: string) {
+async function hmac(key: Uint8Array<ArrayBuffer>, value: string) {
   const cryptoKey = await crypto.subtle.importKey('raw', key, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
   return new Uint8Array(await crypto.subtle.sign('HMAC', cryptoKey, new TextEncoder().encode(value)))
 }
@@ -59,10 +59,11 @@ Deno.serve(async req => {
     const telegramId = String(telegramUser.id)
     const isAdmin = envAdminIds().has(telegramId)
     const db = adminClient()
-    const { data: access } = await db.from('staging_allowlist')
+    const { data: access, error: accessError } = await db.from('staging_allowlist')
       .select('enabled,role')
       .eq('telegram_subject', telegramId)
       .maybeSingle()
+    if (accessError) return json({ error: publicErrorMessage(accessError.message, 'Autorizzazione non riuscita.') }, 500)
     if (access && !access.enabled && !isAdmin) return json({ error: 'Accesso non autorizzato' }, 403)
     if (isAdmin || !access) {
       const { error } = await db.from('staging_allowlist').upsert({
@@ -80,13 +81,35 @@ Deno.serve(async req => {
       first_name: telegramUser.first_name,
       avatar_url: telegramUser.photo_url,
     }
-    const { data: profile } = await db.from('profiles').select('id').eq('telegram_subject', telegramId).maybeSingle()
+    const { data: profile, error: profileError } = await db.from('profiles').select('id').eq('telegram_subject', telegramId).maybeSingle()
+    if (profileError) return json({ error: publicErrorMessage(profileError.message, 'Accesso Telegram non riuscito.') }, 500)
     if (!profile) {
       const created = await db.auth.admin.createUser({ email, email_confirm: true, user_metadata: metadata })
-      if (created.error) return json({ error: publicErrorMessage(created.error.message, 'Creazione account non riuscita.') }, 500)
+      if (created.error && !/already registered|already exists/i.test(created.error.message)) {
+        return json({ error: publicErrorMessage(created.error.message, 'Creazione account non riuscita.') }, 500)
+      }
     }
     const generated = await db.auth.admin.generateLink({ type: 'magiclink', email, options: { data: metadata } })
     if (generated.error) return json({ error: publicErrorMessage(generated.error.message, 'Accesso Telegram non riuscito.') }, 500)
+    if (!profile) {
+      const userId = generated.data.user?.id
+      if (!userId) return json({ error: 'Creazione account non riuscita.' }, 500)
+      const { error: repairProfileError } = await db.from('profiles').upsert({
+        id: userId,
+        telegram_subject: telegramId,
+        username: metadata.username,
+        avatar_url: metadata.avatar_url,
+        role: isAdmin ? 'admin' : access?.role ?? 'user',
+      }, { onConflict: 'id' })
+      if (repairProfileError) {
+        return json({ error: publicErrorMessage(repairProfileError.message, 'Creazione account non riuscita.') }, 500)
+      }
+      const { error: walletError } = await db.from('wallet_balances').upsert({
+        user_id: userId,
+        points: 0,
+      }, { onConflict: 'user_id', ignoreDuplicates: true })
+      if (walletError) return json({ error: publicErrorMessage(walletError.message, 'Creazione account non riuscita.') }, 500)
+    }
     return json({ tokenHash: generated.data.properties.hashed_token, isAdmin })
   } catch (caught) {
     return json({ error: publicErrorMessage(caught, 'Autorizzazione Telegram non riuscita.') }, 401)

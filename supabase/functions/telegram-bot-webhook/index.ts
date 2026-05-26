@@ -92,11 +92,20 @@ Deno.serve(async req => {
       enabled: true,
       note: isAdmin ? 'TELEGRAM_ADMIN_IDS' : 'Avvio bot Telegram',
     })
-    await Promise.allSettled([setTelegramMiniAppMenu(telegramId, appUrl)])
+    const adminUrl = new URL('/admin', appUrl).toString()
+    await Promise.allSettled([
+      setTelegramMiniAppMenu(
+        telegramId,
+        isAdmin ? adminUrl : appUrl,
+        isAdmin ? 'Pannello admin' : 'Apri Street Family',
+      ),
+    ])
     await sendTelegramMessageWithOptions(
       String(message.chat.id),
-      isAdmin ? 'Accesso amministratore disponibile. Apri la mini applicazione.' : 'Benvenuto. Apri la mini applicazione per accedere.',
-      { inline_keyboard: [[{ text: 'Apri Street Family', web_app: { url: appUrl } }]] },
+      isAdmin ? 'Accesso amministratore disponibile.' : 'Benvenuto. Apri Street Family per accedere.',
+      isAdmin
+        ? { inline_keyboard: [[{ text: 'Pannello amministrazione', web_app: { url: adminUrl } }], [{ text: 'Apri Street Family', web_app: { url: appUrl } }]] }
+        : { inline_keyboard: [[{ text: 'Apri Street Family', web_app: { url: appUrl } }]] },
     )
     return json({ ok: true })
   }
@@ -145,6 +154,16 @@ Deno.serve(async req => {
     auth_token_hash: authTokenHash,
     confirmed_at: new Date().toISOString(),
   }).eq('id', challenge.id)
-  await sendTelegramMessage(String(message.chat.id), isAdmin ? 'Accesso amministratore confermato. Torna al sito per aprire il pannello.' : 'Accesso confermato. Torna al sito.')
+  if (isAdmin) {
+    const appUrl = Deno.env.get('TELEGRAM_MINI_APP_URL')
+    const adminUrl = appUrl ? new URL('/admin', appUrl).toString() : null
+    await sendTelegramMessageWithOptions(
+      String(message.chat.id),
+      'Accesso amministratore confermato.',
+      adminUrl ? { inline_keyboard: [[{ text: 'Pannello amministrazione', web_app: { url: adminUrl } }]] } : undefined,
+    )
+  } else {
+    await sendTelegramMessage(String(message.chat.id), 'Accesso confermato. Torna al sito.')
+  }
   return json({ ok: true })
 })

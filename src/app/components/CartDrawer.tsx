@@ -95,10 +95,35 @@ export function CartDrawer({ open, onClose, cart, removeFromCart, tokens, servic
               {scenarios.map(({ key, label, Icon }) => <button key={key} onClick={() => chooseScenario(key)} className="p-5 flex gap-4 text-left" style={panel}><Icon style={{ color: '#D7FE55' }} /><div><strong>{label}</strong><ServiceMinimum service={key} /></div></button>)}
             </div>}
             {step === 'details' && <div className="flex flex-col gap-4">
-              <label style={muted}>Città</label>
+              <div>
+                <div style={muted}>Città</div>
+                {scenarioType !== 'delivery_italia' && <p style={{ ...muted, marginTop: 5 }}>Scegli la zona disponibile per questo servizio.</p>}
+              </div>
               {scenarioType === 'delivery_italia'
                 ? <input value={city} onChange={e => setCity(e.target.value)} placeholder="Città" style={input} />
-                : <select value={city} onChange={e => setCity(e.target.value)} style={input}><option value="">Seleziona città</option>{selectedAreas.map(area => <option key={area.id} value={area.city}>{area.city} - min {area.minimumUnits} g</option>)}</select>}
+                : <div className="grid grid-cols-2 gap-2">
+                    {selectedAreas.map(area => {
+                      const selected = city === area.city
+                      return (
+                        <button
+                          key={area.id}
+                          type="button"
+                          onClick={() => { setCity(area.city); setError('') }}
+                          className="p-3 text-left rounded-xl min-w-0"
+                          style={{
+                            background: selected ? 'rgba(215,254,85,.09)' : '#11181B',
+                            border: `1px solid ${selected ? '#D7FE55' : 'rgba(126,156,168,.24)'}`,
+                          }}
+                        >
+                          <div className="flex items-center justify-between gap-1">
+                            <strong className="truncate" style={{ fontSize: 14 }}>{area.city}</strong>
+                            {selected && <Check size={15} style={{ flexShrink: 0, color: '#D7FE55' }} />}
+                          </div>
+                          <div style={{ ...muted, marginTop: 4 }}>Minimo {area.minimumUnits} g</div>
+                        </button>
+                      )
+                    })}
+                  </div>}
               {scenarioType !== 'meetup' && <><label style={muted}>Via</label><input value={street} onChange={e => setStreet(e.target.value)} placeholder="Via" style={input} /></>}
               {error && <p style={{ color: '#EF4444' }}>{error}</p>}
             </div>}

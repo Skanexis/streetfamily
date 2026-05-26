@@ -93,7 +93,7 @@ export async function editTelegramMessage(chatId: string, messageId: number, tex
   if (!response.ok) throw new Error(`Aggiornamento messaggio Telegram non riuscito: ${response.status}`)
 }
 
-export async function setTelegramMiniAppMenu(chatId: string, url: string) {
+export async function setTelegramMiniAppMenu(chatId: string, url: string, text = 'Apri Street Family') {
   const token = Deno.env.get('TELEGRAM_BOT_TOKEN')
   if (!token) throw new Error('Token del bot Telegram non configurato')
   const response = await fetch(`https://api.telegram.org/bot${token}/setChatMenuButton`, {
@@ -101,7 +101,7 @@ export async function setTelegramMiniAppMenu(chatId: string, url: string) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       chat_id: chatId,
-      menu_button: { type: 'web_app', text: 'Apri', web_app: { url } },
+      menu_button: { type: 'web_app', text, web_app: { url } },
     }),
   })
   if (!response.ok) throw new Error(`Configurazione menu Telegram non riuscita: ${response.status}`)

@@ -49,6 +49,8 @@ export function LoginPage() {
       Telegram?: { WebApp?: { initData?: string; ready?: () => void; expand?: () => void } }
     }).Telegram?.WebApp
     if (miniAppAttempted || auth.session || !telegram?.initData) return
+    setChallenge(null)
+    setPreparedChallenge(null)
     setMiniAppData(telegram.initData)
     setMiniAppAttempted(true)
     telegram.ready?.()
@@ -97,7 +99,7 @@ export function LoginPage() {
               ? <a href={preparedChallenge.botUrl} target="_blank" rel="noopener noreferrer" onClick={() => { setError(''); setChallenge(preparedChallenge); setPreparedChallenge(null) }} style={{ ...primaryButton, textDecoration: 'none' }}><Send size={17} /> Apri il bot Telegram</a>
               : <button onClick={() => void prepareBotLogin()} disabled={preparingBotLink} style={{ ...primaryButton, opacity: preparingBotLink ? .65 : 1 }}><Send size={17} /> {preparingBotLink ? 'Preparazione...' : 'Riprova'}</button>
         )}
-        {challenge && <p style={{ color: '#D7FE55', marginTop: 16 }}>Conferma nel bot, poi questa pagina accederà automaticamente.</p>}
+        {challenge && !miniAppData && <p style={{ color: '#D7FE55', marginTop: 16 }}>Conferma nel bot, poi questa pagina accederà automaticamente.</p>}
         {error && <p style={{ color: '#F87171', marginTop: 16 }}>{error}</p>}
       </div>
     </Centered>
