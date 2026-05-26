@@ -1,9 +1,9 @@
 import { adminClient, json } from '../_shared/clients.ts'
 
 Deno.serve(async req => {
-  if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
+  if (req.method !== 'POST') return json({ error: 'Metodo non consentito' }, 405)
   const expected = Deno.env.get('KYC_PURGE_SECRET')
-  if (!expected || req.headers.get('X-Kyc-Purge-Secret') !== expected) return json({ error: 'Unauthorized' }, 401)
+  if (!expected || req.headers.get('X-Kyc-Purge-Secret') !== expected) return json({ error: 'Non autorizzato' }, 401)
 
   const db = adminClient()
   const expired = await db.from('kyc_cases')

@@ -30,7 +30,7 @@ export function GamesPage({ user, onSpin, onComplete }: Props) {
       }, 1450)
       await onComplete()
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Spin non disponibile.')
+      setError(caught instanceof Error ? caught.message : 'Estrazione non disponibile.')
     } finally {
       setBusy(false)
     }
@@ -39,11 +39,11 @@ export function GamesPage({ user, onSpin, onComplete }: Props) {
   return (
     <div className="min-h-screen px-4 md:px-8 py-10" style={{ paddingTop: 100 }}>
       <div className="max-w-lg mx-auto">
-        <div className="sf-kicker mb-4">Earned reward</div>
+        <div className="sf-kicker mb-4">Premio guadagnato</div>
         <h1 style={{ fontFamily: 'Space Grotesk', fontWeight: 700, fontSize: 34, marginBottom: 10 }}>Ruota dei premi</h1>
-        <p style={{ color: 'rgba(245,245,245,.58)', marginBottom: 26 }}>Ricevi 1 ticket ogni 5 scenari demo completati. La ruota non consuma gettoni.</p>
+        <p style={{ color: 'rgba(245,245,245,.58)', marginBottom: 26 }}>Ricevi 1 biglietto ogni 5 scenari dimostrativi completati. La ruota non consuma gettoni.</p>
         <div className="flex justify-between p-4 mb-6" style={panel}>
-          <span className="flex items-center gap-2"><Ticket size={17} style={{ color: '#D7FE55' }} /> Ticket disponibili</span>
+          <span className="flex items-center gap-2"><Ticket size={17} style={{ color: '#D7FE55' }} /> Biglietti disponibili</span>
           <strong style={{ color: '#D7FE55', fontFamily: 'Orbitron' }}>{user.spinTickets}</strong>
         </div>
         <div className="p-7 text-center" style={panel}>
@@ -53,7 +53,7 @@ export function GamesPage({ user, onSpin, onComplete }: Props) {
             transition={{ duration: 1.45, ease: [0.12, 0.85, 0.2, 1] }}
             style={{ width: 250, height: 250, background: `conic-gradient(${wheelColors.join(',')})`, border: '5px solid #11181B' }}
           >
-            <div className="rounded-full flex items-center justify-center" style={{ width: 92, height: 92, background: '#080C0E', border: '1px solid rgba(215,254,85,.25)', fontFamily: 'Orbitron', color: '#D7FE55' }}>SPIN</div>
+            <div className="rounded-full flex items-center justify-center" style={{ width: 92, height: 92, background: '#080C0E', border: '1px solid rgba(215,254,85,.25)', fontFamily: 'Orbitron', color: '#D7FE55' }}>GIRA</div>
           </motion.div>
           {result && (
             <div className="p-4 mb-5" style={{ background: 'rgba(215,254,85,.07)', border: '1px solid rgba(215,254,85,.22)' }}>
@@ -63,7 +63,7 @@ export function GamesPage({ user, onSpin, onComplete }: Props) {
             </div>
           )}
           <button disabled={busy || user.spinTickets < 1} onClick={spin} className="w-full py-4" style={{ ...button, opacity: busy || user.spinTickets < 1 ? .45 : 1 }}>
-            {busy ? 'Estrazione...' : user.spinTickets > 0 ? 'Usa 1 ticket' : 'Nessun ticket disponibile'}
+            {busy ? 'Estrazione...' : user.spinTickets > 0 ? 'Usa 1 biglietto' : 'Nessun biglietto disponibile'}
           </button>
           {error && <p style={{ color: '#EF4444', marginTop: 14 }}>{error}</p>}
         </div>

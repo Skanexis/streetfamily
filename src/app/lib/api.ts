@@ -28,6 +28,39 @@ function unwrap<T>(result: { data: T | null; error: { message: string } | null }
   return result.data
 }
 
+async function edgeFunctionError(error: unknown, fallback: string) {
+  const functionError = error as { message?: string; context?: Response }
+  try {
+    if (functionError.context) {
+      const body = await functionError.context.clone().json() as { error?: string }
+      if (body.error) return body.error
+    }
+  } catch {
+    // Usa il messaggio di riserva quando la risposta non contiene JSON leggibile.
+  }
+  return functionError.message ?? fallback
+}
+
+function databaseMessage(message: string) {
+  const labels: Record<string, string> = {
+    FEEDBACK_INVALID: 'La recensione non è valida.',
+    COMPLETED_ORDER_REQUIRED: 'Puoi lasciare una recensione solo dopo una richiesta completata.',
+    SPIN_TICKET_REQUIRED: 'Non hai biglietti disponibili per la ruota.',
+    ONLY_EARNED_WHEEL_AVAILABLE: 'È disponibile solo la ruota dei premi.',
+    'Reward configuration invalid': 'Configurazione premi non valida.',
+  }
+  return labels[message] ?? message
+}
+
+function ledgerReason(reason: string) {
+  return reason
+    .replace(/^Test order /, 'Richiesta di prova ')
+    .replace(/^Daily Bonus$/, 'Bonus giornaliero')
+    .replace(/^Game: /, 'Gioco: ')
+    .replace(/^Admin gettoni:/, 'Amministrazione gettoni:')
+    .replace(/^Ticket ruota guadagnato$/, 'Biglietto ruota guadagnato')
+}
+
 export async function getAccessProfile(): Promise<Profile | null> {
   const db = requireSupabase()
   const { data, error } = await db.rpc('get_my_profile')
@@ -39,7 +72,7 @@ export async function getAccessProfile(): Promise<Profile | null> {
   const p = data as RecordValue
   return {
     id: p.id,
-    name: p.username || 'Street member',
+    name: p.username || 'Membro Street',
     avatarUrl: p.avatar_url,
     role: p.role,
     level: p.level_number,
@@ -86,7 +119,7 @@ export async function getCatalog(): Promise<Product[]> {
       name: row.name,
       category: row.category,
       img: media.find((entry: { type: string }) => entry.type === 'image')?.url ?? row.cover_url ?? '',
-      startingPrice: variants[0]?.price ?? 0,
+      startingPrice: variants.find((variant: { unitAmount: number; available: boolean }) => variant.available && variant.unitAmount >= 50)?.price ?? 0,
       rating: Number(row.rating),
       badge: row.badge,
       reviews: row.review_count,
@@ -162,7 +195,7 @@ export async function getProfileActivity() {
   const ledger: LedgerEntry[] = (ledgerResponse.data ?? []).map((entry: RecordValue) => ({
     id: entry.id,
     createdAt: entry.created_at,
-    reason: entry.reason,
+    reason: ledgerReason(entry.reason),
     tokens: entry.points_delta,
     xp: entry.xp_delta,
   }))
@@ -181,7 +214,9 @@ export async function getProfileActivity() {
 
 export async function playWheel(): Promise<GamePlayResult> {
   const db = requireSupabase()
-  const result = unwrap(await db.rpc('play_game', { p_game_type: 'spin' })) as RecordValue
+  const response = await db.rpc('play_game', { p_game_type: 'spin' })
+  if (response.error) throw new Error(databaseMessage(response.error.message))
+  const result = unwrap(response) as RecordValue
   return {
     playId: result.play_id,
     gameType: 'spin',
@@ -210,7 +245,7 @@ export async function getDemoInfo(): Promise<DemoInfo> {
   const db = requireSupabase()
   const result = unwrap(await db.rpc('get_demo_info')) as RecordValue
   return {
-    disclaimer: result.rules?.disclaimer ?? 'Ambiente demo: nessun pagamento, scambio o fulfillment reale.',
+    disclaimer: result.rules?.disclaimer ?? 'Ambiente dimostrativo: nessun pagamento, scambio o gestione reale degli ordini.',
     instagram: result.links?.instagram ?? '',
     viber: result.links?.viber ?? '',
     signal: result.links?.signal ?? null,
@@ -222,10 +257,12 @@ export async function submitTestOrder(
   selection: ScenarioSelection,
 ): Promise<OrderSubmitResult> {
   const db = requireSupabase()
-  const payload = cart.map((item) => ({ variant_id: item.variantId, quantity: 1 }))
-  const result = unwrap(await db.functions.invoke('submit-test-order', {
+  const payload = cart.map((item) => ({ product_id: item.productId, grams: item.unitAmount }))
+  const response = await db.functions.invoke('submit-test-order', {
     body: { items: payload, ...selection },
-  })) as RecordValue
+  })
+  if (response.error) throw new Error(await edgeFunctionError(response.error, 'Invio richiesta non riuscito.'))
+  const result = unwrap(response) as RecordValue
   return {
     orderId: result.order_id,
     displayId: result.display_id,
@@ -238,14 +275,14 @@ export async function submitTestOrder(
     tokensOnComplete: result.tokens_on_complete,
     xpOnComplete: result.xp_on_complete,
     balance: result.balance,
-    disclaimer: result.disclaimer,
+    disclaimer: 'Ambiente dimostrativo: nessun pagamento, scambio o gestione reale degli ordini.',
   }
 }
 
 export async function submitFeedback(orderId: string, rating: number, message: string) {
   const db = requireSupabase()
   const { error } = await db.rpc('submit_feedback', { p_order_id: orderId, p_rating: rating, p_message: message })
-  if (error) throw new Error(error.message)
+  if (error) throw new Error(databaseMessage(error.message))
 }
 
 export async function getAdminDashboard(): Promise<DashboardData> {
@@ -272,7 +309,9 @@ export async function adminAdjustWallet(userId: string, points: number, xp: numb
 
 export async function getKycStatus(): Promise<KycStatus> {
   const db = requireSupabase()
-  const result = unwrap(await db.functions.invoke('kyc-status', { body: {} })) as RecordValue
+  const response = await db.functions.invoke('kyc-status', { body: {} })
+  if (response.error) throw new Error(await edgeFunctionError(response.error, 'Lettura verifica non riuscita.'))
+  const result = unwrap(response) as RecordValue
   return {
     status: result.status,
     documents: result.documents ?? [],
@@ -288,18 +327,22 @@ export async function uploadKycCapture(documentType: KycDocumentType, blob: Blob
   form.append('capturedAt', new Date().toISOString())
   form.append('capture', blob, `${documentType}.jpg`)
   const { error } = await db.functions.invoke('upload-kyc-capture', { body: form })
-  if (error) throw new Error(error.message)
+  if (error) throw new Error(await edgeFunctionError(error, 'Caricamento documento non riuscito.'))
 }
 
 export async function submitKyc(): Promise<KycStatus> {
   const db = requireSupabase()
-  const result = unwrap(await db.functions.invoke('submit-kyc', { body: {} })) as RecordValue
+  const response = await db.functions.invoke('submit-kyc', { body: {} })
+  if (response.error) throw new Error(await edgeFunctionError(response.error, 'Invio verifica non riuscito.'))
+  const result = unwrap(response) as RecordValue
   return { status: result.status, documents: [], submittedAt: null, rejectionReason: null }
 }
 
 export async function getAdminKycDocuments(userId: string): Promise<KycReviewDocument[]> {
   const db = requireSupabase()
-  const result = unwrap(await db.functions.invoke('admin-kyc-documents', { body: { userId } })) as RecordValue
+  const response = await db.functions.invoke('admin-kyc-documents', { body: { userId } })
+  if (response.error) throw new Error(await edgeFunctionError(response.error, 'Lettura documenti non riuscita.'))
+  const result = unwrap(response) as RecordValue
   return (result.documents ?? []).map((document: RecordValue) => ({
     id: document.id,
     documentType: document.documentType,
@@ -311,5 +354,5 @@ export async function getAdminKycDocuments(userId: string): Promise<KycReviewDoc
 export async function reviewKyc(userId: string, decision: 'approved' | 'rejected', reason = '') {
   const db = requireSupabase()
   const { error } = await db.functions.invoke('review-kyc', { body: { userId, decision, reason } })
-  if (error) throw new Error(error.message)
+  if (error) throw new Error(await edgeFunctionError(error, 'Decisione sulla verifica non riuscita.'))
 }

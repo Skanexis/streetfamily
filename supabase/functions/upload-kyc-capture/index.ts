@@ -6,12 +6,12 @@ const maximumBytes = 10 * 1024 * 1024
 
 Deno.serve(async req => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
-  if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
+  if (req.method !== 'POST') return json({ error: 'Metodo non consentito' }, 405)
   const authHeader = req.headers.get('Authorization')
-  if (!authHeader) return json({ error: 'Unauthorized' }, 401)
+  if (!authHeader) return json({ error: 'Non autorizzato' }, 401)
   const session = userClient(authHeader)
   const { data: { user }, error: authError } = await session.auth.getUser()
-  if (authError || !user) return json({ error: 'Unauthorized' }, 401)
+  if (authError || !user) return json({ error: 'Non autorizzato' }, 401)
   const access = await session.rpc('get_my_kyc_status')
   if (access.error) return json({ error: access.error.message }, 403)
 
@@ -19,12 +19,12 @@ Deno.serve(async req => {
   const documentType = String(form.get('documentType') ?? '')
   const capturedAt = String(form.get('capturedAt') ?? '')
   const capture = form.get('capture')
-  if (!documentTypes.has(documentType) || !(capture instanceof File)) return json({ error: 'Invalid capture' }, 400)
-  if (!mimeTypes.has(capture.type) || capture.size > maximumBytes || capture.size === 0) return json({ error: 'Invalid image file' }, 400)
+  if (!documentTypes.has(documentType) || !(capture instanceof File)) return json({ error: 'Acquisizione non valida' }, 400)
+  if (!mimeTypes.has(capture.type) || capture.size > maximumBytes || capture.size === 0) return json({ error: 'File immagine non valido' }, 400)
 
   const db = adminClient()
   const currentCase = await db.from('kyc_cases').select('status').eq('user_id', user.id).maybeSingle()
-  if (currentCase.data?.status === 'approved') return json({ error: 'KYC gia approvata.' }, 409)
+  if (currentCase.data?.status === 'approved') return json({ error: 'KYC già approvata.' }, 409)
   const previous = await db.from('kyc_documents').select('storage_path').eq('user_id', user.id).eq('document_type', documentType).maybeSingle()
   const path = `${user.id}/${documentType}-${crypto.randomUUID()}.jpg`
   const upload = await db.storage.from('kyc-documents').upload(path, capture, { contentType: capture.type, upsert: false })

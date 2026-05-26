@@ -2,9 +2,9 @@ import { adminClient, corsHeaders, json, sendTelegramMessage, userClient } from 
 
 Deno.serve(async req => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
-  if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
+  if (req.method !== 'POST') return json({ error: 'Metodo non consentito' }, 405)
   const authHeader = req.headers.get('Authorization')
-  if (!authHeader) return json({ error: 'Unauthorized' }, 401)
+  if (!authHeader) return json({ error: 'Non autorizzato' }, 401)
   const { userId, decision, reason } = await req.json()
   const { error } = await userClient(authHeader).rpc('admin_review_kyc', {
     p_user_id: userId,
@@ -29,8 +29,8 @@ Deno.serve(async req => {
   const recipient = await db.from('profiles').select('telegram_subject').eq('id', userId).maybeSingle()
   if (recipient.data?.telegram_subject) {
     const text = decision === 'approved'
-      ? 'Verifica approvata. Ora puoi proseguire con la richiesta demo.'
-      : 'Verifica non approvata. Effettua nuovamente la procedura dal sito demo.'
+      ? 'Verifica approvata. Ora puoi proseguire con la richiesta dimostrativa.'
+      : 'Verifica non approvata. Effettua nuovamente la procedura dal sito.'
     await Promise.allSettled([sendTelegramMessage(recipient.data.telegram_subject, text)])
   }
   return json({ status: decision })

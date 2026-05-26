@@ -11,7 +11,7 @@ import { InfoPage } from './components/InfoPage'
 import { CartDrawer } from './components/CartDrawer'
 import { AdminPage } from './components/AdminPage'
 import { AccessDeniedPage, CallbackPage, LoginPage, RequireAdmin, RequireMember } from './components/AuthPages'
-import { StagingBanner } from './components/StagingBanner'
+
 import { useAuth } from './auth/AuthProvider'
 import { getBroadcasts, getCatalog, getDemoInfo, getKycStatus, getLevels, getProfileActivity, getServiceAreas, playWheel, submitTestOrder } from './lib/api'
 import '../styles/fonts.css'
@@ -45,7 +45,7 @@ function MemberApplication() {
   const [rewards, setRewards] = useState<UserReward[]>([])
   const [feedback, setFeedback] = useState<Feedback[]>([])
   const [serviceAreas, setServiceAreas] = useState<ServiceArea[]>([])
-  const [demoInfo, setDemoInfo] = useState<DemoInfo>({ disclaimer: 'Ambiente demo: nessun pagamento, scambio o fulfillment reale.', instagram: '', viber: '', signal: null })
+  const [demoInfo, setDemoInfo] = useState<DemoInfo>({ disclaimer: 'Ambiente dimostrativo: nessun pagamento, scambio o gestione reale degli ordini.', instagram: '', viber: '', signal: null })
   const [kycStatus, setKycStatus] = useState<KycStatus>({ status: 'not_started', documents: [], submittedAt: null, rejectionReason: null })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -73,7 +73,7 @@ function MemberApplication() {
       setBroadcasts(publishedBroadcasts)
       setError('')
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Errore nel caricamento staging.')
+      setError(caught instanceof Error ? caught.message : 'Errore nel caricamento dati.')
     } finally {
       setLoading(false)
     }
@@ -101,8 +101,8 @@ function MemberApplication() {
   }
   const addToCart = (item: Omit<CartItem, 'id'>) => {
     setCart(previous => {
-      if (previous.some(current => current.variantId === item.variantId)) return previous
-      return [...previous, { ...item, id: `${item.variantId}-${Date.now()}` }]
+      if (previous.some(current => current.productId === item.productId && current.unitAmount === item.unitAmount)) return previous
+      return [...previous, { ...item, id: `${item.productId}-${item.unitAmount}-${Date.now()}` }]
     })
     setCartOpen(true)
   }
@@ -120,10 +120,10 @@ function MemberApplication() {
         broadcasts={broadcasts}
         onBroadcastProduct={(id) => { setSelectedProductId(id); navigate('catalog') }}
       />
-      <StagingBanner />
+
       {error && <div className="fixed z-50 left-4 right-4 rounded-xl p-3" style={{ top: 100, background: '#35161e', color: '#FCA5A5' }}>{error}</div>}
       {loading ? (
-        <div className="flex justify-center" style={{ paddingTop: 140 }}>Caricamento dati test...</div>
+        <div className="flex justify-center" style={{ paddingTop: 140 }}>Caricamento dati...</div>
       ) : (
         <main className="sf-mobile-nav-space" style={{ paddingTop: 28 }}>
           <Routes>

@@ -40,7 +40,7 @@ export function LoginPage() {
     try {
       await auth.loginFromTelegramMiniApp(initData)
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Accesso Mini App non riuscito.')
+      setError(caught instanceof Error ? caught.message : 'Accesso alla mini applicazione non riuscito.')
     }
   }
   useEffect(() => {
@@ -69,7 +69,7 @@ export function LoginPage() {
         }
         if (state === 'denied' || state === 'expired') {
           window.clearInterval(timer)
-          setError(state === 'denied' ? 'Account non autorizzato allo staging.' : 'Richiesta scaduta. Riprova.')
+          setError(state === 'denied' ? 'Account non autorizzato.' : 'Richiesta scaduta. Riprova.')
           setChallenge(null)
         }
       } catch (caught) {
@@ -84,12 +84,11 @@ export function LoginPage() {
     <Centered>
       <div style={card}>
         <div style={{ fontFamily: 'Orbitron', fontWeight: 900, fontSize: 25, marginBottom: 8 }}>STREET FAMILY</div>
-        <div style={{ color: '#D7FE55', fontFamily: 'Orbitron', fontSize: 11, marginBottom: 24 }}>CLOSED TEST MODE</div>
-        <p style={{ color: 'rgba(245,245,245,.65)', marginBottom: 24 }}>{miniAppAttempted ? 'Autorizzazione Telegram Mini App in corso...' : 'Apri il bot Telegram e premi Start per confermare il tuo account. Ambiente staging senza pagamento o fulfillment.'}</p>
+        <p style={{ color: 'rgba(245,245,245,.65)', marginBottom: 24 }}>{miniAppAttempted ? 'Autorizzazione della mini applicazione Telegram in corso...' : 'Apri il bot Telegram e premi Avvia per confermare il tuo account.'}</p>
         {!auth.configured ? (
           <p style={{ color: '#F59E0B' }}>Configura `VITE_SUPABASE_URL` e `VITE_SUPABASE_PUBLISHABLE_KEY` per abilitare l'accesso.</p>
         ) : miniAppData ? (
-          error && <button onClick={() => loginMiniApp(miniAppData)} style={primaryButton}><Send size={17} /> Riprova accesso Mini App</button>
+          error && <button onClick={() => loginMiniApp(miniAppData)} style={primaryButton}><Send size={17} /> Riprova accesso alla mini applicazione</button>
         ) : (
           challenge
             ? <button disabled style={{ ...primaryButton, opacity: .65 }}><Send size={17} /> In attesa del bot...</button>
@@ -97,7 +96,7 @@ export function LoginPage() {
               ? <a href={preparedChallenge.botUrl} target="_blank" rel="noopener noreferrer" onClick={() => { setError(''); setChallenge(preparedChallenge); setPreparedChallenge(null) }} style={{ ...primaryButton, textDecoration: 'none' }}><Send size={17} /> Apri il bot Telegram</a>
               : <button onClick={() => void prepareBotLogin()} disabled={preparingBotLink} style={{ ...primaryButton, opacity: preparingBotLink ? .65 : 1 }}><Send size={17} /> {preparingBotLink ? 'Preparazione...' : 'Riprova'}</button>
         )}
-        {challenge && <p style={{ color: '#D7FE55', marginTop: 16 }}>Conferma nel bot, poi questa pagina accedera automaticamente.</p>}
+        {challenge && <p style={{ color: '#D7FE55', marginTop: 16 }}>Conferma nel bot, poi questa pagina accederà automaticamente.</p>}
         {error && <p style={{ color: '#F87171', marginTop: 16 }}>{error}</p>}
       </div>
     </Centered>
@@ -106,7 +105,7 @@ export function LoginPage() {
 
 export function CallbackPage() {
   const auth = useAuth()
-  if (auth.loading) return <Centered>Verifica accesso staging...</Centered>
+  if (auth.loading) return <Centered>Verifica accesso...</Centered>
   if (auth.denied) return <Navigate to="/access-denied" replace />
   if (auth.profile) return <Navigate to="/" replace />
   return <Navigate to="/login" replace />
@@ -119,7 +118,7 @@ export function AccessDeniedPage() {
       <div style={card}>
         <ShieldAlert size={36} style={{ color: '#F59E0B', marginBottom: 15 }} />
         <h1 style={{ fontFamily: 'Space Grotesk', fontWeight: 700 }}>Accesso non autorizzato</h1>
-        <p style={{ color: 'rgba(245,245,245,.65)', margin: '12px 0 24px' }}>Il tuo account Telegram non e nella allowlist dello staging.</p>
+        <p style={{ color: 'rgba(245,245,245,.65)', margin: '12px 0 24px' }}>Il tuo account Telegram non è autorizzato.</p>
         <button style={primaryButton} onClick={logout}>Esci</button>
       </div>
     </Centered>

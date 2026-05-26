@@ -11,7 +11,7 @@ interface TelegramUpdate {
 Deno.serve(async req => {
   const webhookSecret = Deno.env.get('TELEGRAM_WEBHOOK_SECRET')
   if (!webhookSecret || req.headers.get('X-Telegram-Bot-Api-Secret-Token') !== webhookSecret) {
-    return json({ error: 'Unauthorized' }, 401)
+    return json({ error: 'Non autorizzato' }, 401)
   }
   const update: TelegramUpdate = await req.json()
   const message = update.message
@@ -24,25 +24,25 @@ Deno.serve(async req => {
   if (message.text?.match(/^\/start(?:\s*)$/)) {
     const appUrl = Deno.env.get('TELEGRAM_MINI_APP_URL')
     if (!appUrl) {
-      await sendTelegramMessage(String(message.chat.id), 'Mini App non configurata. Contatta un amministratore.')
+      await sendTelegramMessage(String(message.chat.id), 'Mini applicazione non configurata. Contatta un amministratore.')
       return json({ ok: true })
     }
     const { data: existing } = await db.from('staging_allowlist').select('enabled,role').eq('telegram_subject', telegramId).maybeSingle()
     if (existing?.enabled === false && !isAdmin) {
-      await sendTelegramMessage(String(message.chat.id), 'Il tuo account non e autorizzato allo staging.')
+      await sendTelegramMessage(String(message.chat.id), 'Il tuo account non è autorizzato.')
       return json({ ok: true })
     }
     await db.from('staging_allowlist').upsert({
       telegram_subject: telegramId,
       role: isAdmin ? 'admin' : existing?.role ?? 'user',
       enabled: true,
-      note: isAdmin ? 'TELEGRAM_ADMIN_IDS' : 'Telegram bot start',
+      note: isAdmin ? 'TELEGRAM_ADMIN_IDS' : 'Avvio bot Telegram',
     })
     await Promise.allSettled([setTelegramMiniAppMenu(telegramId, appUrl)])
     await sendTelegramMessageWithOptions(
       String(message.chat.id),
-      isAdmin ? 'Accesso admin disponibile. Apri la Mini App demo.' : 'Benvenuto nello staging demo. Apri la Mini App per accedere.',
-      { inline_keyboard: [[{ text: 'Apri Street Family Demo', web_app: { url: appUrl } }]] },
+      isAdmin ? 'Accesso amministratore disponibile. Apri la mini applicazione.' : 'Benvenuto. Apri la mini applicazione per accedere.',
+      { inline_keyboard: [[{ text: 'Apri Street Family', web_app: { url: appUrl } }]] },
     )
     return json({ ok: true })
   }
@@ -65,18 +65,18 @@ Deno.serve(async req => {
       telegram_subject: telegramId,
       role: isAdmin ? 'admin' : 'user',
       enabled: true,
-      note: isAdmin ? 'TELEGRAM_ADMIN_IDS' : 'Telegram login registration',
+      note: isAdmin ? 'TELEGRAM_ADMIN_IDS' : 'Registrazione accesso Telegram',
     })
   }
   const { data: allowed } = await db.from('staging_allowlist').select('role,enabled').eq('telegram_subject', telegramId).eq('enabled', true).maybeSingle()
   if (!allowed) {
     await db.from('telegram_login_challenges').update({ state: 'denied', telegram_id: telegramId }).eq('id', challenge.id)
-    await sendTelegramMessage(String(message.chat.id), 'Il tuo account non e autorizzato allo staging.')
+    await sendTelegramMessage(String(message.chat.id), 'Il tuo account non è autorizzato.')
     return json({ ok: true })
   }
 
   const email = `telegram_${telegramId}@street-family.invalid`
-  const metadata = { telegram_id: telegramId, username: message.from.username ?? message.from.first_name ?? 'member', first_name: message.from.first_name }
+  const metadata = { telegram_id: telegramId, username: message.from.username ?? message.from.first_name ?? 'membro', first_name: message.from.first_name }
   const { data: profile } = await db.from('profiles').select('id').eq('telegram_subject', telegramId).maybeSingle()
   if (!profile) {
     const created = await db.auth.admin.createUser({ email, email_confirm: true, user_metadata: metadata })
@@ -91,6 +91,6 @@ Deno.serve(async req => {
     auth_token_hash: authTokenHash,
     confirmed_at: new Date().toISOString(),
   }).eq('id', challenge.id)
-  await sendTelegramMessage(String(message.chat.id), isAdmin ? 'Accesso admin confermato. Torna al sito per aprire la dashboard.' : 'Accesso confermato. Torna al sito.')
+  await sendTelegramMessage(String(message.chat.id), isAdmin ? 'Accesso amministratore confermato. Torna al sito per aprire il pannello.' : 'Accesso confermato. Torna al sito.')
   return json({ ok: true })
 })

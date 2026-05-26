@@ -128,7 +128,7 @@ begin
     p_category_id,
     v_slug,
     v_name,
-    'Test catalogue item only. No sale or fulfillment.',
+    'Premium quality product.',
     'NEW',
     false,
     false,

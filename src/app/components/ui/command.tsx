@@ -30,7 +30,7 @@ function Command({
 }
 
 function CommandDialog({
-  title = "Command Palette",
+  title = "Tavolozza comandi",
   description = "Search for a command to run...",
   children,
   ...props

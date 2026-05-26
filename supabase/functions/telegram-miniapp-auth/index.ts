@@ -25,12 +25,12 @@ function constantTimeEqual(left: string, right: string) {
 
 async function validateInitData(initData: string): Promise<TelegramUser> {
   const botToken = Deno.env.get('TELEGRAM_BOT_TOKEN')
-  if (!botToken) throw new Error('TELEGRAM_BOT_TOKEN missing')
+  if (!botToken) throw new Error('Token del bot Telegram non configurato')
   const parameters = new URLSearchParams(initData)
   const receivedHash = parameters.get('hash')
   const userValue = parameters.get('user')
   const authDate = Number(parameters.get('auth_date'))
-  if (!receivedHash || !userValue || !Number.isFinite(authDate)) throw new Error('TELEGRAM_INIT_DATA_INVALID')
+  if (!receivedHash || !userValue || !Number.isFinite(authDate)) throw new Error('Dati Telegram non validi')
   parameters.delete('hash')
   parameters.delete('signature')
   const checkString = Array.from(parameters.entries())
@@ -39,22 +39,22 @@ async function validateInitData(initData: string): Promise<TelegramUser> {
     .join('\n')
   const secret = await hmac(new TextEncoder().encode('WebAppData'), botToken)
   const expectedHash = toHex(await hmac(secret, checkString))
-  if (!constantTimeEqual(receivedHash.toLowerCase(), expectedHash)) throw new Error('TELEGRAM_INIT_DATA_INVALID')
+  if (!constantTimeEqual(receivedHash.toLowerCase(), expectedHash)) throw new Error('Dati Telegram non validi')
   const configuredMaxAge = Number(Deno.env.get('TELEGRAM_INIT_DATA_MAX_AGE_SECONDS') ?? 600)
   const maxAge = Number.isFinite(configuredMaxAge) && configuredMaxAge > 0 ? configuredMaxAge : 600
   const age = Math.floor(Date.now() / 1000) - authDate
-  if (age < -30 || age > maxAge) throw new Error('TELEGRAM_INIT_DATA_EXPIRED')
+  if (age < -30 || age > maxAge) throw new Error('Autorizzazione Telegram scaduta')
   const user = JSON.parse(userValue) as TelegramUser
-  if (!Number.isSafeInteger(user.id) || user.id <= 0) throw new Error('TELEGRAM_INIT_DATA_INVALID')
+  if (!Number.isSafeInteger(user.id) || user.id <= 0) throw new Error('Dati Telegram non validi')
   return user
 }
 
 Deno.serve(async req => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
-  if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
+  if (req.method !== 'POST') return json({ error: 'Metodo non consentito' }, 405)
   try {
     const { initData } = await req.json()
-    if (typeof initData !== 'string' || !initData) return json({ error: 'TELEGRAM_INIT_DATA_REQUIRED' }, 400)
+    if (typeof initData !== 'string' || !initData) return json({ error: 'Dati di autorizzazione Telegram mancanti' }, 400)
     const telegramUser = await validateInitData(initData)
     const telegramId = String(telegramUser.id)
     const isAdmin = envAdminIds().has(telegramId)
@@ -63,20 +63,20 @@ Deno.serve(async req => {
       .select('enabled,role')
       .eq('telegram_subject', telegramId)
       .maybeSingle()
-    if (access && !access.enabled && !isAdmin) return json({ error: 'Staging access denied' }, 403)
+    if (access && !access.enabled && !isAdmin) return json({ error: 'Accesso non autorizzato' }, 403)
     if (isAdmin || !access) {
       const { error } = await db.from('staging_allowlist').upsert({
         telegram_subject: telegramId,
         role: isAdmin ? 'admin' : 'user',
         enabled: true,
-        note: isAdmin ? 'TELEGRAM_ADMIN_IDS' : 'Telegram Mini App registration',
+        note: isAdmin ? 'TELEGRAM_ADMIN_IDS' : 'Registrazione dalla mini applicazione Telegram',
       })
       if (error) return json({ error: error.message }, 500)
     }
     const email = `telegram_${telegramId}@street-family.invalid`
     const metadata = {
       telegram_id: telegramId,
-      username: telegramUser.username ?? telegramUser.first_name ?? 'member',
+      username: telegramUser.username ?? telegramUser.first_name ?? 'membro',
       first_name: telegramUser.first_name,
       avatar_url: telegramUser.photo_url,
     }
@@ -89,6 +89,6 @@ Deno.serve(async req => {
     if (generated.error) return json({ error: generated.error.message }, 500)
     return json({ tokenHash: generated.data.properties.hashed_token, isAdmin })
   } catch (caught) {
-    return json({ error: caught instanceof Error ? caught.message : 'TELEGRAM_AUTH_FAILED' }, 401)
+    return json({ error: caught instanceof Error ? caught.message : 'Autorizzazione Telegram non riuscita' }, 401)
   }
 })

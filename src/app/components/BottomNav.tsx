@@ -9,10 +9,10 @@ interface BottomNavProps {
 }
 
 const NAV_ITEMS = [
-  { label: 'Home', page: 'home' as Page, Icon: Home },
-  { label: 'Shop', page: 'catalog' as Page, Icon: ShoppingBag },
+  { label: 'Inizio', page: 'home' as Page, Icon: Home },
+  { label: 'Catalogo', page: 'catalog' as Page, Icon: ShoppingBag },
   { label: 'Ruota', page: 'games' as Page, Icon: Gamepad2 },
-  { label: 'Profile', page: 'profile' as Page, Icon: User },
+  { label: 'Profilo', page: 'profile' as Page, Icon: User },
 ]
 
 export function BottomNav({ page, navigate, cartCount, onCartOpen }: BottomNavProps) {
@@ -80,7 +80,7 @@ export function BottomNav({ page, navigate, cartCount, onCartOpen }: BottomNavPr
             </span>
           )}
         </div>
-        <span style={{ fontSize: 10, fontFamily: 'Inter, sans-serif' }}>Cart</span>
+        <span style={{ fontSize: 10, fontFamily: 'Inter, sans-serif' }}>Carrello</span>
       </button>
     </nav>
   )

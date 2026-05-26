@@ -6,6 +6,12 @@ import type { Broadcast, DashboardData, KycReviewDocument } from '../data'
 
 type Tab = 'catalog' | 'broadcasts' | 'users' | 'orders' | 'economy' | 'feedback' | 'settings'
 type Row = Record<string, any>
+const orderStatusLabel: Record<string, string> = { submitted: 'Inviata', processing: 'In revisione', completed: 'Completata', cancelled: 'Annullata' }
+const feedbackStatusLabel: Record<string, string> = { pending: 'In moderazione', published: 'Pubblicata', hidden: 'Nascosta' }
+const kycStatusLabel: Record<string, string> = { not_started: 'Non iniziata', collecting: 'In raccolta', submitted: 'Inviata', approved: 'Approvata', rejected: 'Rifiutata' }
+const broadcastStatusLabel: Record<string, string> = { draft: 'Bozza', published: 'Pubblicato', archived: 'Archiviato' }
+const scenarioLabel: Record<string, string> = { meetup: 'Incontro', delivery_zone: 'Consegna in zona', delivery_italia: 'Consegna Italia', delivery: 'Consegna precedente' }
+const documentLabel: Record<string, string> = { document_front: 'Fronte documento', document_back: 'Retro documento', selfie_with_document: 'Selfie con documento' }
 
 export function AdminPage() {
   const [tab, setTab] = useState<Tab>('catalog')
@@ -68,7 +74,7 @@ export function AdminPage() {
         createdAt: broadcast.created_at,
       })))
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Errore admin.')
+      setError(caught instanceof Error ? caught.message : 'Errore amministrazione.')
     }
   }
 
@@ -77,13 +83,13 @@ export function AdminPage() {
   return (
     <AdminFrame>
       <div className="flex justify-between items-center mb-7">
-        <div><div style={{ color: '#D7FE55', fontFamily: 'Orbitron', fontSize: 11 }}>ADMIN / TEST MODE</div><h1 style={heading}>Control Center</h1></div>
+        <div><h1 style={heading}>Centro di controllo</h1></div>
         <button style={smallButton} onClick={load}>Aggiorna</button>
       </div>
       {error && <div className="p-3 mb-5 rounded-xl" style={{ color: '#EF4444', background: 'rgba(239,68,68,.12)' }}>{error}</div>}
       {dashboard && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-7">
-          <Metric label="Allowlist" value={dashboard.allowlistedUsers} />
+          <Metric label="Utenti autorizzati" value={dashboard.allowlistedUsers} />
           <Metric label="Richieste inviate" value={dashboard.submittedOrders} />
           <Metric label="Partite" value={dashboard.gamePlays} />
           <Metric label="Gettoni emessi" value={dashboard.issuedPoints} />
@@ -92,11 +98,11 @@ export function AdminPage() {
       <div className="flex flex-wrap gap-2 mb-6">
         {([
           ['catalog', Package, 'Catalogo'],
-          ['broadcasts', Megaphone, 'Broadcast'],
+          ['broadcasts', Megaphone, 'Notizie'],
           ['users', Users, 'Utenti'],
           ['orders', ClipboardList, 'Richieste'],
           ['economy', Gamepad2, 'Economia'],
-          ['feedback', MessageSquare, 'Feedback'],
+          ['feedback', MessageSquare, 'Recensioni'],
           ['settings', Settings, 'Impostazioni'],
         ] as const).map(([id, Icon, label]) => (
           <button key={id} onClick={() => setTab(id)} style={{ ...smallButton, background: tab === id ? '#7E9CA8' : '#11181B' }}><Icon size={15} /> {label}</button>
@@ -135,7 +141,7 @@ function CatalogAdmin({ products, categories, reload }: { products: Row[]; categ
     const { error } = await db.rpc('admin_create_demo_product', {
       p_name: name,
       p_category_id: values.get('category'),
-      p_prices: Object.fromEntries([50, 100, 300, 500, 1000].map(unit => [unit, Number(values.get(`price${unit}`))])),
+      p_prices: Object.fromEntries([25, 50, 100, 300, 500, 1000].map(grams => [grams, roundPrice(Number(values.get(`price${grams}`)))])),
       p_announce: values.get('announce') === 'on',
     })
     if (error) throw new Error(error.message)
@@ -143,7 +149,7 @@ function CatalogAdmin({ products, categories, reload }: { products: Row[]; categ
     await reload()
   }
   const setPrice = async (variantId: string, price: number) => {
-    const { error } = await requireSupabase().from('product_variants').update({ price }).eq('id', variantId)
+    const { error } = await requireSupabase().from('product_variants').update({ price: roundPrice(price) }).eq('id', variantId)
     if (error) throw new Error(error.message)
     await reload()
   }
@@ -154,34 +160,34 @@ function CatalogAdmin({ products, categories, reload }: { products: Row[]; categ
     await reload()
   }
   return (
-    <Section title="Catalogo demo" note="Soltanto pacchetti in units; nessuna vendita o consegna reale.">
+    <Section title="Catalogo dimostrativo" note="Prezzi a peso con scelta personalizzata in grammi; nessuna vendita o consegna reale.">
       <form onSubmit={addCategory} className="flex gap-2 mb-4">
         <input name="name" required placeholder="Nuova categoria" style={input} />
         <button style={primary}>Categoria</button>
       </form>
       <form onSubmit={addProduct} className="grid md:grid-cols-4 gap-2 mb-6">
-        <input name="name" required placeholder="Demo item" style={input} />
+        <input name="name" required placeholder="Articolo dimostrativo" style={input} />
         <select name="category" required style={input}><option value="">Categoria</option>{categories.map(category => <option value={category.id} key={category.id}>{category.name}</option>)}</select>
-        {[50, 100, 300, 500, 1000].map(unit => <input key={unit} name={`price${unit}`} type="number" min="0" required placeholder={`EUR ${unit} units`} style={input} />)}
+        {[25, 50, 100, 300, 500, 1000].map(grams => <input key={grams} name={`price${grams}`} type="number" min="0" step="5" required placeholder={`EUR ${grams} g`} style={input} />)}
         <button style={primary}>Crea non pubblicato</button>
         <label className="md:col-span-4 flex items-center gap-2" style={muted}>
           <input type="checkbox" name="announce" />
-          Crea news nuovo prodotto come bozza (pubblicala dopo media e pubblicazione catalogo)
+          Crea notizia nuovo prodotto come bozza (pubblicala dopo media e pubblicazione catalogo)
         </label>
       </form>
       {products.map(product => (
         <div key={product.id} className="p-3 mb-2 rounded-xl" style={{ background: 'rgba(245,245,245,.035)' }}>
           <div className="flex gap-2 items-center mb-3">
-            <div className="flex-1"><strong>{product.name}</strong><div style={muted}>{product.categories?.name} {product.badge ? `/ ${product.badge}` : ''}</div></div>
-            <Toggle label="Featured" active={product.featured} onClick={() => toggle(product, 'featured')} />
+            <div className="flex-1"><strong>{product.name}</strong><div style={muted}>{product.categories?.name} {product.badge ? `/ ${product.badge === 'NEW' ? 'NOVITÀ' : 'IN EVIDENZA'}` : ''}</div></div>
+            <Toggle label="In evidenza" active={product.featured} onClick={() => toggle(product, 'featured')} />
             <Toggle label="Pubblicato" active={product.published} onClick={() => toggle(product, 'published')} />
           </div>
           <div className="flex gap-2">
             {(product.product_variants ?? []).filter((variant: Row) => variant.unit_amount).map((variant: Row) => (
               <div key={variant.id} className="flex gap-2 items-center">
-                <span>{variant.unit_amount} units / +{variant.token_award}</span>
-                <input type="number" min="0" defaultValue={variant.price} onBlur={event => setPrice(variant.id, Number(event.target.value))} style={{ ...input, width: 78 }} />
-                <Toggle label="Stock" active={variant.inventory_status?.available ?? false} onClick={() => setAvailability(variant)} />
+                <span>{variant.unit_amount} g / +{variant.token_award}</span>
+                <input type="number" min="0" step="5" defaultValue={roundPrice(Number(variant.price))} onBlur={event => setPrice(variant.id, Number(event.target.value))} style={{ ...input, width: 78 }} />
+                <Toggle label="Disponibilità" active={variant.inventory_status?.available ?? false} onClick={() => setAvailability(variant)} />
               </div>
             ))}
           </div>
@@ -223,19 +229,19 @@ function BroadcastAdmin({ broadcasts, reload }: { broadcasts: Broadcast[]; reloa
     await reload()
   }
   return (
-    <Section title="Broadcast staging" note="Gli annunci pubblicati appaiono nel centro notifiche degli utenti ammessi. Le news prodotto vengono create come bozze.">
+    <Section title="Notizie riservate" note="Gli annunci pubblicati appaiono nel centro notifiche degli utenti ammessi. Le notizie prodotto vengono create come bozze.">
       <form onSubmit={create} className="grid md:grid-cols-2 gap-2 mb-6">
         <input name="title" maxLength={120} required placeholder="Titolo annuncio" style={input} />
         <input name="message" maxLength={500} required placeholder="Messaggio" style={input} />
         <label className="flex items-center gap-2" style={muted}><input type="checkbox" name="publish" /> Pubblica subito</label>
-        <button style={primary}>Crea broadcast</button>
+        <button style={primary}>Crea notizia</button>
       </form>
       {message && <p className="mb-4" style={{ color: '#EF4444' }}>{message}</p>}
       {broadcasts.map(broadcast => (
         <div key={broadcast.id} style={row}>
           <div className="flex-1">
             <strong>{broadcast.title}</strong>
-            <div style={muted}>{broadcast.kind} / {broadcast.status} / {new Date(broadcast.createdAt).toLocaleDateString('it-IT')}</div>
+            <div style={muted}>{broadcast.kind === 'product_new' ? 'Nuovo prodotto' : 'Annuncio'} / {broadcastStatusLabel[broadcast.status]} / {new Date(broadcast.createdAt).toLocaleDateString('it-IT')}</div>
             <div style={{ ...muted, marginTop: 4 }}>{broadcast.message}</div>
           </div>
           {broadcast.status !== 'published' && <button style={smallButton} onClick={() => setStatus(broadcast, 'published')}>Pubblica</button>}
@@ -268,7 +274,7 @@ function MediaUploader({ product, reload }: { product: Row; reload: () => Promis
       }
       await reload()
     } catch (caught) {
-      setUploadError(caught instanceof Error ? caught.message : 'Upload non riuscito.')
+      setUploadError(caught instanceof Error ? caught.message : 'Caricamento non riuscito.')
       await reload()
     } finally {
       event.target.value = ''
@@ -307,7 +313,7 @@ function MediaUploader({ product, reload }: { product: Row; reload: () => Promis
   return (
     <div className="mt-3 pt-3" style={{ borderTop: '1px solid rgba(245,245,245,.08)' }}>
       <div className="flex justify-between items-center mb-2">
-        <span style={muted}>Media: {imageCount}/5 foto, {videoCount}/3 video</span>
+        <span style={muted}>Contenuti: {imageCount}/5 foto, {videoCount}/3 video</span>
         <label style={{ ...smallButton, cursor: 'pointer' }}>
           Carica file
           <input hidden type="file" multiple accept="image/*,video/*" onChange={selectFiles} />
@@ -318,15 +324,15 @@ function MediaUploader({ product, reload }: { product: Row; reload: () => Promis
         const progress = uploads[media.id]?.progress ?? 0
         return (
           <div key={media.id} className="flex gap-2 items-center mb-1" style={{ fontSize: 12 }}>
-            <span className="flex-1">{media.media_type} {media.storage_path?.split('/').pop() ?? 'seed media'}</span>
-            {status === 'uploading' && <span style={{ color: '#7E9CA8' }}>Uploading {progress}%</span>}
-            {status === 'ready' && <span style={{ color: '#D7FE55' }}>Ready</span>}
-            {status === 'failed' && <span style={{ color: '#EF4444' }}>Failed</span>}
+            <span className="flex-1">{media.media_type === 'image' ? 'foto' : 'video'} {media.storage_path?.split('/').pop() ?? 'contenuto iniziale'}</span>
+            {status === 'uploading' && <span style={{ color: '#7E9CA8' }}>Caricamento {progress}%</span>}
+            {status === 'ready' && <span style={{ color: '#D7FE55' }}>Pronto</span>}
+            {status === 'failed' && <span style={{ color: '#EF4444' }}>Non riuscito</span>}
           </div>
         )
       })}
       {Object.entries(uploads).filter(([id]) => !existing.some((media: Row) => media.id === id)).map(([id, state]) => (
-        <div key={id} style={{ color: '#7E9CA8', fontSize: 12 }}>Uploading {state.progress}%</div>
+        <div key={id} style={{ color: '#7E9CA8', fontSize: 12 }}>Caricamento {state.progress}%</div>
       ))}
       {uploadError && <div style={{ color: '#EF4444', fontSize: 12 }}>{uploadError}</div>}
     </div>
@@ -344,8 +350,8 @@ async function xhrStorageUpload(path: string, file: File, onProgress: (value: nu
     request.setRequestHeader('Content-Type', file.type)
     request.setRequestHeader('x-upsert', 'false')
     request.upload.onprogress = progress => progress.lengthComputable && onProgress(Math.round(progress.loaded / progress.total * 100))
-    request.onload = () => request.status >= 200 && request.status < 300 ? resolve() : reject(new Error('Upload Storage non riuscito.'))
-    request.onerror = () => reject(new Error('Upload Storage non riuscito.'))
+    request.onload = () => request.status >= 200 && request.status < 300 ? resolve() : reject(new Error('Caricamento nell’archivio non riuscito.'))
+    request.onerror = () => reject(new Error('Caricamento nell’archivio non riuscito.'))
     request.send(file)
   })
 }
@@ -372,7 +378,7 @@ function UsersAdmin({ profiles, allowlist, reload }: { profiles: Row[]; allowlis
     const { error } = await requireSupabase().from('staging_allowlist').insert({
       telegram_subject: values.get('subject'),
       role: values.get('role'),
-      note: 'Creato da admin UI',
+      note: 'Creato dall’interfaccia amministrazione',
     })
     if (error) throw new Error(error.message)
     event.currentTarget.reset()
@@ -403,34 +409,34 @@ function UsersAdmin({ profiles, allowlist, reload }: { profiles: Row[]; allowlis
     }
   }
   return (
-    <Section title="Utenti e wallet" note="Contatti Telegram, KYC e correzioni gettoni sono tracciati nell'audit log.">
+    <Section title="Utenti e saldo" note="Contatti Telegram, KYC e correzioni gettoni sono tracciati nel registro di controllo.">
       <form onSubmit={addAccess} className="mb-5 flex gap-2">
-        <input name="subject" required placeholder="Telegram numeric user ID" style={input} />
-        <select name="role" style={input}><option value="user">user</option><option value="admin">admin</option></select>
-        <button style={primary}>Allowlist</button>
+        <input name="subject" required placeholder="ID numerico utente Telegram" style={input} />
+        <select name="role" style={input}><option value="user">utente</option><option value="admin">amministratore</option></select>
+        <button style={primary}>Autorizza</button>
       </form>
-      {allowlist.map(entry => <div key={entry.telegram_subject} style={row}><span className="flex-1">{entry.telegram_subject}</span><span>{entry.role} / {entry.enabled ? 'enabled' : 'blocked'}</span></div>)}
+      {allowlist.map(entry => <div key={entry.telegram_subject} style={row}><span className="flex-1">{entry.telegram_subject}</span><span>{entry.role === 'admin' ? 'amministratore' : 'utente'} / {entry.enabled ? 'abilitato' : 'bloccato'}</span></div>)}
       <h3 className="mt-5 mb-3">Profili registrati</h3>
       <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Cerca username o Telegram ID" style={{ ...input, width: '100%', marginBottom: 12 }} />
       {visibleProfiles.map(profile => (
         <div key={profile.id} style={row}>
           <div className="flex-1">
             <strong>@{profile.username}</strong>
-            <div style={muted}>{profile.role} / {profile.telegram_subject}</div>
+            <div style={muted}>{profile.role === 'admin' ? 'amministratore' : 'utente'} / {profile.telegram_subject}</div>
             <div style={muted}>
-              {(profile.orders ?? []).filter((order: Row) => order.status === 'completed').length} completed / {(profile.feedback ?? []).length} feedback
+              {(profile.orders ?? []).filter((order: Row) => order.status === 'completed').length} completate / {(profile.feedback ?? []).length} recensioni
               {profile.kyc_cases?.retain_until ? ` / documenti fino a ${new Date(profile.kyc_cases.retain_until).toLocaleDateString('it-IT')}` : ''}
             </div>
           </div>
-          <span style={{ color: profile.kyc_cases?.status === 'approved' ? '#D7FE55' : '#F59E0B' }}>KYC: {profile.kyc_cases?.status ?? 'not_started'}</span>
+          <span style={{ color: profile.kyc_cases?.status === 'approved' ? '#D7FE55' : '#F59E0B' }}>KYC: {kycStatusLabel[profile.kyc_cases?.status ?? 'not_started']}</span>
           {profile.kyc_cases?.status && profile.kyc_cases.status !== 'not_started' && <button style={smallButton} onClick={() => openKyc(profile)}>Documenti</button>}
-          <span>{profile.wallet_balances?.points ?? 0} gettoni / {profile.wallet_balances?.xp ?? 0} XP / {profile.wallet_balances?.spin_tickets ?? 0} ticket</span>
+          <span>{profile.wallet_balances?.points ?? 0} gettoni / {profile.wallet_balances?.xp ?? 0} XP / {profile.wallet_balances?.spin_tickets ?? 0} biglietti</span>
         </div>
       ))}
       <form onSubmit={adjust} className="mt-5 grid md:grid-cols-4 gap-2">
         <select required value={selected} onChange={e => setSelected(e.target.value)} style={input}><option value="">Utente</option>{profiles.map(p => <option key={p.id} value={p.id}>@{p.username}</option>)}</select>
         <input type="number" value={points} onChange={e => setPoints(Number(e.target.value))} placeholder="Gettoni +/-" style={input} />
-        <input required value={reason} onChange={e => setReason(e.target.value)} placeholder="Motivo audit" style={input} />
+        <input required value={reason} onChange={e => setReason(e.target.value)} placeholder="Motivo della registrazione" style={input} />
         <button style={primary}>Registra</button>
       </form>
       {reviewUser && (
@@ -439,7 +445,7 @@ function UsersAdmin({ profiles, allowlist, reload }: { profiles: Row[]; allowlis
             <div className="flex justify-between mb-4">
               <div>
                 <h2 style={{ ...heading, fontSize: 22 }}>KYC @{reviewUser.username}</h2>
-                <p style={muted}>Link temporanei validi 60 secondi. Visualizzazione registrata nell'audit log.</p>
+                <p style={muted}>Link temporanei validi 60 secondi. Visualizzazione registrata nel registro di controllo.</p>
               </div>
               <button style={smallButton} onClick={() => { setReviewUser(null); setDocuments([]) }}>Chiudi</button>
             </div>
@@ -447,8 +453,8 @@ function UsersAdmin({ profiles, allowlist, reload }: { profiles: Row[]; allowlis
             <div className="grid md:grid-cols-3 gap-3 mb-5">
               {documents.map(document => (
                 <div key={document.id}>
-                  <div style={{ ...muted, marginBottom: 6 }}>{document.documentType}</div>
-                  <img src={document.signedUrl} alt={document.documentType} className="w-full rounded-xl" style={{ maxHeight: 340, objectFit: 'contain', background: '#080C0E' }} referrerPolicy="no-referrer" />
+                  <div style={{ ...muted, marginBottom: 6 }}>{documentLabel[document.documentType]}</div>
+                  <img src={document.signedUrl} alt={documentLabel[document.documentType]} className="w-full rounded-xl" style={{ maxHeight: 340, objectFit: 'contain', background: '#080C0E' }} referrerPolicy="no-referrer" />
                 </div>
               ))}
             </div>
@@ -468,17 +474,17 @@ function UsersAdmin({ profiles, allowlist, reload }: { profiles: Row[]; allowlis
 function OrdersAdmin({ orders, reload }: { orders: Row[]; reload: () => Promise<void> }) {
   const updateStatus = async (orderId: string, status: string) => {
     const db = requireSupabase()
-    const { error } = await db.rpc('admin_update_order_status', { p_order_id: orderId, p_status: status, p_note: 'Updated from admin panel' })
+    const { error } = await db.rpc('admin_update_order_status', { p_order_id: orderId, p_status: status, p_note: 'Aggiornato dal pannello amministrazione' })
     if (error) throw new Error(error.message)
     await reload()
   }
   return (
-    <Section title="Richieste test" note="Questi record non attivano pagamento, spedizione o meetup.">
+    <Section title="Richieste di prova" note="Questi record non attivano pagamento, spedizione o incontro.">
       {orders.map(order => (
         <div key={order.id} style={row}>
-          <div className="flex-1"><strong>{order.display_id}</strong><div style={muted}>@{order.profiles?.username} / {order.total_units} units / EUR {order.total} demo / {order.scenario_type} {order.scenario_city}</div><div style={muted}>Riserva: {order.tokens_reserved} / premio completed: +{order.points_awarded} gettoni</div></div>
+          <div className="flex-1"><strong>{order.display_id}</strong><div style={muted}>@{order.profiles?.username} / {order.total_units} g / EUR {order.total} simulati / {scenarioLabel[order.scenario_type] ?? order.scenario_type} {order.scenario_city}</div><div style={muted}>Riserva: {order.tokens_reserved} / premio al completamento: +{order.points_awarded} gettoni</div></div>
           <select value={order.status} onChange={event => updateStatus(order.id, event.target.value)} style={input}>
-            {['submitted', 'processing', 'completed', 'cancelled'].map(status => <option key={status}>{status}</option>)}
+            {['submitted', 'processing', 'completed', 'cancelled'].map(status => <option key={status} value={status}>{orderStatusLabel[status]}</option>)}
           </select>
         </div>
       ))}
@@ -498,7 +504,7 @@ function EconomyAdmin({ games, options, reload }: { games: Row[]; options: Row[]
     await reload()
   }
   return (
-    <Section title="Ruota dei premi" note="Un ticket viene emesso ogni cinque richieste demo completate; l'estrazione avviene server-side.">
+    <Section title="Ruota dei premi" note="Un biglietto viene emesso ogni cinque richieste dimostrative completate; l'estrazione avviene sul server.">
       {games.filter(game => game.game_type === 'spin').map(game => (
         <div key={game.game_type} style={row}>
           <div className="flex-1"><strong>{game.title}</strong><div style={muted}>{game.game_type}</div></div>
@@ -523,11 +529,11 @@ function FeedbackAdmin({ feedback, reload }: { feedback: Row[]; reload: () => Pr
     await reload()
   }
   return (
-    <Section title="Feedback demo" note="Solo feedback approvati vengono mostrati ai membri staging.">
+    <Section title="Recensioni dimostrative" note="Solo le recensioni approvate vengono mostrate ai membri autorizzati.">
       {feedback.map(item => <div key={item.id} className="p-4 mb-3" style={row}>
         <div className="flex-1">
-          <strong>@{item.profiles?.username ?? 'member'} / {item.rating} stelle</strong>
-          <div style={muted}>{item.orders?.display_id} / {item.status}</div>
+          <strong>@{item.profiles?.username ?? 'membro'} / {item.rating} stelle</strong>
+          <div style={muted}>{item.orders?.display_id} / {feedbackStatusLabel[item.status]}</div>
           <p style={{ marginTop: 7 }}>{item.message}</p>
         </div>
         {item.status !== 'published' && <button style={smallButton} onClick={() => moderate(item.id, 'published')}>Pubblica</button>}
@@ -539,7 +545,7 @@ function FeedbackAdmin({ feedback, reload }: { feedback: Row[]; reload: () => Pr
 
 function SettingsAdmin({ locations, settings, tokenTiers, reload }: { locations: Row[]; settings: Row[]; tokenTiers: Row[]; reload: () => Promise<void> }) {
   const retention = settings.find(setting => setting.key === 'kyc_retention')?.value ?? { approved_days: 365 }
-  const rules = settings.find(setting => setting.key === 'demo_rules')?.value ?? { disclaimer: 'Ambiente demo: nessun pagamento, scambio o fulfillment reale.' }
+  const rules = settings.find(setting => setting.key === 'demo_rules')?.value ?? { disclaimer: 'Ambiente dimostrativo: nessun pagamento, scambio o gestione reale degli ordini.' }
   const links = settings.find(setting => setting.key === 'community_links')?.value ?? { instagram: '', viber: '', signal: null }
   const addLocation = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -559,7 +565,7 @@ function SettingsAdmin({ locations, settings, tokenTiers, reload }: { locations:
     event.preventDefault()
     const values = new FormData(event.currentTarget)
     const value = { approved_days: Number(values.get('days')) }
-    if (value.approved_days < 1) throw new Error('Retention non valida')
+    if (value.approved_days < 1) throw new Error('Conservazione non valida')
     const { error } = await requireSupabase().from('app_settings').upsert({ key: 'kyc_retention', value })
     if (error) throw new Error(error.message)
     await reload()
@@ -588,31 +594,54 @@ function SettingsAdmin({ locations, settings, tokenTiers, reload }: { locations:
     await reload()
   }
   return (
-    <Section title="Scenari e privacy" note="Tutte le location sono campi demo; non devono descrivere esecuzioni reali.">
+    <Section title="Scenari e privacy" note="Tutte le località sono campi dimostrativi; non devono descrivere esecuzioni reali.">
       <form onSubmit={updatePublicInfo} className="grid gap-2 mb-6">
-        <h3>Regolamento e community links</h3>
-        <input name="disclaimer" required defaultValue={rules.disclaimer} placeholder="Disclaimer demo" style={input} />
-        <input name="instagram" defaultValue={links.instagram} placeholder="Instagram news URL" style={input} />
-        <input name="viber" defaultValue={links.viber} placeholder="Viber news URL" style={input} />
+        <h3>Regolamento e link della community</h3>
+        <input name="disclaimer" required defaultValue={rules.disclaimer} placeholder="Avviso dimostrativo" style={input} />
+        <input name="instagram" defaultValue={links.instagram} placeholder="URL notizie Instagram" style={input} />
+        <input name="viber" defaultValue={links.viber} placeholder="URL notizie Viber" style={input} />
         <input name="signal" defaultValue={links.signal ?? ''} placeholder="Signal URL (opzionale)" style={input} />
         <button style={primary}>Salva informazioni pubbliche</button>
       </form>
       <form onSubmit={updateRetention} className="flex gap-2 mb-5 items-center">
-        <label>KYC retention giorni <input name="days" type="number" min="1" defaultValue={retention.approved_days} style={{ ...input, width: 90 }} /></label>
-        <button style={primary}>Salva retention</button>
+        <label>Conservazione KYC in giorni <input name="days" type="number" min="1" defaultValue={retention.approved_days} style={{ ...input, width: 90 }} /></label>
+        <button style={primary}>Salva conservazione</button>
       </form>
       <h3 className="mb-3">Gettoni per scenario completato</h3>
       <div className="flex flex-wrap gap-3 mb-6">
-        {tokenTiers.map(tier => <label key={tier.minimum_units} style={muted}>{tier.minimum_units}+ units
+        {tokenTiers.map(tier => <label key={tier.minimum_units} style={muted}>{tier.minimum_units}+ g
           <input type="number" min={0} max={100} defaultValue={tier.tokens_awarded} onBlur={event => updateTier(tier.minimum_units, Number(event.target.value))} style={{ ...input, width: 70, display: 'block' }} />
         </label>)}
       </div>
-      {locations.map(location => <div key={location.id} style={row}><strong>{location.city}</strong><span>{location.scenario_type} / minimo {location.minimum_units} units</span></div>)}
-      <form onSubmit={addLocation} className="flex flex-wrap gap-2 mt-4">
-        <select name="scenario" style={input}><option value="meetup">meetup</option><option value="delivery_zone">delivery_zone</option><option value="delivery_italia">delivery_italia</option></select>
-        <input name="city" required placeholder="Citta demo" style={input} />
-        <input name="minimum" type="number" min="1" required placeholder="Minimum units" style={input} />
-        <button style={primary}>Aggiungi</button>
+      <h3 className="mb-3 mt-6">INCONTRO - possono scegliere solo città</h3>
+      <div className="mb-4">
+        {locations.filter(l => l.scenario_type === 'meetup').map(location => <div key={location.id} style={row}><strong>{location.city}</strong><span>minimo {location.minimum_units} g</span></div>)}
+      </div>
+      <form onSubmit={addLocation} className="flex flex-wrap gap-2 mb-6">
+        <input type="hidden" name="scenario" value="meetup" />
+        <input name="city" required placeholder="Nuova città incontro" style={input} />
+        <input name="minimum" type="number" min="1" required placeholder="Grammi minimi" style={input} />
+        <button style={primary}>Aggiungi incontro</button>
+      </form>
+      <h3 className="mb-3">CONSEGNA IN ZONA - possono scegliere città/via</h3>
+      <div className="mb-4">
+        {locations.filter(l => l.scenario_type === 'delivery_zone').map(location => <div key={location.id} style={row}><strong>{location.city}</strong><span>minimo {location.minimum_units} g + via</span></div>)}
+      </div>
+      <form onSubmit={addLocation} className="flex flex-wrap gap-2 mb-6">
+        <input type="hidden" name="scenario" value="delivery_zone" />
+        <input name="city" required placeholder="Nuova città per consegna in zona" style={input} />
+        <input name="minimum" type="number" min="1" required placeholder="Grammi minimi" style={input} />
+        <button style={primary}>Aggiungi consegna in zona</button>
+      </form>
+      <h3 className="mb-3">CONSEGNA ITALIA - possono inserire città/via</h3>
+      <div className="mb-4">
+        {locations.filter(l => l.scenario_type === 'delivery_italia').map(location => <div key={location.id} style={row}><strong>{location.city}</strong><span>minimo {location.minimum_units} g + via</span></div>)}
+      </div>
+      <form onSubmit={addLocation} className="flex flex-wrap gap-2">
+        <input type="hidden" name="scenario" value="delivery_italia" />
+        <input name="city" required placeholder="Nuova città per consegna Italia" style={input} />
+        <input name="minimum" type="number" min="1" required placeholder="Grammi minimi" style={input} />
+        <button style={primary}>Aggiungi consegna Italia</button>
       </form>
     </Section>
   )
@@ -628,7 +657,10 @@ function Metric({ label, value }: { label: string; value: number }) {
   return <div className="p-4 rounded-xl" style={panel}><div style={muted}>{label}</div><div style={{ fontFamily: 'Orbitron', fontSize: 25, color: '#D7FE55' }}>{value}</div></div>
 }
 function Toggle({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
-  return <button onClick={onClick} style={{ ...smallButton, color: active ? '#D7FE55' : 'rgba(245,245,245,.55)' }}>{label}: {active ? 'ON' : 'OFF'}</button>
+  return <button onClick={onClick} style={{ ...smallButton, color: active ? '#D7FE55' : 'rgba(245,245,245,.55)' }}>{label}: {active ? 'SÌ' : 'NO'}</button>
+}
+function roundPrice(price: number) {
+  return Math.round(price / 5) * 5
 }
 const panel = { background: '#11181B', border: '1px solid rgba(126,156,168,.18)' }
 const row = { display: 'flex', alignItems: 'center', gap: 12, padding: 12, marginBottom: 8, background: 'rgba(245,245,245,.035)', borderRadius: 10 }

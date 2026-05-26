@@ -1,6 +1,6 @@
-# Street Family - Closed Staging MVP
+# Street Family
 
-React/Vite storefront and admin interface backed by Supabase. This environment creates test requests only: it implements no payment, delivery, meetup execution or commercial fulfillment.
+React/Vite storefront and admin interface backed by Supabase.
 
 ## VPS Deployment
 
@@ -70,13 +70,13 @@ https://api.telegram.org/bot<BOT_TOKEN>/setWebhook?url=https://<project-ref>.sup
 ## Authentication And Admins
 
 - Website login opens the Telegram bot with a one-time deep link. The browser session is issued only after confirmation in the bot.
-- Sending a plain `/start` message makes the bot return an `Apri Street Family Demo` Mini App button and installs an equivalent chat menu button. Telegram does not allow a bot to open a Mini App without the user's button tap.
+- Sending a plain `/start` message makes the bot return an `Apri Street Family` Mini App button and installs an equivalent chat menu button. Telegram does not allow a bot to open a Mini App without the user's button tap.
 - When the app is opened inside Telegram, `telegram-miniapp-auth` validates signed `Telegram.WebApp.initData` on the server and creates the Supabase session automatically. Do not trust `initDataUnsafe` in frontend code.
 - `TELEGRAM_MINI_APP_URL` must be the public HTTPS URL of the deployed frontend.
 - `TELEGRAM_ADMIN_IDS` contains comma-separated Telegram numeric user IDs, for example `123456789,987654321`. When any of these users enters through the bot or Mini App, they are assigned role `admin` automatically.
 - Admin users see an admin badge and panel link in their profile and the admin navigation action.
 - The admin panel is available to Telegram users assigned role `admin`; actions remain protected by RLS/RPC checks and audit logging.
-- Non-admin Telegram users registering through the bot receive member access to this closed demo; an explicitly disabled member remains blocked.
+- Non-admin Telegram users registering through the bot receive member access; an explicitly disabled member remains blocked.
 - Functions receiving unsigned browser startup requests or Telegram webhooks are configured with `verify_jwt = false` in [`supabase/config.toml`](supabase/config.toml). They authenticate through Telegram signatures or challenge secrets in their handlers.
 
 ## Orders And Notifications
@@ -84,14 +84,14 @@ https://api.telegram.org/bot<BOT_TOKEN>/setWebhook?url=https://<project-ref>.sup
 - The client invokes the `submit-test-order` Edge Function, not the order RPC directly.
 - The function creates a demo-request transaction and sends a Telegram Bot API notification to every ID in `TELEGRAM_ADMIN_IDS`.
 - Every listed admin must have opened the bot at least once, otherwise Telegram will not permit the bot to initiate messages to that chat.
-- The supported scenarios are `meetup`, `delivery_zone` and `delivery_italia`; allowed cities, minimum units and required street fields are validated in the database function.
+- The supported scenarios are `meetup`, `delivery_zone` and `delivery_italia`; allowed cities, minimum grams and required street fields are validated in the database function.
 - Totals, surcharge and token credit are simulations only. No request performs payment, exchange, delivery or pickup.
 - Direct browser execution and the superseded internal order function are revoked after applying the migrations.
 
 ## Demo Rules And Loyalty
 
 - The authenticated `/info` page displays the simulation rules and community-news links for Instagram and Viber; Signal remains `In arrivo` until configured.
-- The neutral catalogue exposes only packages of `50`, `100`, `300`, `500` and `1000 units`.
+- The catalogue exposes reference prices for `25`, `50`, `100`, `300`, `500` and `1000 g`. Members can select `50` to `1000 g` in `25 g` increments; intermediate prices are interpolated server-side between adjacent configured tiers and rounded to whole euro values ending in `0` or `5`.
 - `Gettoni` are the loyalty credit shown to members. They are reserved atomically when used in a demo request and awarded only when an admin marks that request `completed`; their balance is capped at `100`.
 - XP remains separate from gettoni. The only member game is `Ruota dei premi`, consuming one ticket earned on every fifth completed demo request.
 - A member may submit one feedback entry for each of their own completed requests. Only admin-published feedback is shown in staging.
@@ -131,7 +131,7 @@ curl -X POST "https://<project-ref>.supabase.co/functions/v1/purge-expired-kyc" 
 
 ## Constraints
 
-- Seed product content is test-only and is not an approved commercial catalogue.
+- Seed product content is representative sample and is not an approved commercial catalogue.
 - Product sales or fulfillment require a separate compliance decision and are outside this build.
 
 References: [Supabase Edge Function secrets](https://supabase.com/docs/guides/functions/secrets), [Supabase Storage](https://supabase.com/docs/guides/storage), [Telegram Bot API](https://core.telegram.org/bots/api).

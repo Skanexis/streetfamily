@@ -1,5 +1,4 @@
--- Closed staging expansion: demo scenarios, tokens, earned wheel, feedback and KYC retention.
--- All order figures are simulated only. No payment, exchange or fulfillment is performed.
+-- Expansion: scenarios, tokens, earned wheel, feedback and KYC retention.
 
 alter table public.product_variants
   add column unit_amount integer,
@@ -114,13 +113,12 @@ insert into public.token_reward_tiers (minimum_units, tokens_awarded) values
   (50, 5), (100, 10), (300, 20), (500, 30), (1000, 50);
 
 insert into public.app_settings (key, value) values
-  ('demo_rules', '{"disclaimer":"Ambiente demo: nessun pagamento, scambio o fulfillment reale.","delivery_zone_surcharge_per_100_units":10,"italia_note":"Tariffa demo da definire nel solo scenario simulato."}'),
   ('community_links', '{"instagram":"https://www.instagram.com/street_family_420?igsh=anE0NXl2bHc1bWUy","viber":"https://invite.viber.com/?g2=AQBPMWNo9WD3f1ZpxQmFGMw45rNNTiciLs1ftxm3cHeo6mCJD9EvQHNnNxSt%2BlNe","signal":null}'),
   ('kyc_retention', '{"approved_days":36500}')
 on conflict (key) do update set value = excluded.value, updated_at = now();
 
 -- Replace the initial showcase with neutral demo terminology and package tiers.
-update public.categories set name = 'Demo Collection', slug = 'demo-collection', published = true
+update public.categories set name = 'Collection', slug = 'collection', published = true
 where id = '10000000-0000-0000-0000-000000000001';
 update public.categories set published = false
 where id <> '10000000-0000-0000-0000-000000000001';
@@ -321,7 +319,7 @@ begin
     simulated_token_credit, simulated_total, points_awarded, xp_awarded
   ) values (
     v_order, v_display, p_user_id, case when p_scenario_type = 'meetup' then 'meetup' else 'delivery' end,
-    p_scenario_type, trim(p_city), trim(p_street), 'DEMO ONLY - no fulfillment', v_units,
+    p_scenario_type, trim(p_city), trim(p_street), 'submitted', v_units,
     p_tokens_to_reserve, v_total, v_subtotal, v_surcharge, p_tokens_to_reserve, v_total, v_expected_tokens, v_expected_xp
   );
   insert into public.order_items (order_id, variant_id, name_snapshot, variant_label, unit_price, quantity)
@@ -329,7 +327,7 @@ begin
   from jsonb_array_elements(p_items) item join public.product_variants v on v.id = (item ->> 'variant_id')::uuid
   join public.products p on p.id = v.product_id;
   insert into public.order_status_history (order_id, status, changed_by, note)
-  values (v_order, 'submitted', p_user_id, 'DEMO ONLY - no payment or fulfillment');
+  values (v_order, 'submitted', p_user_id, 'submitted');
   if p_tokens_to_reserve > 0 then
     update public.wallet_balances set points = points - p_tokens_to_reserve, updated_at = now()
       where user_id = p_user_id returning * into v_wallet;

@@ -114,7 +114,7 @@ begin
   from jsonb_array_elements(p_items) item join public.product_variants v on v.id = (item ->> 'variant_id')::uuid
   join public.products p on p.id = v.product_id;
   insert into public.order_status_history (order_id, status, changed_by, note)
-  values (v_order, 'submitted', p_user_id, 'TEST MODE - no payment or fulfillment');
+  values (v_order, 'submitted', p_user_id, 'submitted');
   update public.wallet_balances set points = points + v_points, xp = xp + v_xp, updated_at = now()
   where user_id = p_user_id returning * into v_wallet;
   insert into public.loyalty_ledger (user_id, reason, points_delta, xp_delta, reference_type, reference_id)

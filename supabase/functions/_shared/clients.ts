@@ -40,25 +40,25 @@ export async function sendTelegramMessage(chatId: string, text: string) {
 
 export async function sendTelegramMessageWithOptions(chatId: string, text: string, replyMarkup?: unknown) {
   const token = Deno.env.get('TELEGRAM_BOT_TOKEN')
-  if (!token) throw new Error('TELEGRAM_BOT_TOKEN missing')
+  if (!token) throw new Error('Token del bot Telegram non configurato')
   const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ chat_id: chatId, text, reply_markup: replyMarkup }),
   })
-  if (!response.ok) throw new Error(`Telegram send failed: ${response.status}`)
+  if (!response.ok) throw new Error(`Invio messaggio Telegram non riuscito: ${response.status}`)
 }
 
 export async function setTelegramMiniAppMenu(chatId: string, url: string) {
   const token = Deno.env.get('TELEGRAM_BOT_TOKEN')
-  if (!token) throw new Error('TELEGRAM_BOT_TOKEN missing')
+  if (!token) throw new Error('Token del bot Telegram non configurato')
   const response = await fetch(`https://api.telegram.org/bot${token}/setChatMenuButton`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       chat_id: chatId,
-      menu_button: { type: 'web_app', text: 'Apri demo', web_app: { url } },
+      menu_button: { type: 'web_app', text: 'Apri', web_app: { url } },
     }),
   })
-  if (!response.ok) throw new Error(`Telegram menu setup failed: ${response.status}`)
+  if (!response.ok) throw new Error(`Configurazione menu Telegram non riuscita: ${response.status}`)
 }

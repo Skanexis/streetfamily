@@ -548,7 +548,7 @@ begin
   from jsonb_array_elements(p_items) item join public.product_variants v on v.id = (item ->> 'variant_id')::uuid
   join public.products p on p.id = v.product_id;
   insert into public.order_status_history (order_id, status, changed_by, note)
-    values (v_order, 'submitted', auth.uid(), 'TEST MODE - no payment or fulfillment');
+    values (v_order, 'submitted', auth.uid(), 'submitted');
   update public.wallet_balances set points = points + v_points, xp = xp + v_xp, updated_at = now()
     where user_id = auth.uid() returning * into v_wallet;
   insert into public.loyalty_ledger (user_id, reason, points_delta, xp_delta, reference_type, reference_id)
@@ -633,14 +633,14 @@ insert into public.categories (id, name, slug, sort_order) values
 ('10000000-0000-0000-0000-000000000005', 'Hash', 'hash', 5);
 
 insert into public.products (id, category_id, name, slug, description, badge, rating, review_count, featured, published) values
-('20000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','OG Kush','og-kush','Test catalogue item only. No sale or fulfillment.','HOT',4.8,142,true,true),
-('20000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000002','Purple Haze','purple-haze','Test catalogue item only. No sale or fulfillment.','HOT',4.9,98,true,true),
-('20000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000003','Gorilla Glue','gorilla-glue','Test catalogue item only. No sale or fulfillment.','NEW',4.7,54,false,true),
-('20000000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000004','Gelato #33','gelato-33','Test catalogue item only. No sale or fulfillment.',null,5.0,203,true,true),
-('20000000-0000-0000-0000-000000000005','10000000-0000-0000-0000-000000000002','Amnesia Haze','amnesia-haze','Test catalogue item only. No sale or fulfillment.','HOT',4.6,87,false,true),
-('20000000-0000-0000-0000-000000000006','10000000-0000-0000-0000-000000000003','Northern Lights','northern-lights','Test catalogue item only. No sale or fulfillment.',null,4.8,165,false,true),
-('20000000-0000-0000-0000-000000000007','10000000-0000-0000-0000-000000000005','Moroccan Hash','moroccan-hash','Test catalogue item only. No sale or fulfillment.','NEW',4.5,33,false,true),
-('20000000-0000-0000-0000-000000000008','10000000-0000-0000-0000-000000000004','Blue Dream','blue-dream','Test catalogue item only. No sale or fulfillment.',null,4.7,119,false,true);
+('20000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','OG Kush','og-kush','Premium quality product.','HOT',4.8,142,true,true),
+('20000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000002','Purple Haze','purple-haze','Premium quality product.','HOT',4.9,98,true,true),
+('20000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000003','Gorilla Glue','gorilla-glue','Premium quality product.','NEW',4.7,54,false,true),
+('20000000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000004','Gelato #33','gelato-33','Premium quality product.',null,5.0,203,true,true),
+('20000000-0000-0000-0000-000000000005','10000000-0000-0000-0000-000000000002','Amnesia Haze','amnesia-haze','Premium quality product.','HOT',4.6,87,false,true),
+('20000000-0000-0000-0000-000000000006','10000000-0000-0000-0000-000000000003','Northern Lights','northern-lights','Premium quality product.',null,4.8,165,false,true),
+('20000000-0000-0000-0000-000000000007','10000000-0000-0000-0000-000000000005','Moroccan Hash','moroccan-hash','Premium quality product.','NEW',4.5,33,false,true),
+('20000000-0000-0000-0000-000000000008','10000000-0000-0000-0000-000000000004','Blue Dream','blue-dream','Premium quality product.',null,4.7,119,false,true);
 
 insert into public.product_variants (id, product_id, label, price, sort_order)
 select ('30000000-0000-0000-0000-' || lpad(((n * 2) - 1)::text, 12, '0'))::uuid, p.id, '1g',
@@ -685,5 +685,4 @@ insert into public.game_reward_options (game_type, code, label, points_awarded, 
 ('box','points_30','+30 Punti',30,20,null,25,'#8B5CF6'), ('box','points_15','+15 Punti',15,20,null,30,'#3B82F6'),
 ('box','discount_10','Sconto 10%',0,0,'40000000-0000-0000-0000-000000000002',10,'#10B981'), ('box','nothing','Niente',0,0,null,10,'#6B7280');
 insert into public.app_settings (key, value) values
-('staging_banner', '{"text":"TEST MODE - no payment / no fulfillment"}'),
 ('order_rewards', '{"points_multiplier":0.5,"xp_multiplier":0.5}');

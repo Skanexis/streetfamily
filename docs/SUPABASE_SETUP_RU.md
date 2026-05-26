@@ -197,7 +197,7 @@ Invoke-RestMethod "https://api.telegram.org/bot$token/setWebhook?url=https://$re
 ## 10. Проверить работу
 
 1. Напишите боту `/start`.
-2. Бот должен прислать кнопку `Apri Street Family Demo`.
+2. Бот должен прислать кнопку `Apri Street Family`.
 3. Нажмите кнопку: сайт открывается внутри Telegram и авторизует пользователя автоматически.
 4. Для ID из `TELEGRAM_ADMIN_IDS` в профиле появится `Admin / Apri pannello amministrazione`.
 5. Отправьте demo-заявку: сообщение о новой заявке должно прийти всем администраторам из `TELEGRAM_ADMIN_IDS`, которые ранее открыли бота.

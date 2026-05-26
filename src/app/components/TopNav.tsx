@@ -16,9 +16,9 @@ interface TopNavProps {
 }
 
 const NAV_LINKS: { label: string; page: Page }[] = [
-  { label: 'Home', page: 'home' },
+  { label: 'Inizio', page: 'home' },
   { label: 'Catalogo', page: 'catalog' },
-  { label: 'Games', page: 'games' },
+  { label: 'Giochi', page: 'games' },
   { label: 'Regolamento', page: 'info' },
   { label: 'Profilo', page: 'profile' },
 ]
@@ -93,7 +93,7 @@ export function TopNav({ page, navigate, cartCount, onCartOpen, tokens, isAdmin,
       {/* Right: tokens + cart */}
       <div className="flex items-center gap-3">
         {isAdmin && (
-          <button onClick={onAdmin} className="hidden sm:flex items-center gap-1 px-3 py-2 rounded-lg" style={{ color: '#D7FE55', border: '1px solid rgba(215,254,85,.3)', fontSize: 13 }}><ShieldCheck size={14} /> Admin</button>
+          <button onClick={onAdmin} className="hidden sm:flex items-center gap-1 px-3 py-2 rounded-lg" style={{ color: '#D7FE55', border: '1px solid rgba(215,254,85,.3)', fontSize: 13 }}><ShieldCheck size={14} /> Amministrazione</button>
         )}
         <div
           className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full"
@@ -169,14 +169,14 @@ export function TopNav({ page, navigate, cartCount, onCartOpen, tokens, isAdmin,
       {broadcastOpen && (
         <div className="absolute right-4 top-16 mt-2 rounded-2xl p-4" style={{ width: 'min(390px, calc(100vw - 32px))', maxHeight: '70vh', overflowY: 'auto', background: '#11181B', border: '1px solid rgba(126,156,168,.3)', boxShadow: '0 16px 42px rgba(0,0,0,.5)' }}>
           <div className="flex items-center justify-between mb-3">
-            <strong style={{ fontFamily: 'Space Grotesk', fontSize: 18 }}>Broadcast</strong>
+            <strong style={{ fontFamily: 'Space Grotesk', fontSize: 18 }}>Notizie</strong>
             <button onClick={() => setBroadcastOpen(false)} aria-label="Chiudi notizie" style={{ color: 'rgba(245,245,245,.7)' }}><X size={17} /></button>
           </div>
           {broadcasts.length === 0 && <p style={{ color: 'rgba(245,245,245,.55)', fontSize: 13 }}>Nessuna notizia pubblicata.</p>}
           {broadcasts.map(broadcast => (
             <article key={broadcast.id} className="p-3 mb-2 rounded-xl" style={{ background: 'rgba(245,245,245,.045)' }}>
               <div style={{ color: broadcast.kind === 'product_new' ? '#D7FE55' : '#60A5FA', fontSize: 10, fontWeight: 700, marginBottom: 5 }}>
-                {broadcast.kind === 'product_new' ? 'NUOVO PRODOTTO TEST' : 'ANNUNCIO'}
+                {broadcast.kind === 'product_new' ? 'NUOVO PRODOTTO DI PROVA' : 'ANNUNCIO'}
               </div>
               <strong style={{ display: 'block', fontSize: 14 }}>{broadcast.title}</strong>
               <p style={{ color: 'rgba(245,245,245,.67)', fontSize: 13, marginTop: 5 }}>{broadcast.message}</p>

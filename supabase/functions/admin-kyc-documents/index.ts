@@ -2,9 +2,9 @@ import { adminClient, corsHeaders, json, userClient } from '../_shared/clients.t
 
 Deno.serve(async req => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
-  if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
+  if (req.method !== 'POST') return json({ error: 'Metodo non consentito' }, 405)
   const authHeader = req.headers.get('Authorization')
-  if (!authHeader) return json({ error: 'Unauthorized' }, 401)
+  if (!authHeader) return json({ error: 'Non autorizzato' }, 401)
   const { userId } = await req.json()
   const userDb = userClient(authHeader)
   const logged = await userDb.rpc('admin_log_kyc_view', { p_user_id: userId })

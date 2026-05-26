@@ -92,7 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loginFromTelegramMiniApp: async (initData: string) => {
       const db = requireSupabase()
       const { data, error } = await db.functions.invoke('telegram-miniapp-auth', { body: { initData } })
-      if (error) throw new Error(await edgeFunctionError(error, 'Accesso Mini App non riuscito.'))
+      if (error) throw new Error(await edgeFunctionError(error, 'Accesso alla mini applicazione non riuscito.'))
       const verified = await db.auth.verifyOtp({ token_hash: data.tokenHash, type: 'magiclink' })
       if (verified.error) throw new Error(verified.error.message)
     },

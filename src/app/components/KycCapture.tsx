@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Camera, Check, ShieldAlert } from 'lucide-react'
+import { Camera, Check, LoaderCircle, ShieldAlert, X } from 'lucide-react'
 import type { KycDocumentType, KycStatus } from '../data'
 import { submitKyc, uploadKycCapture } from '../lib/api'
 
@@ -18,37 +18,71 @@ export function KycCapture({ status, onChanged }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const [active, setActive] = useState<(typeof captures)[number] | null>(null)
+  const [cameraReady, setCameraReady] = useState(false)
+  const [cameraAttempt, setCameraAttempt] = useState(0)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
-  const stopCamera = () => {
+  const stopStream = () => {
     streamRef.current?.getTracks().forEach(track => track.stop())
     streamRef.current = null
     if (videoRef.current) videoRef.current.srcObject = null
+  }
+  const stopCamera = () => {
+    stopStream()
+    setCameraReady(false)
     setActive(null)
   }
-  useEffect(() => () => stopCamera(), [])
 
-  const openCamera = async (capture: (typeof captures)[number]) => {
-    setError('')
-    stopCamera()
-    try {
-      if (!navigator.mediaDevices?.getUserMedia) throw new Error('Fotocamera non disponibile in questo browser.')
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: { facingMode: { ideal: capture.facingMode }, width: { ideal: 1600 }, height: { ideal: 1200 } },
-      })
-      streamRef.current = stream
-      setActive(capture)
-      window.setTimeout(() => {
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream
-          void videoRef.current.play()
+  useEffect(() => {
+    if (!active) return
+    let cancelled = false
+    const startCamera = async () => {
+      setCameraReady(false)
+      stopStream()
+      try {
+        if (!navigator.mediaDevices?.getUserMedia) throw new Error('Fotocamera non disponibile in questo browser.')
+        let stream: MediaStream
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: { facingMode: { ideal: active.facingMode }, width: { ideal: 1280 }, height: { ideal: 720 } },
+          })
+        } catch (firstError) {
+          if (firstError instanceof DOMException && ['NotAllowedError', 'SecurityError'].includes(firstError.name)) throw firstError
+          stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: active.facingMode } })
         }
-      }, 0)
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Permesso fotocamera negato.')
+        if (cancelled) {
+          stream.getTracks().forEach(track => track.stop())
+          return
+        }
+        streamRef.current = stream
+        const video = videoRef.current
+        if (!video) throw new Error('Anteprima fotocamera non disponibile.')
+        video.srcObject = stream
+        await video.play()
+      } catch (caught) {
+        if (!cancelled) {
+          stopStream()
+          setError(cameraErrorMessage(caught))
+        }
+      }
     }
+    void startCamera()
+    return () => {
+      cancelled = true
+      stopStream()
+    }
+  }, [active, cameraAttempt])
+
+  const openCamera = (capture: (typeof captures)[number]) => {
+    setError('')
+    setCameraAttempt(attempt => attempt + 1)
+    setActive(capture)
+  }
+  const restartCamera = () => {
+    setError('')
+    setCameraAttempt(attempt => attempt + 1)
   }
 
   const takePhoto = async () => {
@@ -88,10 +122,10 @@ export function KycCapture({ status, onChanged }: Props) {
   }
 
   if (status.status === 'submitted') {
-    return <Notice text="Documenti inviati. Il primo ordine sara disponibile dopo la verifica admin." />
+    return <Notice text="Documenti inviati. Il primo ordine sarà disponibile dopo la verifica dell'amministratore." />
   }
   if (status.status === 'approved') {
-    return <Notice text="Identita verificata. Puoi completare il primo ordine." ok />
+    return <Notice text="Identità verificata. Puoi completare il primo ordine." ok />
   }
 
   const allCaptured = captures.every(capture => status.documents.includes(capture.type))
@@ -110,19 +144,56 @@ export function KycCapture({ status, onChanged }: Props) {
           </button>
         ))}
       </div>
+      {allCaptured && !active && <button disabled={busy} onClick={sendForReview} style={buttonStyle}>Invia documenti alla verifica</button>}
+      {error && <p style={{ color: '#F87171', marginTop: 12 }}>{error}</p>}
       {active && (
-        <div className="mb-4">
-          <video ref={videoRef} muted playsInline className="w-full rounded-xl mb-3" style={{ maxHeight: 300, objectFit: 'cover', background: '#000' }} />
-          <div className="flex gap-2">
-            <button disabled={busy} onClick={takePhoto} style={buttonStyle}>Scatta e carica</button>
-            <button onClick={stopCamera} style={secondaryStyle}>Annulla</button>
+        <div className="fixed inset-0 flex items-center justify-center p-4" style={{ zIndex: 92, background: 'rgba(0,0,0,.88)' }}>
+          <div className="w-full max-w-xl p-4 rounded-2xl" style={{ background: '#11181B', border: '1px solid rgba(126,156,168,.3)' }}>
+            <header className="flex justify-between items-center gap-3 mb-3">
+              <div>
+                <strong style={{ fontFamily: 'Space Grotesk', fontSize: 20 }}>{active.label}</strong>
+                <div style={{ color: 'rgba(245,245,245,.58)', fontSize: 13 }}>Posiziona il documento nel riquadro e scatta una foto.</div>
+              </div>
+              <button onClick={stopCamera} aria-label="Chiudi fotocamera" style={iconButton}><X size={20} /></button>
+            </header>
+            <div className="relative mb-3 rounded-xl overflow-hidden" style={{ minHeight: 320, background: '#000' }}>
+              <video
+                ref={videoRef}
+                autoPlay
+                muted
+                playsInline
+                disablePictureInPicture
+                onPlaying={() => setCameraReady(true)}
+                className="w-full"
+                style={{ height: 420, maxHeight: '62vh', objectFit: 'cover', background: '#000' }}
+              />
+              {!cameraReady && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3" style={{ color: '#F5F5F5', background: 'rgba(0,0,0,.65)' }}>
+                  <LoaderCircle size={28} className="animate-spin" />
+                  <span>Avvio fotocamera...</span>
+                </div>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button disabled={busy || !cameraReady} onClick={takePhoto} style={{ ...buttonStyle, opacity: busy || !cameraReady ? .55 : 1 }}>Scatta e carica</button>
+              <button disabled={busy} onClick={restartCamera} style={secondaryStyle}>Riavvia fotocamera</button>
+              <button onClick={stopCamera} style={secondaryStyle}>Annulla</button>
+            </div>
+            {error && <p style={{ color: '#F87171', marginTop: 12 }}>{error}</p>}
           </div>
         </div>
       )}
-      {allCaptured && !active && <button disabled={busy} onClick={sendForReview} style={buttonStyle}>Invia documenti alla verifica</button>}
-      {error && <p style={{ color: '#F87171', marginTop: 12 }}>{error}</p>}
     </div>
   )
+}
+
+function cameraErrorMessage(caught: unknown) {
+  if (caught instanceof DOMException) {
+    if (caught.name === 'NotAllowedError' || caught.name === 'SecurityError') return 'Accesso alla fotocamera negato. Controlla il permesso del browser e riapri la verifica.'
+    if (caught.name === 'NotFoundError') return 'Nessuna fotocamera trovata sul dispositivo.'
+    if (caught.name === 'NotReadableError') return 'La fotocamera è occupata da un’altra applicazione. Chiudila e riprova.'
+  }
+  return caught instanceof Error ? caught.message : 'Impossibile avviare la fotocamera.'
 }
 
 function Notice({ text, ok }: { text: string; ok?: boolean }) {
@@ -130,3 +201,4 @@ function Notice({ text, ok }: { text: string; ok?: boolean }) {
 }
 const buttonStyle = { padding: '12px 18px', border: 'none', borderRadius: 10, color: '#F5F5F5', fontWeight: 700, background: 'linear-gradient(135deg,#7E9CA8,#B99361)' }
 const secondaryStyle = { ...buttonStyle, background: 'rgba(245,245,245,.1)' }
+const iconButton = { padding: 8, borderRadius: 10, color: '#F5F5F5', background: 'rgba(245,245,245,.08)' }
