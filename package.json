@@ -4,8 +4,8 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
-    "build": "vite build",
-    "dev": "vite",
+    "build": "vite build --mode deploy",
+    "dev": "vite --mode deploy",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

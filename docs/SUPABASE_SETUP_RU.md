@@ -1,16 +1,21 @@
 # Настройка Supabase и Telegram с нуля
 
-В проекте используется один реальный файл настроек: `.env` в корне проекта.
+В проекте используется один реальный файл настроек: `.env.deploy` в корне проекта.
 
 ```text
-.env
+.env.deploy
 |- VITE_SUPABASE_*        -> Vite/frontend и Docker build
 |- STREET_FAMILY_PORT     -> Docker на VPS
 |- TELEGRAM_*             -> Supabase Edge Functions
 `- KYC_PURGE_SECRET       -> защищенная очистка KYC
 ```
 
-Файл `.env` уже исключен из Git. Не публикуйте его в репозиторий.
+Файл `.env.deploy` уже исключен из Git. Не публикуйте его в репозиторий.
+
+Не вставляйте реальные `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`,
+`KYC_PURGE_SECRET` или Supabase access token в этот Markdown-файл, README,
+чат или скриншоты. Если token бота уже был показан, откройте `@BotFather`,
+выполните `/revoke` для бота и используйте новый token только в `.env.deploy`.
 
 ## 1. Создать проект Supabase
 
@@ -21,13 +26,13 @@
    - `Publishable key`, начинающийся с `sb_publishable_`.
 4. Запишите `Project Ref`: это часть URL перед `.supabase.co`, в примере `abcdefgh`.
 
-## 2. Заполнить один `.env`
+## 2. Заполнить один `.env.deploy`
 
 В PowerShell в папке проекта:
 
 ```powershell
-Copy-Item .env.example .env
-notepad .env
+Copy-Item .env.deploy.example .env.deploy
+notepad .env.deploy
 ```
 
 Заполните файл:
@@ -78,7 +83,11 @@ TELEGRAM_ADMIN_IDS=123456789,987654321
 
 ## 4. Подключить проект через Supabase CLI
 
-Нужен Node.js, он уже требуется для frontend. В PowerShell:
+Нужен Node.js, он уже требуется для frontend.
+
+### Вариант A: на своем компьютере с браузером
+
+В PowerShell:
 
 ```powershell
 npx supabase@latest login
@@ -86,6 +95,30 @@ npx supabase@latest link --project-ref YOUR_PROJECT_REF
 ```
 
 При `link` Supabase может запросить пароль базы, который задавался при создании проекта.
+
+### Вариант B: на VPS по SSH, где браузера нет
+
+Не используйте обычный `npx supabase@latest login`: VPS не сможет открыть
+страницу входа. На своем компьютере в браузере откройте:
+
+```text
+https://supabase.com/dashboard/account/tokens
+```
+
+Создайте `Personal Access Token`. Затем на VPS, в папке проекта, выполните:
+
+```bash
+read -s -p "Paste Supabase Personal Access Token: " SUPABASE_ACCESS_TOKEN; echo
+export SUPABASE_ACCESS_TOKEN
+npx supabase@latest projects list
+npx supabase@latest link --project-ref YOUR_PROJECT_REF
+```
+
+Команда `read -s` не показывает token на экране и не записывает его в историю
+команд. Переменная действует только в текущем SSH-сеансе.
+
+Если терминал уже показывает `Enter your verification code:` после неудачного
+входа, сначала нажмите `Ctrl+C`, затем выполните команды варианта B.
 
 ## 5. Загрузить таблицы и функции базы
 
@@ -103,12 +136,12 @@ npx supabase@latest db push
 
 Команда создаёт таблицы, RLS-политики, приватные Storage buckets, RPC для demo-заявок, feedback, KYC и админки.
 
-## 6. Загрузить secrets из того же `.env`
+## 6. Загрузить secrets из того же `.env.deploy`
 
-Используется тот же единственный `.env`:
+Используется тот же единственный `.env.deploy`:
 
 ```powershell
-npx supabase@latest secrets set --env-file .env
+npx supabase@latest secrets set --env-file .env.deploy
 npx supabase@latest secrets list
 ```
 
@@ -134,7 +167,7 @@ npx supabase@latest functions list
 
 Для Telegram Mini App требуется публичный HTTPS-адрес сайта. Сначала поднимите frontend на VPS по инструкции [DEPLOY_VPS_RU.md](DEPLOY_VPS_RU.md) и включите HTTPS.
 
-После получения настоящего адреса сайта замените в `.env`:
+После получения настоящего адреса сайта замените в `.env.deploy`:
 
 ```dotenv
 TELEGRAM_MINI_APP_URL=https://ваш-домен.example.com
@@ -143,7 +176,7 @@ TELEGRAM_MINI_APP_URL=https://ваш-домен.example.com
 Повторно отправьте secrets:
 
 ```powershell
-npx supabase@latest secrets set --env-file .env
+npx supabase@latest secrets set --env-file .env.deploy
 ```
 
 Перепубликовывать функции после смены secrets не нужно.
@@ -177,7 +210,7 @@ Telegram не разрешает автоматически открыть Mini 
 
 ```powershell
 npx supabase@latest db push
-npx supabase@latest secrets set --env-file .env
+npx supabase@latest secrets set --env-file .env.deploy
 npx supabase@latest functions deploy --use-api
 ```
 

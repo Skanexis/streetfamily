@@ -8,15 +8,15 @@ The repository now includes a production frontend container, Docker Compose conf
 
 ## One Environment File
 
-The project uses exactly one local/deployment configuration file: `.env` in the repository root.
+The project uses exactly one local/deployment configuration file: `.env.deploy` in the repository root.
 
 ```bash
 npm install
-copy .env.example .env
+copy .env.deploy.example .env.deploy
 npm run dev
 ```
 
-The same `.env` is used for Vite, Docker Compose and `supabase secrets set --env-file .env`. It is ignored by Git. For the complete Russian step-by-step Supabase and Telegram setup, use [`docs/SUPABASE_SETUP_RU.md`](docs/SUPABASE_SETUP_RU.md).
+The same `.env.deploy` is used for Vite, Docker Compose and `supabase secrets set --env-file .env.deploy`. It is ignored by Git. For the complete Russian step-by-step Supabase and Telegram setup, use [`docs/SUPABASE_SETUP_RU.md`](docs/SUPABASE_SETUP_RU.md).
 
 Checks:
 
@@ -35,15 +35,17 @@ The exact beginner setup commands are in [`docs/SUPABASE_SETUP_RU.md`](docs/SUPA
 - [`supabase/migrations/202605250004_broadcasts.sql`](supabase/migrations/202605250004_broadcasts.sql)
 - [`supabase/migrations/202605250005_demo_loyalty_feedback_rules.sql`](supabase/migrations/202605250005_demo_loyalty_feedback_rules.sql)
 
-After `npx supabase@latest login` and `npx supabase@latest link --project-ref YOUR_PROJECT_REF`, apply and deploy:
+On a workstation with a browser use `npx supabase@latest login`. On a headless
+VPS use a Personal Access Token through `SUPABASE_ACCESS_TOKEN`, as shown in
+[`docs/SUPABASE_SETUP_RU.md`](docs/SUPABASE_SETUP_RU.md). After linking the project, apply and deploy:
 
 ```bash
 npx supabase@latest db push
-npx supabase@latest secrets set --env-file .env
+npx supabase@latest secrets set --env-file .env.deploy
 npx supabase@latest functions deploy --use-api
 ```
 
-All configuration values are defined once in root `.env`, copied from `.env.example`:
+All configuration values are defined once in root `.env.deploy`, copied from `.env.deploy.example`:
 
 ```dotenv
 VITE_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
