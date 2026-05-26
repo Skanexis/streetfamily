@@ -34,6 +34,7 @@ The exact beginner setup commands are in [`docs/SUPABASE_SETUP_RU.md`](docs/SUPA
 - [`supabase/migrations/202605250003_manual_kyc.sql`](supabase/migrations/202605250003_manual_kyc.sql)
 - [`supabase/migrations/202605250004_broadcasts.sql`](supabase/migrations/202605250004_broadcasts.sql)
 - [`supabase/migrations/202605250005_demo_loyalty_feedback_rules.sql`](supabase/migrations/202605250005_demo_loyalty_feedback_rules.sql)
+- [`supabase/migrations/202605250006_remove_admin_mfa.sql`](supabase/migrations/202605250006_remove_admin_mfa.sql)
 
 On a workstation with a browser use `npx supabase@latest login`. On a headless
 VPS use a Personal Access Token through `SUPABASE_ACCESS_TOKEN`, as shown in
@@ -74,7 +75,7 @@ https://api.telegram.org/bot<BOT_TOKEN>/setWebhook?url=https://<project-ref>.sup
 - `TELEGRAM_MINI_APP_URL` must be the public HTTPS URL of the deployed frontend.
 - `TELEGRAM_ADMIN_IDS` contains comma-separated Telegram numeric user IDs, for example `123456789,987654321`. When any of these users enters through the bot or Mini App, they are assigned role `admin` automatically.
 - Admin users see an admin badge and panel link in their profile and the admin navigation action.
-- The admin panel additionally requires TOTP MFA (`aal2`) before protected operations are accessible.
+- The admin panel is available to Telegram users assigned role `admin`; actions remain protected by RLS/RPC checks and audit logging.
 - Non-admin Telegram users registering through the bot receive member access to this closed demo; an explicitly disabled member remains blocked.
 - Functions receiving unsigned browser startup requests or Telegram webhooks are configured with `verify_jwt = false` in [`supabase/config.toml`](supabase/config.toml). They authenticate through Telegram signatures or challenge secrets in their handlers.
 
@@ -107,7 +108,7 @@ https://api.telegram.org/bot<BOT_TOKEN>/setWebhook?url=https://<project-ref>.sup
 - Admins create in-app broadcasts from the `Broadcast` admin tab and can publish or archive each message.
 - Published broadcasts appear in the notification bell for allowlisted staging users; drafts remain admin-only under RLS.
 - When an admin creates a product, the `Crea news nuovo prodotto` checkbox creates a linked news draft. It is deliberately not published automatically so media and catalogue visibility can be checked first.
-- Broadcast and linked-product creation operations require admin MFA and are written to the admin audit log.
+- Broadcast and linked-product creation operations require the admin role and are written to the admin audit log.
 
 ## First-Order Manual KYC
 
@@ -116,7 +117,7 @@ https://api.telegram.org/bot<BOT_TOKEN>/setWebhook?url=https://<project-ref>.sup
 - The frontend uses `navigator.mediaDevices.getUserMedia()` and a canvas snapshot. It does not expose a file-picker input for KYC.
 - A browser application cannot cryptographically prove that a submitted image originated from the live camera without an external verification or device-attestation service. This implementation removes the normal upload path and requires active camera permission in the UI.
 - KYC images are stored in the separate private `kyc-documents` Storage bucket. There are no browser read/upload policies for this bucket; authenticated uploads and reviews go through Edge Functions only.
-- Administrators may view KYC images only after MFA (`aal2`). Document views generate 60-second signed URLs and an audit event; approve/reject decisions are also audited.
+- Administrators may view KYC images only from an admin session. Document views generate 60-second signed URLs and an audit event; approve/reject decisions are also audited.
 - Approving or rejecting KYC sends a Telegram status notification to the member. When KYC is rejected, captured image objects and metadata are removed so the user must perform fresh camera captures before resubmitting.
 - Approved images are retained permanently (default: 36500 days / 100 years) and configurable in the admin panel. Invoke `purge-expired-kyc` daily with a secret header to delete expired document objects and metadata while keeping the reviewed case record:
 

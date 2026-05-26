@@ -32,6 +32,6 @@ Deno.serve(async req => {
     details: { document_count: 3 },
   })
   const username = user.user_metadata?.username ?? user.user_metadata?.first_name ?? user.id
-  await Promise.allSettled(Array.from(envAdminIds()).map(id => sendTelegramMessage(id, `KYC da revisionare\nUtente: @${username}\nApri la dashboard admin con MFA.`)))
+  await Promise.allSettled(Array.from(envAdminIds()).map(id => sendTelegramMessage(id, `KYC da revisionare\nUtente: @${username}\nApri la dashboard admin.`)))
   return json({ status: 'submitted' })
 })

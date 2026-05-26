@@ -10,7 +10,6 @@ interface AuthValue {
   session: Session | null
   profile: Profile | null
   denied: boolean
-  isAdminMfa: boolean
   beginTelegramBotLogin: () => Promise<{ token: string; botUrl: string }>
   checkTelegramBotLogin: (token: string) => Promise<'pending' | 'confirmed' | 'denied' | 'expired'>
   loginFromTelegramMiniApp: (initData: string) => Promise<void>
@@ -37,7 +36,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [denied, setDenied] = useState(false)
-  const [isAdminMfa, setIsAdminMfa] = useState(false)
   const [loading, setLoading] = useState(isSupabaseConfigured)
 
   const refreshProfile = async () => {
@@ -45,8 +43,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const current = await getAccessProfile()
     setProfile(current)
     setDenied(!current)
-    const { data } = await requireSupabase().auth.mfa.getAuthenticatorAssuranceLevel()
-    setIsAdminMfa(data?.currentLevel === 'aal2')
   }
 
   useEffect(() => {
@@ -77,7 +73,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     session,
     profile,
     denied,
-    isAdminMfa,
     beginTelegramBotLogin: async () => {
       const db = requireSupabase()
       const { data, error } = await db.functions.invoke('telegram-auth-start', { body: {} })
@@ -106,7 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await db.auth.signOut()
     },
     refreshProfile,
-  }), [loading, session, profile, denied, isAdminMfa])
+  }), [loading, session, profile, denied])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

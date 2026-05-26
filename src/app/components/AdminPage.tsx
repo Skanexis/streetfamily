@@ -1,6 +1,5 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
-import { ShieldCheck, Package, Users, Gamepad2, ClipboardList, Settings, Megaphone, MessageSquare } from 'lucide-react'
-import { useAuth } from '../auth/AuthProvider'
+import { Package, Users, Gamepad2, ClipboardList, Settings, Megaphone, MessageSquare } from 'lucide-react'
 import { adminAdjustWallet, getAdminDashboard, getAdminKycDocuments, reviewKyc } from '../lib/api'
 import { requireSupabase } from '../lib/supabase'
 import type { Broadcast, DashboardData, KycReviewDocument } from '../data'
@@ -9,7 +8,6 @@ type Tab = 'catalog' | 'broadcasts' | 'users' | 'orders' | 'economy' | 'feedback
 type Row = Record<string, any>
 
 export function AdminPage() {
-  const auth = useAuth()
   const [tab, setTab] = useState<Tab>('catalog')
   const [dashboard, setDashboard] = useState<DashboardData | null>(null)
   const [products, setProducts] = useState<Row[]>([])
@@ -27,7 +25,6 @@ export function AdminPage() {
   const [error, setError] = useState('')
 
   const load = async () => {
-    if (!auth.isAdminMfa) return
     try {
       const db = requireSupabase()
       const [summary, productResult, categoryResult, profileResult, orderResult, gameResult, locationResult, allowlistResult, settingsResult, broadcastResult, feedbackResult, optionsResult, tiersResult] = await Promise.all([
@@ -75,15 +72,7 @@ export function AdminPage() {
     }
   }
 
-  useEffect(() => { load() }, [auth.isAdminMfa])
-
-  if (!auth.isAdminMfa) {
-    return (
-      <AdminFrame>
-        <MfaGate onVerified={auth.refreshProfile} />
-      </AdminFrame>
-    )
-  }
+  useEffect(() => { load() }, [])
 
   return (
     <AdminFrame>
@@ -121,53 +110,6 @@ export function AdminPage() {
       {tab === 'feedback' && <FeedbackAdmin feedback={feedback} reload={load} />}
       {tab === 'settings' && <SettingsAdmin locations={locations} settings={settings} tokenTiers={tokenTiers} reload={load} />}
     </AdminFrame>
-  )
-}
-
-function MfaGate({ onVerified }: { onVerified: () => Promise<void> }) {
-  const [factorId, setFactorId] = useState('')
-  const [qr, setQr] = useState('')
-  const [code, setCode] = useState('')
-  const [message, setMessage] = useState('')
-  const prepare = async () => {
-    const db = requireSupabase()
-    const factors = await db.auth.mfa.listFactors()
-    const existing = factors.data?.totp.find(factor => factor.status === 'verified')
-    if (existing) {
-      setFactorId(existing.id)
-      setMessage('Inserisci il codice della tua app autenticatore.')
-      return
-    }
-    const enrollment = await db.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'Street Family Admin' })
-    if (enrollment.error) throw new Error(enrollment.error.message)
-    setFactorId(enrollment.data.id)
-    setQr(enrollment.data.totp.qr_code)
-    setMessage('Scansiona il QR e inserisci il primo codice.')
-  }
-  const verify = async (event: FormEvent) => {
-    event.preventDefault()
-    const { error } = await requireSupabase().auth.mfa.challengeAndVerify({ factorId, code })
-    if (error) {
-      setMessage(error.message)
-      return
-    }
-    await onVerified()
-  }
-  useEffect(() => { prepare().catch(error => setMessage(error.message)) }, [])
-  return (
-    <div className="p-8 rounded-2xl max-w-lg" style={panel}>
-      <ShieldCheck size={38} style={{ color: '#F59E0B', marginBottom: 12 }} />
-      <h1 style={heading}>MFA obbligatoria</h1>
-      <p style={muted}>La dashboard amministrativa richiede assurance level `aal2`.</p>
-      {qr && <img src={qr} alt="QR TOTP per MFA admin" className="my-5 rounded-xl" style={{ width: 190, height: 190 }} />}
-      {message && <p style={{ ...muted, margin: '15px 0' }}>{message}</p>}
-      {factorId && (
-        <form onSubmit={verify} className="flex gap-2">
-          <input required inputMode="numeric" value={code} onChange={event => setCode(event.target.value)} placeholder="Codice MFA" style={input} />
-          <button style={primary}>Verifica</button>
-        </form>
-      )}
-    </div>
   )
 }
 

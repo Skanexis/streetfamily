@@ -128,13 +128,13 @@ npx supabase@latest link --project-ref YOUR_PROJECT_REF
 npx supabase@latest db push --dry-run
 ```
 
-Если в выводе перечислены миграции `202605250001` ... `202605250005`, примените их:
+Если в выводе перечислены миграции `202605250001` ... `202605250006`, примените их:
 
 ```powershell
 npx supabase@latest db push
 ```
 
-Команда создаёт таблицы, RLS-политики, приватные Storage buckets, RPC для demo-заявок, feedback, KYC и админки.
+Команда создаёт таблицы, RLS-политики, приватные Storage buckets, RPC для demo-заявок, feedback, KYC и админки. Для admin-доступа используется Telegram admin role без TOTP/MFA.
 
 ## 6. Загрузить secrets из того же `.env.deploy`
 
