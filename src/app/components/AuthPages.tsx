@@ -16,22 +16,23 @@ const card = {
 export function LoginPage() {
   const auth = useAuth()
   const [challenge, setChallenge] = useState<{ token: string; botUrl: string } | null>(null)
+  const [preparedChallenge, setPreparedChallenge] = useState<{ token: string; botUrl: string } | null>(null)
+  const [preparingBotLink, setPreparingBotLink] = useState(false)
+  const [botLinkAttempted, setBotLinkAttempted] = useState(false)
   const [miniAppData, setMiniAppData] = useState('')
   const [miniAppAttempted, setMiniAppAttempted] = useState(false)
   const [error, setError] = useState('')
-  const login = async () => {
-    const telegramWindow = window.open('', '_blank')
+  const prepareBotLogin = async () => {
+    setBotLinkAttempted(true)
+    setPreparingBotLink(true)
+    setError('')
     try {
       const created = await auth.beginTelegramBotLogin()
-      setChallenge(created)
-      if (telegramWindow) {
-        telegramWindow.location.href = created.botUrl
-      } else {
-        window.location.href = created.botUrl
-      }
+      setPreparedChallenge(created)
     } catch (caught) {
-      telegramWindow?.close()
       setError(caught instanceof Error ? caught.message : 'Impossibile avviare Telegram.')
+    } finally {
+      setPreparingBotLink(false)
     }
   }
   const loginMiniApp = async (initData: string) => {
@@ -53,6 +54,10 @@ export function LoginPage() {
     telegram.expand?.()
     loginMiniApp(telegram.initData)
   }, [auth, miniAppAttempted])
+  useEffect(() => {
+    if (!auth.configured || miniAppData || challenge || preparedChallenge || preparingBotLink || botLinkAttempted) return
+    void prepareBotLogin()
+  }, [auth.configured, botLinkAttempted, challenge, miniAppData, preparedChallenge, preparingBotLink])
   useEffect(() => {
     if (!challenge) return
     const timer = window.setInterval(async () => {
@@ -86,7 +91,11 @@ export function LoginPage() {
         ) : miniAppData ? (
           error && <button onClick={() => loginMiniApp(miniAppData)} style={primaryButton}><Send size={17} /> Riprova accesso Mini App</button>
         ) : (
-          <button onClick={login} disabled={Boolean(challenge)} style={primaryButton}><Send size={17} /> {challenge ? 'In attesa del bot...' : 'Apri il bot Telegram'}</button>
+          challenge
+            ? <button disabled style={{ ...primaryButton, opacity: .65 }}><Send size={17} /> In attesa del bot...</button>
+            : preparedChallenge
+              ? <a href={preparedChallenge.botUrl} target="_blank" rel="noopener noreferrer" onClick={() => { setError(''); setChallenge(preparedChallenge); setPreparedChallenge(null) }} style={{ ...primaryButton, textDecoration: 'none' }}><Send size={17} /> Apri il bot Telegram</a>
+              : <button onClick={() => void prepareBotLogin()} disabled={preparingBotLink} style={{ ...primaryButton, opacity: preparingBotLink ? .65 : 1 }}><Send size={17} /> {preparingBotLink ? 'Preparazione...' : 'Riprova'}</button>
         )}
         {challenge && <p style={{ color: '#D7FE55', marginTop: 16 }}>Conferma nel bot, poi questa pagina accedera automaticamente.</p>}
         {error && <p style={{ color: '#F87171', marginTop: 16 }}>{error}</p>}

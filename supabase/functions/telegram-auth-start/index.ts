@@ -9,7 +9,7 @@ Deno.serve(async req => {
   const db = adminClient()
   const { error } = await db.from('telegram_login_challenges').insert({ token_hash: hash })
   if (error) return json({ error: error.message }, 500)
-  const botUsername = Deno.env.get('TELEGRAM_BOT_USERNAME')
+  const botUsername = Deno.env.get('TELEGRAM_BOT_USERNAME')?.trim().replace(/^@/, '')
   if (!botUsername) return json({ error: 'TELEGRAM_BOT_USERNAME missing' }, 500)
   return json({
     token,
