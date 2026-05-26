@@ -125,7 +125,7 @@ function MemberApplication() {
       {loading ? (
         <div className="flex justify-center" style={{ paddingTop: 140 }}>Caricamento dati test...</div>
       ) : (
-        <main className="pb-20 md:pb-0" style={{ paddingTop: 28 }}>
+        <main className="sf-mobile-nav-space" style={{ paddingTop: 28 }}>
           <Routes>
             <Route path="/" element={<HomePage navigate={navigate} products={products} levels={levels} addToCart={addToCart} user={user} onProductSelect={(id) => { setSelectedProductId(id); navigate('catalog') }} />} />
             <Route path="/catalog" element={<CatalogPage products={products} feedback={feedback} addToCart={addToCart} selectedProductId={selectedProductId} onProductSelect={setSelectedProductId} />} />
@@ -137,7 +137,7 @@ function MemberApplication() {
           </Routes>
         </main>
       )}
-      {location.pathname !== '/admin' && (
+      {location.pathname !== '/admin' && !cartOpen && !selectedProductId && (
         <BottomNav page={page} navigate={navigate} cartCount={cart.length} onCartOpen={() => setCartOpen(true)} />
       )}
       <CartDrawer

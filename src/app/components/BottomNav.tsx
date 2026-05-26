@@ -20,7 +20,8 @@ export function BottomNav({ page, navigate, cartCount, onCartOpen }: BottomNavPr
     <nav
       className="md:hidden fixed bottom-0 left-0 right-0 z-50 flex items-center"
       style={{
-        height: 64,
+        height: 'calc(64px + env(safe-area-inset-bottom, 0px))',
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
         background: 'rgba(8, 12, 14, 0.97)',
         backdropFilter: 'blur(20px)',
         borderTop: '1px solid rgba(126, 156, 168, 0.15)',

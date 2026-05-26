@@ -70,8 +70,8 @@ export function CartDrawer({ open, onClose, cart, removeFromCart, tokens, servic
   return (
     <AnimatePresence>
       {open && <>
-        <motion.div className="fixed inset-0 z-50" style={{ background: 'rgba(0,0,0,.68)' }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={close} />
-        <motion.div className="fixed right-0 top-0 bottom-0 z-50 flex flex-col w-full sm:max-w-md" style={{ background: '#080C0E', borderLeft: '1px solid rgba(126,156,168,.2)' }} initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}>
+        <motion.div className="fixed inset-0" style={{ zIndex: 70, background: 'rgba(0,0,0,.68)' }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={close} />
+        <motion.div className="fixed right-0 top-0 bottom-0 flex flex-col w-full sm:max-w-md" style={{ zIndex: 71, paddingBottom: 'env(safe-area-inset-bottom, 0px)', background: '#080C0E', borderLeft: '1px solid rgba(126,156,168,.2)' }} initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}>
           <header className="p-5 flex items-center gap-3" style={{ borderBottom: '1px solid rgba(245,245,245,.08)' }}>
             {!['cart', 'success'].includes(step) && <button onClick={() => setStep(step === 'kyc' ? 'summary' : step === 'summary' ? 'details' : step === 'details' ? 'scenario' : 'cart')}><ChevronLeft size={20} /></button>}
             <div className="flex-1"><strong style={{ fontFamily: 'Space Grotesk', fontSize: 20 }}>Richiesta demo</strong><div style={{ color: '#D7FE55', fontSize: 10, fontFamily: 'Orbitron' }}>NO PAYMENT / NO FULFILLMENT</div></div>
