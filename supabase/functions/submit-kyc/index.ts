@@ -1,4 +1,4 @@
-import { adminClient, corsHeaders, envAdminIds, json, sendTelegramMessage, userClient } from '../_shared/clients.ts'
+import { adminClient, corsHeaders, envAdminIds, json, publicErrorMessage, sendTelegramMessageWithOptions, userClient } from '../_shared/clients.ts'
 
 Deno.serve(async req => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
@@ -9,7 +9,7 @@ Deno.serve(async req => {
   const { data: { user }, error: authError } = await session.auth.getUser()
   if (authError || !user) return json({ error: 'Non autorizzato' }, 401)
   const access = await session.rpc('get_my_kyc_status')
-  if (access.error) return json({ error: access.error.message }, 403)
+  if (access.error) return json({ error: publicErrorMessage(access.error.message, 'Accesso alla verifica non riuscito.') }, 403)
   const db = adminClient()
   const currentCase = await db.from('kyc_cases').select('status').eq('user_id', user.id).maybeSingle()
   if (currentCase.data?.status === 'approved') return json({ error: 'KYC già approvata.' }, 409)
@@ -23,7 +23,7 @@ Deno.serve(async req => {
     submitted_at: new Date().toISOString(),
     rejection_reason: null,
   }, { onConflict: 'user_id' })
-  if (update.error) return json({ error: update.error.message }, 500)
+  if (update.error) return json({ error: publicErrorMessage(update.error.message, 'Invio verifica non riuscito.') }, 500)
   await db.from('admin_audit_log').insert({
     actor_id: user.id,
     action: 'kyc.submitted',
@@ -32,6 +32,19 @@ Deno.serve(async req => {
     details: { document_count: 3 },
   })
   const username = user.user_metadata?.username ?? user.user_metadata?.first_name ?? user.id
-  await Promise.allSettled(Array.from(envAdminIds()).map(id => sendTelegramMessage(id, `KYC da revisionare\nUtente: @${username}\nApri il pannello amministrazione.`)))
+  const appUrl = Deno.env.get('TELEGRAM_MINI_APP_URL')
+  const adminUrl = appUrl ? new URL('/admin', appUrl) : null
+  if (adminUrl) {
+    adminUrl.searchParams.set('tab', 'users')
+    adminUrl.searchParams.set('kyc', user.id)
+  }
+  const keyboard = adminUrl
+    ? { inline_keyboard: [[{ text: 'Apri KYC', web_app: { url: adminUrl.toString() } }]] }
+    : undefined
+  await Promise.allSettled(Array.from(envAdminIds()).map(id => sendTelegramMessageWithOptions(
+    id,
+    `Nuova richiesta KYC\nUtente: @${username}\nStato: da revisionare`,
+    keyboard,
+  )))
   return json({ status: 'submitted' })
 })

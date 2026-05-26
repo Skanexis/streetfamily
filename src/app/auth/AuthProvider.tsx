@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import type { Session } from '@supabase/supabase-js'
 import { getAccessProfile } from '../lib/api'
 import { isSupabaseConfigured, requireSupabase, supabase } from '../lib/supabase'
+import { italianErrorMessage } from '../lib/errors'
 import type { Profile } from '../data'
 
 interface AuthValue {
@@ -24,12 +25,12 @@ async function edgeFunctionError(error: unknown, fallback: string) {
   try {
     if (functionError.context) {
       const body = await functionError.context.clone().json() as { error?: string }
-      if (body.error) return body.error
+      if (body.error) return italianErrorMessage(body.error, fallback)
     }
   } catch {
     // Keep the client fallback when the failed response is not JSON.
   }
-  return functionError.message ?? fallback
+  return italianErrorMessage(functionError.message, fallback)
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -85,7 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error) throw new Error(await edgeFunctionError(error, 'Impossibile verificare Telegram.'))
       if (data.state === 'confirmed') {
         const verified = await db.auth.verifyOtp({ token_hash: data.tokenHash, type: 'magiclink' })
-        if (verified.error) throw new Error(verified.error.message)
+        if (verified.error) throw new Error(italianErrorMessage(verified.error.message, 'Accesso Telegram non riuscito.'))
       }
       return data.state
     },
@@ -94,7 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data, error } = await db.functions.invoke('telegram-miniapp-auth', { body: { initData } })
       if (error) throw new Error(await edgeFunctionError(error, 'Accesso alla mini applicazione non riuscito.'))
       const verified = await db.auth.verifyOtp({ token_hash: data.tokenHash, type: 'magiclink' })
-      if (verified.error) throw new Error(verified.error.message)
+      if (verified.error) throw new Error(italianErrorMessage(verified.error.message, 'Accesso Telegram non riuscito.'))
     },
     logout: async () => {
       const db = requireSupabase()

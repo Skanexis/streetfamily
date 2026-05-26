@@ -1,4 +1,4 @@
-import { adminClient, corsHeaders, json, sha256 } from '../_shared/clients.ts'
+import { adminClient, corsHeaders, json, publicErrorMessage, sha256 } from '../_shared/clients.ts'
 
 Deno.serve(async req => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
@@ -8,7 +8,7 @@ Deno.serve(async req => {
   const hash = await sha256(token)
   const db = adminClient()
   const { error } = await db.from('telegram_login_challenges').insert({ token_hash: hash })
-  if (error) return json({ error: error.message }, 500)
+  if (error) return json({ error: publicErrorMessage(error.message, 'Impossibile avviare Telegram.') }, 500)
   const botUsername = Deno.env.get('TELEGRAM_BOT_USERNAME')?.trim().replace(/^@/, '')
   if (!botUsername) return json({ error: 'Username del bot Telegram non configurato' }, 500)
   return json({

@@ -1,10 +1,15 @@
-import { adminClient, envAdminIds, json, sendTelegramMessage, sendTelegramMessageWithOptions, setTelegramMiniAppMenu, sha256 } from '../_shared/clients.ts'
+import { adminClient, answerTelegramCallbackQuery, envAdminIds, json, publicErrorMessage, sendTelegramMessage, sendTelegramMessageWithOptions, setTelegramMiniAppMenu, sha256 } from '../_shared/clients.ts'
 
 interface TelegramUpdate {
   message?: {
     chat: { id: number }
     from?: { id: number; username?: string; first_name?: string }
     text?: string
+  }
+  callback_query?: {
+    id: string
+    from: { id: number; username?: string; first_name?: string }
+    data?: string
   }
 }
 
@@ -14,6 +19,41 @@ Deno.serve(async req => {
     return json({ error: 'Non autorizzato' }, 401)
   }
   const update: TelegramUpdate = await req.json()
+  const callback = update.callback_query
+  if (callback?.data) {
+    const telegramId = String(callback.from.id)
+    if (!envAdminIds().has(telegramId)) {
+      await answerTelegramCallbackQuery(callback.id, 'Azione non autorizzata.')
+      return json({ ok: true })
+    }
+    const match = callback.data.match(/^ord:([ar]):([0-9a-f-]{36})$/i)
+    if (!match) {
+      await answerTelegramCallbackQuery(callback.id, 'Azione non valida.')
+      return json({ ok: true })
+    }
+    const db = adminClient()
+    const { data: actor } = await db.from('profiles')
+      .select('id')
+      .eq('telegram_subject', telegramId)
+      .eq('role', 'admin')
+      .maybeSingle()
+    if (!actor) {
+      await answerTelegramCallbackQuery(callback.id, 'Apri prima la mini applicazione come amministratore.')
+      return json({ ok: true })
+    }
+    const action = match[1] === 'a' ? 'accept' : 'reject'
+    const result = await db.rpc('telegram_admin_order_action', {
+      p_actor_id: actor.id,
+      p_order_id: match[2],
+      p_action: action,
+    })
+    if (result.error) {
+      await answerTelegramCallbackQuery(callback.id, publicErrorMessage(result.error.message, 'Aggiornamento ordine non riuscito.'))
+      return json({ ok: true })
+    }
+    await answerTelegramCallbackQuery(callback.id, action === 'accept' ? 'Ordine accettato.' : 'Ordine rifiutato.')
+    return json({ ok: true })
+  }
   const message = update.message
   const match = message?.text?.match(/^\/start\s+login_([A-Za-z0-9_-]+)$/)
   if (!message || !message.from) return json({ ok: true })
@@ -80,10 +120,10 @@ Deno.serve(async req => {
   const { data: profile } = await db.from('profiles').select('id').eq('telegram_subject', telegramId).maybeSingle()
   if (!profile) {
     const created = await db.auth.admin.createUser({ email, email_confirm: true, user_metadata: metadata })
-    if (created.error) return json({ error: created.error.message }, 500)
+    if (created.error) return json({ error: publicErrorMessage(created.error.message, 'Creazione account non riuscita.') }, 500)
   }
   const generated = await db.auth.admin.generateLink({ type: 'magiclink', email, options: { data: metadata } })
-  if (generated.error) return json({ error: generated.error.message }, 500)
+  if (generated.error) return json({ error: publicErrorMessage(generated.error.message, 'Accesso Telegram non riuscito.') }, 500)
   const authTokenHash = generated.data.properties.hashed_token
   await db.from('telegram_login_challenges').update({
     telegram_id: telegramId,

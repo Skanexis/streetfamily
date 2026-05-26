@@ -3,6 +3,7 @@ import { ShieldAlert, Send } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { ReactElement, ReactNode } from 'react'
 import { useAuth } from '../auth/AuthProvider'
+import { italianErrorMessage } from '../lib/errors'
 
 const card = {
   maxWidth: 460,
@@ -30,7 +31,7 @@ export function LoginPage() {
       const created = await auth.beginTelegramBotLogin()
       setPreparedChallenge(created)
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Impossibile avviare Telegram.')
+      setError(italianErrorMessage(caught, 'Impossibile avviare Telegram.'))
     } finally {
       setPreparingBotLink(false)
     }
@@ -40,7 +41,7 @@ export function LoginPage() {
     try {
       await auth.loginFromTelegramMiniApp(initData)
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Accesso alla mini applicazione non riuscito.')
+      setError(italianErrorMessage(caught, 'Accesso alla mini applicazione non riuscito.'))
     }
   }
   useEffect(() => {
@@ -74,7 +75,7 @@ export function LoginPage() {
         }
       } catch (caught) {
         window.clearInterval(timer)
-        setError(caught instanceof Error ? caught.message : 'Accesso non riuscito.')
+        setError(italianErrorMessage(caught, 'Accesso non riuscito.'))
       }
     }, 1800)
     return () => window.clearInterval(timer)

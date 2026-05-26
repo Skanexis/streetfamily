@@ -1,4 +1,4 @@
-import { adminClient, corsHeaders, json, sendTelegramMessage, userClient } from '../_shared/clients.ts'
+import { adminClient, corsHeaders, json, publicErrorMessage, sendTelegramMessage, userClient } from '../_shared/clients.ts'
 
 Deno.serve(async req => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
@@ -11,7 +11,7 @@ Deno.serve(async req => {
     p_decision: decision,
     p_reason: reason ?? '',
   })
-  if (error) return json({ error: error.message }, 403)
+  if (error) return json({ error: publicErrorMessage(error.message, 'Decisione sulla verifica non riuscita.') }, 403)
   const db = adminClient()
   if (decision === 'rejected') {
     const documents = await db.from('kyc_documents').select('storage_path').eq('user_id', userId)
@@ -29,7 +29,7 @@ Deno.serve(async req => {
   const recipient = await db.from('profiles').select('telegram_subject').eq('id', userId).maybeSingle()
   if (recipient.data?.telegram_subject) {
     const text = decision === 'approved'
-      ? 'Verifica approvata. Ora puoi proseguire con la richiesta dimostrativa.'
+      ? 'Verifica approvata. Ora puoi proseguire con l’ordine.'
       : 'Verifica non approvata. Effettua nuovamente la procedura dal sito.'
     await Promise.allSettled([sendTelegramMessage(recipient.data.telegram_subject, text)])
   }

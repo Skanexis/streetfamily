@@ -39,13 +39,13 @@ export function HomePage({ navigate, user, products, levels, onProductSelect }: 
       </div>
     </section>
     <section className="px-4 md:px-8 py-14"><div className="max-w-6xl mx-auto">
-      <div className="flex justify-between mb-7"><div><div className="sf-kicker mb-3">Catalogo dimostrativo</div><h2 style={title}>Collezioni</h2></div><button onClick={() => navigate('catalog')} style={{ color: '#D7FE55' }}>Vedi tutto</button></div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">{products.slice(0, 4).map(product => <button key={product.id} onClick={() => { onProductSelect(product.id); navigate('catalog') }} className="text-left overflow-hidden" style={panel}>{product.img ? <img src={product.img} alt={product.name} className="w-full object-cover" style={{ height: 150 }} /> : <div className="flex justify-center items-center" style={{ height: 150, background: '#182226', color: 'rgba(245,245,245,.35)', fontFamily: 'Orbitron', fontSize: 10 }}>MEDIA DIMOSTRATIVO</div>}<div className="p-4"><strong>{product.name}</strong><div style={{ ...caption, marginTop: 8 }}>da EUR {formatPrice(product.startingPrice)} / 50 g</div></div></button>)}</div>
+      <div className="flex justify-between mb-7"><div><div className="sf-kicker mb-3">Catalogo</div><h2 style={title}>Collezioni</h2></div><button onClick={() => navigate('catalog')} style={{ color: '#D7FE55' }}>Vedi tutto</button></div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">{products.slice(0, 4).map(product => <button key={product.id} onClick={() => { onProductSelect(product.id); navigate('catalog') }} className="text-left overflow-hidden" style={panel}>{product.img ? <img src={product.img} alt={product.name} className="w-full object-cover" style={{ height: 150 }} /> : <div className="flex justify-center items-center" style={{ height: 150, background: '#182226', color: 'rgba(245,245,245,.35)', fontFamily: 'Orbitron', fontSize: 10 }}>MEDIA</div>}<div className="p-4"><strong>{product.name}</strong><div style={{ ...caption, marginTop: 8 }}>da EUR {formatPrice(product.startingPrice)} / 25 g</div></div></button>)}</div>
     </div></section>
     <section className="px-4 md:px-8 py-14"><div className="max-w-6xl mx-auto grid md:grid-cols-3 gap-4">
-      <Info Icon={Ticket} title="Ruota dei premi" body="Un biglietto gratuito ogni 5 scenari dimostrativi completati." onClick={() => navigate('games')} />
-      <Info Icon={MapPin} title="Incontro dimostrativo" body="Selezione città e minimi in grammi visibili nel regolamento." onClick={() => navigate('info')} />
-      <Info Icon={Truck} title="Consegna dimostrativa" body="Dati di esempio e sovrapprezzo soltanto simulato." onClick={() => navigate('info')} />
+      <Info Icon={Ticket} title="Ruota dei premi" body="Un biglietto gratuito ogni 5 ordini completati." onClick={() => navigate('games')} />
+      <Info Icon={MapPin} title="MEETUP" body="Selezione città e minimi in grammi visibili nel regolamento." onClick={() => navigate('info')} />
+      <Info Icon={Truck} title="DELIVERY LOCALE / TUTTA ITALIA" body="Disponibilità e tariffe visibili nel regolamento." onClick={() => navigate('info')} />
     </div></section>
   </div>
 }

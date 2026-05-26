@@ -1,4 +1,4 @@
-import { adminClient, corsHeaders, envAdminIds, json, sendTelegramMessage, userClient } from '../_shared/clients.ts'
+import { adminClient, corsHeaders, envAdminIds, json, publicErrorMessage, sendTelegramMessageWithOptions, userClient } from '../_shared/clients.ts'
 
 function orderErrorMessage(message: string) {
   const messages: Record<string, string> = {
@@ -19,8 +19,8 @@ function orderErrorMessage(message: string) {
   if (message.startsWith('MAXIMUM_UNITS_SUPPORTED:')) {
     return `Sono supportati al massimo ${message.split(':')[1]} g.`
   }
-  if (message === 'GRAM_AMOUNT_INVALID') return 'Inserisci almeno 50 g, in multipli di 25 g.'
-  return messages[message] ?? message
+  if (message === 'GRAM_AMOUNT_INVALID') return 'Inserisci almeno 25 g, in multipli di 25 g.'
+  return messages[message] ?? publicErrorMessage(message, 'Invio richiesta non riuscito.')
 }
 
 Deno.serve(async req => {
@@ -44,21 +44,38 @@ Deno.serve(async req => {
   if (error) return json({ error: orderErrorMessage(error.message) }, 400)
 
   const username = user.user_metadata?.username ?? user.user_metadata?.first_name ?? user.id
+  const { data: items } = await db.from('order_items')
+    .select('name_snapshot,variant_label,unit_price')
+    .eq('order_id', data.order_id)
   const scenarioLabels: Record<string, string> = {
-    meetup: 'Incontro',
-    delivery_zone: 'Consegna in zona',
-    delivery_italia: 'Consegna Italia',
+    meetup: 'MEETUP',
+    delivery_zone: 'DELIVERY LOCALE',
+    delivery_italia: 'DELIVERY TUTTA ITALIA',
   }
+  const address = [body.city, body.street].filter(Boolean).join(', ')
   const text = [
-    'Nuova richiesta dimostrativa Street Family',
-    `Richiesta: ${data.display_id}`,
+    'Nuovo ordine Street Family',
+    `Ordine: ${data.display_id}`,
     `Utente: @${username}`,
-    `Totale simulato: EUR ${data.simulated_total}`,
+    '',
+    'Prodotti:',
+    ...(items ?? []).map(item => `- ${item.name_snapshot} / ${item.variant_label}: EUR ${item.unit_price}`),
+    '',
+    `Servizio: ${scenarioLabels[body.scenarioType] ?? body.scenarioType}`,
+    `Destinazione: ${address}`,
+    `Subtotale: EUR ${data.simulated_subtotal}`,
+    `Supplemento: EUR ${data.simulated_surcharge}`,
+    `Gettoni usati: ${data.tokens_reserved}`,
+    `Totale: EUR ${data.simulated_total}`,
     `Grammi: ${data.total_units}`,
-    `Scenario: ${scenarioLabels[body.scenarioType] ?? body.scenarioType} / ${body.city ?? ''}`,
-    `Gettoni riservati: ${data.tokens_reserved}`,
-    'Ambiente dimostrativo: nessun pagamento, scambio o gestione reale degli ordini.',
+    `Premio dopo completamento: +${data.tokens_on_complete} gettoni / +${data.xp_on_complete} XP`,
   ].join('\n')
-  await Promise.allSettled(Array.from(envAdminIds()).map(chatId => sendTelegramMessage(chatId, text)))
+  const keyboard = {
+    inline_keyboard: [[
+      { text: 'ACCETTA', callback_data: `ord:a:${data.order_id}` },
+      { text: 'RIFIUTA', callback_data: `ord:r:${data.order_id}` },
+    ]],
+  }
+  await Promise.allSettled(Array.from(envAdminIds()).map(chatId => sendTelegramMessageWithOptions(chatId, text, keyboard)))
   return json(data)
 })

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Camera, Check, LoaderCircle, ShieldAlert, X } from 'lucide-react'
 import type { KycDocumentType, KycStatus } from '../data'
 import { submitKyc, uploadKycCapture } from '../lib/api'
+import { italianErrorMessage } from '../lib/errors'
 
 interface Props {
   status: KycStatus
@@ -103,7 +104,7 @@ export function KycCapture({ status, onChanged }: Props) {
       stopCamera()
       await onChanged()
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Acquisizione fallita.')
+      setError(italianErrorMessage(caught, 'Acquisizione non riuscita.'))
     } finally {
       setBusy(false)
     }
@@ -115,7 +116,7 @@ export function KycCapture({ status, onChanged }: Props) {
       await submitKyc()
       await onChanged()
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Invio KYC fallito.')
+      setError(italianErrorMessage(caught, 'Invio KYC non riuscito.'))
     } finally {
       setBusy(false)
     }
@@ -193,7 +194,7 @@ function cameraErrorMessage(caught: unknown) {
     if (caught.name === 'NotFoundError') return 'Nessuna fotocamera trovata sul dispositivo.'
     if (caught.name === 'NotReadableError') return 'La fotocamera è occupata da un’altra applicazione. Chiudila e riprova.'
   }
-  return caught instanceof Error ? caught.message : 'Impossibile avviare la fotocamera.'
+  return italianErrorMessage(caught, 'Impossibile avviare la fotocamera.')
 }
 
 function Notice({ text, ok }: { text: string; ok?: boolean }) {

@@ -3,6 +3,7 @@ import { motion } from 'motion/react'
 import confetti from 'canvas-confetti'
 import { Ticket, Trophy } from 'lucide-react'
 import type { GamePlayResult, User } from '../data'
+import { italianErrorMessage } from '../lib/errors'
 
 interface Props {
   user: User
@@ -30,7 +31,7 @@ export function GamesPage({ user, onSpin, onComplete }: Props) {
       }, 1450)
       await onComplete()
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Estrazione non disponibile.')
+      setError(italianErrorMessage(caught, 'Estrazione non disponibile.'))
     } finally {
       setBusy(false)
     }
@@ -41,7 +42,7 @@ export function GamesPage({ user, onSpin, onComplete }: Props) {
       <div className="max-w-lg mx-auto">
         <div className="sf-kicker mb-4">Premio guadagnato</div>
         <h1 style={{ fontFamily: 'Space Grotesk', fontWeight: 700, fontSize: 34, marginBottom: 10 }}>Ruota dei premi</h1>
-        <p style={{ color: 'rgba(245,245,245,.58)', marginBottom: 26 }}>Ricevi 1 biglietto ogni 5 scenari dimostrativi completati. La ruota non consuma gettoni.</p>
+        <p style={{ color: 'rgba(245,245,245,.58)', marginBottom: 26 }}>Ricevi 1 biglietto ogni 5 ordini completati. La ruota non consuma gettoni.</p>
         <div className="flex justify-between p-4 mb-6" style={panel}>
           <span className="flex items-center gap-2"><Ticket size={17} style={{ color: '#D7FE55' }} /> Biglietti disponibili</span>
           <strong style={{ color: '#D7FE55', fontFamily: 'Orbitron' }}>{user.spinTickets}</strong>

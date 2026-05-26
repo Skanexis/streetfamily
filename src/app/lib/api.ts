@@ -1,4 +1,5 @@
 import { requireSupabase } from './supabase'
+import { italianErrorMessage } from './errors'
 import type {
   Broadcast,
   CartItem,
@@ -23,7 +24,7 @@ import type {
 type RecordValue = Record<string, any>
 
 function unwrap<T>(result: { data: T | null; error: { message: string } | null }): T {
-  if (result.error) throw new Error(result.error.message)
+  if (result.error) throw new Error(italianErrorMessage(result.error.message))
   if (result.data == null) throw new Error('Nessun dato ricevuto.')
   return result.data
 }
@@ -33,28 +34,17 @@ async function edgeFunctionError(error: unknown, fallback: string) {
   try {
     if (functionError.context) {
       const body = await functionError.context.clone().json() as { error?: string }
-      if (body.error) return body.error
+      if (body.error) return italianErrorMessage(body.error, fallback)
     }
   } catch {
     // Usa il messaggio di riserva quando la risposta non contiene JSON leggibile.
   }
-  return functionError.message ?? fallback
-}
-
-function databaseMessage(message: string) {
-  const labels: Record<string, string> = {
-    FEEDBACK_INVALID: 'La recensione non è valida.',
-    COMPLETED_ORDER_REQUIRED: 'Puoi lasciare una recensione solo dopo una richiesta completata.',
-    SPIN_TICKET_REQUIRED: 'Non hai biglietti disponibili per la ruota.',
-    ONLY_EARNED_WHEEL_AVAILABLE: 'È disponibile solo la ruota dei premi.',
-    'Reward configuration invalid': 'Configurazione premi non valida.',
-  }
-  return labels[message] ?? message
+  return italianErrorMessage(functionError.message, fallback)
 }
 
 function ledgerReason(reason: string) {
   return reason
-    .replace(/^Test order /, 'Richiesta di prova ')
+    .replace(/^Test order /, 'Ordine ')
     .replace(/^Daily Bonus$/, 'Bonus giornaliero')
     .replace(/^Game: /, 'Gioco: ')
     .replace(/^Admin gettoni:/, 'Amministrazione gettoni:')
@@ -66,7 +56,7 @@ export async function getAccessProfile(): Promise<Profile | null> {
   const { data, error } = await db.rpc('get_my_profile')
   if (error) {
     if (/allowlist|access/i.test(error.message)) return null
-    throw new Error(error.message)
+    throw new Error(italianErrorMessage(error.message))
   }
   if (!data) return null
   const p = data as RecordValue
@@ -119,7 +109,7 @@ export async function getCatalog(): Promise<Product[]> {
       name: row.name,
       category: row.category,
       img: media.find((entry: { type: string }) => entry.type === 'image')?.url ?? row.cover_url ?? '',
-      startingPrice: variants.find((variant: { unitAmount: number; available: boolean }) => variant.available && variant.unitAmount >= 50)?.price ?? 0,
+      startingPrice: variants.find((variant: { unitAmount: number; available: boolean }) => variant.available && variant.unitAmount >= 25)?.price ?? 0,
       rating: Number(row.rating),
       badge: row.badge,
       reviews: row.review_count,
@@ -134,7 +124,7 @@ export async function getCatalog(): Promise<Product[]> {
 export async function getLevels(): Promise<Level[]> {
   const db = requireSupabase()
   const { data, error } = await db.from('levels').select('*').order('level_number')
-  if (error) throw new Error(error.message)
+  if (error) throw new Error(italianErrorMessage(error.message))
   return (data ?? []).map((level: RecordValue) => ({
     id: level.id,
     level: level.level_number,
@@ -154,7 +144,7 @@ export async function getBroadcasts(): Promise<Broadcast[]> {
     .eq('status', 'published')
     .order('published_at', { ascending: false })
     .limit(10)
-  if (error) throw new Error(error.message)
+  if (error) throw new Error(italianErrorMessage(error.message))
   return (data ?? []).map((broadcast: RecordValue) => ({
     id: broadcast.id,
     kind: broadcast.kind,
@@ -175,10 +165,10 @@ export async function getProfileActivity() {
     db.from('user_rewards').select('id,state,reward_definitions(label,kind)').order('created_at', { ascending: false }),
     db.from('feedback').select('id,order_id,rating,message,status,created_at').eq('status', 'published').order('created_at', { ascending: false }).limit(20),
   ])
-  if (ordersResponse.error) throw new Error(ordersResponse.error.message)
-  if (ledgerResponse.error) throw new Error(ledgerResponse.error.message)
-  if (rewardsResponse.error) throw new Error(rewardsResponse.error.message)
-  if (feedbackResponse.error) throw new Error(feedbackResponse.error.message)
+  if (ordersResponse.error) throw new Error(italianErrorMessage(ordersResponse.error.message))
+  if (ledgerResponse.error) throw new Error(italianErrorMessage(ledgerResponse.error.message))
+  if (rewardsResponse.error) throw new Error(italianErrorMessage(rewardsResponse.error.message))
+  if (feedbackResponse.error) throw new Error(italianErrorMessage(feedbackResponse.error.message))
   const orders: TestOrder[] = (ordersResponse.data ?? []).map((order: RecordValue) => ({
     id: order.id,
     displayId: order.display_id,
@@ -215,7 +205,7 @@ export async function getProfileActivity() {
 export async function playWheel(): Promise<GamePlayResult> {
   const db = requireSupabase()
   const response = await db.rpc('play_game', { p_game_type: 'spin' })
-  if (response.error) throw new Error(databaseMessage(response.error.message))
+  if (response.error) throw new Error(italianErrorMessage(response.error.message))
   const result = unwrap(response) as RecordValue
   return {
     playId: result.play_id,
@@ -234,7 +224,7 @@ export async function playWheel(): Promise<GamePlayResult> {
 export async function getServiceAreas(): Promise<ServiceArea[]> {
   const db = requireSupabase()
   const { data, error } = await db.from('service_areas').select('id,scenario_type,city,minimum_units,requires_street').eq('active', true).order('sort_order')
-  if (error) throw new Error(error.message)
+  if (error) throw new Error(italianErrorMessage(error.message))
   return (data ?? []).map((area: RecordValue) => ({
     id: area.id, scenarioType: area.scenario_type, city: area.city,
     minimumUnits: area.minimum_units, requiresStreet: area.requires_street,
@@ -245,7 +235,7 @@ export async function getDemoInfo(): Promise<DemoInfo> {
   const db = requireSupabase()
   const result = unwrap(await db.rpc('get_demo_info')) as RecordValue
   return {
-    disclaimer: result.rules?.disclaimer ?? 'Ambiente dimostrativo: nessun pagamento, scambio o gestione reale degli ordini.',
+    disclaimer: '',
     instagram: result.links?.instagram ?? '',
     viber: result.links?.viber ?? '',
     signal: result.links?.signal ?? null,
@@ -275,14 +265,14 @@ export async function submitTestOrder(
     tokensOnComplete: result.tokens_on_complete,
     xpOnComplete: result.xp_on_complete,
     balance: result.balance,
-    disclaimer: 'Ambiente dimostrativo: nessun pagamento, scambio o gestione reale degli ordini.',
+    disclaimer: '',
   }
 }
 
 export async function submitFeedback(orderId: string, rating: number, message: string) {
   const db = requireSupabase()
   const { error } = await db.rpc('submit_feedback', { p_order_id: orderId, p_rating: rating, p_message: message })
-  if (error) throw new Error(databaseMessage(error.message))
+  if (error) throw new Error(italianErrorMessage(error.message))
 }
 
 export async function getAdminDashboard(): Promise<DashboardData> {
@@ -304,7 +294,7 @@ export async function adminAdjustWallet(userId: string, points: number, xp: numb
     p_xp_delta: xp,
     p_reason: reason,
   })
-  if (error) throw new Error(error.message)
+  if (error) throw new Error(italianErrorMessage(error.message))
 }
 
 export async function getKycStatus(): Promise<KycStatus> {

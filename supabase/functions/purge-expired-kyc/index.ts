@@ -1,4 +1,4 @@
-import { adminClient, json } from '../_shared/clients.ts'
+import { adminClient, json, publicErrorMessage } from '../_shared/clients.ts'
 
 Deno.serve(async req => {
   if (req.method !== 'POST') return json({ error: 'Metodo non consentito' }, 405)
@@ -11,7 +11,7 @@ Deno.serve(async req => {
     .eq('status', 'approved')
     .not('retain_until', 'is', null)
     .lt('retain_until', new Date().toISOString())
-  if (expired.error) return json({ error: expired.error.message }, 500)
+  if (expired.error) return json({ error: publicErrorMessage(expired.error.message, 'Pulizia documenti non riuscita.') }, 500)
 
   let purged = 0
   for (const item of expired.data ?? []) {

@@ -1,4 +1,4 @@
-import { adminClient, corsHeaders, json, userClient } from '../_shared/clients.ts'
+import { adminClient, corsHeaders, json, publicErrorMessage, userClient } from '../_shared/clients.ts'
 
 const documentTypes = new Set(['document_front', 'document_back', 'selfie_with_document'])
 const mimeTypes = new Set(['image/jpeg', 'image/png', 'image/webp'])
@@ -13,7 +13,7 @@ Deno.serve(async req => {
   const { data: { user }, error: authError } = await session.auth.getUser()
   if (authError || !user) return json({ error: 'Non autorizzato' }, 401)
   const access = await session.rpc('get_my_kyc_status')
-  if (access.error) return json({ error: access.error.message }, 403)
+  if (access.error) return json({ error: publicErrorMessage(access.error.message, 'Accesso alla verifica non riuscito.') }, 403)
 
   const form = await req.formData()
   const documentType = String(form.get('documentType') ?? '')
@@ -28,7 +28,7 @@ Deno.serve(async req => {
   const previous = await db.from('kyc_documents').select('storage_path').eq('user_id', user.id).eq('document_type', documentType).maybeSingle()
   const path = `${user.id}/${documentType}-${crypto.randomUUID()}.jpg`
   const upload = await db.storage.from('kyc-documents').upload(path, capture, { contentType: capture.type, upsert: false })
-  if (upload.error) return json({ error: upload.error.message }, 500)
+  if (upload.error) return json({ error: publicErrorMessage(upload.error.message, 'Caricamento documento non riuscito.') }, 500)
   const saved = await db.from('kyc_documents').upsert({
     user_id: user.id,
     document_type: documentType,
@@ -39,7 +39,7 @@ Deno.serve(async req => {
   }, { onConflict: 'user_id,document_type' })
   if (saved.error) {
     await db.storage.from('kyc-documents').remove([path])
-    return json({ error: saved.error.message }, 500)
+    return json({ error: publicErrorMessage(saved.error.message, 'Salvataggio documento non riuscito.') }, 500)
   }
   if (previous.data?.storage_path) await db.storage.from('kyc-documents').remove([previous.data.storage_path])
   await db.from('kyc_cases').upsert({ user_id: user.id, status: 'collecting', rejection_reason: null }, { onConflict: 'user_id' })

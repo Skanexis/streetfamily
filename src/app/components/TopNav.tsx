@@ -176,7 +176,7 @@ export function TopNav({ page, navigate, cartCount, onCartOpen, tokens, isAdmin,
           {broadcasts.map(broadcast => (
             <article key={broadcast.id} className="p-3 mb-2 rounded-xl" style={{ background: 'rgba(245,245,245,.045)' }}>
               <div style={{ color: broadcast.kind === 'product_new' ? '#D7FE55' : '#60A5FA', fontSize: 10, fontWeight: 700, marginBottom: 5 }}>
-                {broadcast.kind === 'product_new' ? 'NUOVO PRODOTTO DI PROVA' : 'ANNUNCIO'}
+                {broadcast.kind === 'product_new' ? 'NUOVO PRODOTTO' : 'ANNUNCIO'}
               </div>
               <strong style={{ display: 'block', fontSize: 14 }}>{broadcast.title}</strong>
               <p style={{ color: 'rgba(245,245,245,.67)', fontSize: 13, marginTop: 5 }}>{broadcast.message}</p>

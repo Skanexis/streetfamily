@@ -1,4 +1,4 @@
-import { adminClient, corsHeaders, envAdminIds, json } from '../_shared/clients.ts'
+import { adminClient, corsHeaders, envAdminIds, json, publicErrorMessage } from '../_shared/clients.ts'
 
 type TelegramUser = {
   id: number
@@ -71,7 +71,7 @@ Deno.serve(async req => {
         enabled: true,
         note: isAdmin ? 'TELEGRAM_ADMIN_IDS' : 'Registrazione dalla mini applicazione Telegram',
       })
-      if (error) return json({ error: error.message }, 500)
+      if (error) return json({ error: publicErrorMessage(error.message, 'Autorizzazione non riuscita.') }, 500)
     }
     const email = `telegram_${telegramId}@street-family.invalid`
     const metadata = {
@@ -83,12 +83,12 @@ Deno.serve(async req => {
     const { data: profile } = await db.from('profiles').select('id').eq('telegram_subject', telegramId).maybeSingle()
     if (!profile) {
       const created = await db.auth.admin.createUser({ email, email_confirm: true, user_metadata: metadata })
-      if (created.error) return json({ error: created.error.message }, 500)
+      if (created.error) return json({ error: publicErrorMessage(created.error.message, 'Creazione account non riuscita.') }, 500)
     }
     const generated = await db.auth.admin.generateLink({ type: 'magiclink', email, options: { data: metadata } })
-    if (generated.error) return json({ error: generated.error.message }, 500)
+    if (generated.error) return json({ error: publicErrorMessage(generated.error.message, 'Accesso Telegram non riuscito.') }, 500)
     return json({ tokenHash: generated.data.properties.hashed_token, isAdmin })
   } catch (caught) {
-    return json({ error: caught instanceof Error ? caught.message : 'Autorizzazione Telegram non riuscita' }, 401)
+    return json({ error: publicErrorMessage(caught, 'Autorizzazione Telegram non riuscita.') }, 401)
   }
 })

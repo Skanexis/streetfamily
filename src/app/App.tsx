@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import type { Broadcast, CartItem, DemoInfo, Feedback, KycStatus, LedgerEntry, Level, Page, Product, ServiceArea, TestOrder, UserReward } from './data'
+import type { Broadcast, CartItem, Feedback, KycStatus, LedgerEntry, Level, Page, Product, ServiceArea, TestOrder, UserReward } from './data'
 import { TopNav } from './components/TopNav'
 import { BottomNav } from './components/BottomNav'
 import { HomePage } from './components/HomePage'
@@ -13,7 +13,8 @@ import { AdminPage } from './components/AdminPage'
 import { AccessDeniedPage, CallbackPage, LoginPage, RequireAdmin, RequireMember } from './components/AuthPages'
 
 import { useAuth } from './auth/AuthProvider'
-import { getBroadcasts, getCatalog, getDemoInfo, getKycStatus, getLevels, getProfileActivity, getServiceAreas, playWheel, submitTestOrder } from './lib/api'
+import { getBroadcasts, getCatalog, getKycStatus, getLevels, getProfileActivity, getServiceAreas, playWheel, submitTestOrder } from './lib/api'
+import { italianErrorMessage } from './lib/errors'
 import '../styles/fonts.css'
 
 const PAGE_PATHS: Record<Page, string> = { home: '/', catalog: '/catalog', games: '/games', profile: '/profile', info: '/info' }
@@ -45,21 +46,19 @@ function MemberApplication() {
   const [rewards, setRewards] = useState<UserReward[]>([])
   const [feedback, setFeedback] = useState<Feedback[]>([])
   const [serviceAreas, setServiceAreas] = useState<ServiceArea[]>([])
-  const [demoInfo, setDemoInfo] = useState<DemoInfo>({ disclaimer: 'Ambiente dimostrativo: nessun pagamento, scambio o gestione reale degli ordini.', instagram: '', viber: '', signal: null })
   const [kycStatus, setKycStatus] = useState<KycStatus>({ status: 'not_started', documents: [], submittedAt: null, rejectionReason: null })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
   const loadData = useCallback(async () => {
     try {
-      const [catalog, availableLevels, activity, currentKyc, publishedBroadcasts, areas, info] = await Promise.all([
+      const [catalog, availableLevels, activity, currentKyc, publishedBroadcasts, areas] = await Promise.all([
         getCatalog(),
         getLevels(),
         getProfileActivity(),
         getKycStatus(),
         getBroadcasts(),
         getServiceAreas(),
-        getDemoInfo(),
       ])
       setProducts(catalog)
       setLevels(availableLevels)
@@ -68,12 +67,11 @@ function MemberApplication() {
       setRewards(activity.rewards)
       setFeedback(activity.feedback)
       setServiceAreas(areas)
-      setDemoInfo(info)
       setKycStatus(currentKyc)
       setBroadcasts(publishedBroadcasts)
       setError('')
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Errore nel caricamento dati.')
+      setError(italianErrorMessage(caught, 'Errore nel caricamento dati.'))
     } finally {
       setLoading(false)
     }
@@ -131,7 +129,7 @@ function MemberApplication() {
             <Route path="/catalog" element={<CatalogPage products={products} feedback={feedback} addToCart={addToCart} selectedProductId={selectedProductId} onProductSelect={setSelectedProductId} />} />
             <Route path="/games" element={<GamesPage user={user} onSpin={playWheel} onComplete={refreshAccount} />} />
             <Route path="/profile" element={<ProfilePage user={user} levels={levels} orders={orders} ledger={ledger} rewards={rewards} onChanged={refreshAccount} onAdmin={() => navigateRouter('/admin')} />} />
-            <Route path="/info" element={<InfoPage info={demoInfo} />} />
+            <Route path="/info" element={<InfoPage />} />
             <Route path="/admin" element={<RequireAdmin><AdminPage /></RequireAdmin>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
@@ -148,6 +146,7 @@ function MemberApplication() {
         tokens={user.tokens}
         serviceAreas={serviceAreas}
         firstOrder={orders.length === 0}
+        isAdmin={user.role === 'admin'}
         kycStatus={kycStatus}
         onKycChanged={loadData}
         onSubmit={(selection) => submitTestOrder(cart, selection)}

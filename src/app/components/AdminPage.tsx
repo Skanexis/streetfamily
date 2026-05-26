@@ -1,20 +1,25 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
-import { Package, Users, Gamepad2, ClipboardList, Settings, Megaphone, MessageSquare } from 'lucide-react'
+import { Package, Tags, Users, Gamepad2, ClipboardList, Settings, Megaphone, MessageSquare } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
 import { adminAdjustWallet, getAdminDashboard, getAdminKycDocuments, reviewKyc } from '../lib/api'
 import { requireSupabase } from '../lib/supabase'
+import { italianErrorMessage } from '../lib/errors'
 import type { Broadcast, DashboardData, KycReviewDocument } from '../data'
 
-type Tab = 'catalog' | 'broadcasts' | 'users' | 'orders' | 'economy' | 'feedback' | 'settings'
+type Tab = 'catalog' | 'categories' | 'broadcasts' | 'users' | 'orders' | 'economy' | 'feedback' | 'settings'
 type Row = Record<string, any>
-const orderStatusLabel: Record<string, string> = { submitted: 'Inviata', processing: 'In revisione', completed: 'Completata', cancelled: 'Annullata' }
+const orderStatusLabel: Record<string, string> = { submitted: 'Inviata', processing: 'Accettata', completed: 'Completata', cancelled: 'Rifiutata' }
 const feedbackStatusLabel: Record<string, string> = { pending: 'In moderazione', published: 'Pubblicata', hidden: 'Nascosta' }
 const kycStatusLabel: Record<string, string> = { not_started: 'Non iniziata', collecting: 'In raccolta', submitted: 'Inviata', approved: 'Approvata', rejected: 'Rifiutata' }
 const broadcastStatusLabel: Record<string, string> = { draft: 'Bozza', published: 'Pubblicato', archived: 'Archiviato' }
-const scenarioLabel: Record<string, string> = { meetup: 'Incontro', delivery_zone: 'Consegna in zona', delivery_italia: 'Consegna Italia', delivery: 'Consegna precedente' }
+const scenarioLabel: Record<string, string> = { meetup: 'MEETUP', delivery_zone: 'DELIVERY LOCALE', delivery_italia: 'DELIVERY TUTTA ITALIA', delivery: 'DELIVERY' }
 const documentLabel: Record<string, string> = { document_front: 'Fronte documento', document_back: 'Retro documento', selfie_with_document: 'Selfie con documento' }
 
 export function AdminPage() {
-  const [tab, setTab] = useState<Tab>('catalog')
+  const [searchParams] = useSearchParams()
+  const requestedTab = searchParams.get('tab') as Tab | null
+  const requestedKycUserId = searchParams.get('kyc') ?? ''
+  const [tab, setTab] = useState<Tab>(requestedTab === 'users' ? 'users' : 'catalog')
   const [dashboard, setDashboard] = useState<DashboardData | null>(null)
   const [products, setProducts] = useState<Row[]>([])
   const [categories, setCategories] = useState<Row[]>([])
@@ -30,26 +35,30 @@ export function AdminPage() {
   const [tokenTiers, setTokenTiers] = useState<Row[]>([])
   const [error, setError] = useState('')
 
+  useEffect(() => {
+    if (requestedTab === 'users') setTab('users')
+  }, [requestedTab])
+
   const load = async () => {
     try {
       const db = requireSupabase()
       const [summary, productResult, categoryResult, profileResult, orderResult, gameResult, locationResult, allowlistResult, settingsResult, broadcastResult, feedbackResult, optionsResult, tiersResult] = await Promise.all([
         getAdminDashboard(),
-        db.from('products').select('id,name,badge,published,featured,categories(name),product_variants(id,label,price,unit_amount,token_award,inventory_status(available)),product_media(id,url,storage_path,media_type,upload_status,sort_order)').order('name'),
+        db.from('products').select('id,category_id,name,badge,published,featured,categories(name),product_variants(id,label,price,unit_amount,token_award,inventory_status(available)),product_media(id,url,storage_path,media_type,upload_status,sort_order)').order('name'),
         db.from('categories').select('*').order('sort_order'),
-        db.from('profiles').select('id,username,telegram_subject,role,blocked,wallet_balances(points,xp,spin_tickets),kyc_cases(status,submitted_at,rejection_reason,retain_until),orders(status),feedback(status)').order('created_at', { ascending: false }),
-        db.from('orders').select('id,display_id,status,total,total_units,tokens_reserved,scenario_type,scenario_city,scenario_street,points_awarded,xp_awarded,created_at,profiles(username)').order('created_at', { ascending: false }),
+        db.from('profiles').select('id,username,telegram_subject,role,blocked,wallet_balances(points,xp,spin_tickets),kyc_cases:kyc_cases!kyc_cases_user_id_fkey(status,submitted_at,rejection_reason,retain_until),orders(status),feedback:feedback!feedback_user_id_fkey(status)').order('created_at', { ascending: false }),
+        db.from('orders').select('id,display_id,status,total,total_units,tokens_reserved,scenario_type,scenario_city,scenario_street,points_awarded,xp_awarded,created_at,profiles(username)').in('status', ['submitted', 'processing']).order('created_at', { ascending: false }),
         db.from('game_configs').select('*').order('game_type'),
         db.from('service_areas').select('*').order('sort_order'),
         db.from('staging_allowlist').select('*').order('created_at', { ascending: false }),
         db.from('app_settings').select('*'),
         db.from('broadcasts').select('id,kind,title,message,product_id,status,published_at,created_at').order('created_at', { ascending: false }),
-        db.from('feedback').select('id,rating,message,status,created_at,profiles(username),orders(display_id)').order('created_at', { ascending: false }),
+        db.from('feedback').select('id,rating,message,status,created_at,profiles:profiles!feedback_user_id_fkey(username),orders(display_id)').order('created_at', { ascending: false }),
         db.from('game_reward_options').select('*').eq('game_type', 'spin').order('id'),
         db.from('token_reward_tiers').select('*').order('minimum_units'),
       ])
       for (const result of [productResult, categoryResult, profileResult, orderResult, gameResult, locationResult, allowlistResult, settingsResult, broadcastResult, feedbackResult, optionsResult, tiersResult]) {
-        if (result.error) throw new Error(result.error.message)
+        if (result.error) throw new Error(italianErrorMessage(result.error.message, 'Impossibile caricare il pannello amministrazione.'))
       }
       setDashboard(summary)
       setProducts(productResult.data ?? [])
@@ -74,7 +83,7 @@ export function AdminPage() {
         createdAt: broadcast.created_at,
       })))
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Errore amministrazione.')
+      setError(italianErrorMessage(caught, 'Impossibile caricare il pannello amministrazione.'))
     }
   }
 
@@ -82,22 +91,23 @@ export function AdminPage() {
 
   return (
     <AdminFrame>
-      <div className="flex justify-between items-center mb-7">
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 mb-7">
         <div><h1 style={heading}>Centro di controllo</h1></div>
         <button style={smallButton} onClick={load}>Aggiorna</button>
       </div>
       {error && <div className="p-3 mb-5 rounded-xl" style={{ color: '#EF4444', background: 'rgba(239,68,68,.12)' }}>{error}</div>}
       {dashboard && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-7">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-7">
           <Metric label="Utenti autorizzati" value={dashboard.allowlistedUsers} />
           <Metric label="Richieste inviate" value={dashboard.submittedOrders} />
           <Metric label="Partite" value={dashboard.gamePlays} />
           <Metric label="Gettoni emessi" value={dashboard.issuedPoints} />
         </div>
       )}
-      <div className="flex flex-wrap gap-2 mb-6">
+      <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
         {([
           ['catalog', Package, 'Catalogo'],
+          ['categories', Tags, 'Categorie'],
           ['broadcasts', Megaphone, 'Notizie'],
           ['users', Users, 'Utenti'],
           ['orders', ClipboardList, 'Richieste'],
@@ -105,12 +115,13 @@ export function AdminPage() {
           ['feedback', MessageSquare, 'Recensioni'],
           ['settings', Settings, 'Impostazioni'],
         ] as const).map(([id, Icon, label]) => (
-          <button key={id} onClick={() => setTab(id)} style={{ ...smallButton, background: tab === id ? '#7E9CA8' : '#11181B' }}><Icon size={15} /> {label}</button>
+          <button key={id} className="shrink-0" onClick={() => setTab(id)} style={{ ...smallButton, background: tab === id ? '#7E9CA8' : '#11181B' }}><Icon size={15} /> {label}</button>
         ))}
       </div>
       {tab === 'catalog' && <CatalogAdmin products={products} categories={categories} reload={load} />}
+      {tab === 'categories' && <CategoriesAdmin products={products} categories={categories} reload={load} />}
       {tab === 'broadcasts' && <BroadcastAdmin broadcasts={broadcasts} reload={load} />}
-      {tab === 'users' && <UsersAdmin profiles={profiles} allowlist={allowlist} reload={load} />}
+      {tab === 'users' && <UsersAdmin profiles={profiles} allowlist={allowlist} initialKycUserId={requestedKycUserId} reload={load} />}
       {tab === 'orders' && <OrdersAdmin orders={orders} reload={load} />}
       {tab === 'economy' && <EconomyAdmin games={games} options={rewardOptions} reload={load} />}
       {tab === 'feedback' && <FeedbackAdmin feedback={feedback} reload={load} />}
@@ -120,17 +131,10 @@ export function AdminPage() {
 }
 
 function CatalogAdmin({ products, categories, reload }: { products: Row[]; categories: Row[]; reload: () => Promise<void> }) {
+  const [message, setMessage] = useState('')
   const toggle = async (product: Row, key: 'published' | 'featured') => {
     const { error } = await requireSupabase().from('products').update({ [key]: !product[key] }).eq('id', product.id)
-    if (error) throw new Error(error.message)
-    await reload()
-  }
-  const addCategory = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    const name = String(new FormData(event.currentTarget).get('name'))
-    const { error } = await requireSupabase().from('categories').insert({ name, slug: name.toLowerCase().replace(/\s+/g, '-') })
-    if (error) throw new Error(error.message)
-    event.currentTarget.reset()
+    if (error) throw new Error(italianErrorMessage(error.message, 'Aggiornamento del prodotto non riuscito.'))
     await reload()
   }
   const addProduct = async (event: FormEvent<HTMLFormElement>) => {
@@ -144,56 +148,131 @@ function CatalogAdmin({ products, categories, reload }: { products: Row[]; categ
       p_prices: Object.fromEntries([25, 50, 100, 300, 500, 1000].map(grams => [grams, roundPrice(Number(values.get(`price${grams}`)))])),
       p_announce: values.get('announce') === 'on',
     })
-    if (error) throw new Error(error.message)
+    if (error) throw new Error(italianErrorMessage(error.message, 'Creazione del prodotto non riuscita.'))
     event.currentTarget.reset()
     await reload()
   }
   const setPrice = async (variantId: string, price: number) => {
     const { error } = await requireSupabase().from('product_variants').update({ price: roundPrice(price) }).eq('id', variantId)
-    if (error) throw new Error(error.message)
+    if (error) throw new Error(italianErrorMessage(error.message, 'Aggiornamento del prezzo non riuscito.'))
     await reload()
   }
   const setAvailability = async (variant: Row) => {
     const active = variant.inventory_status?.available ?? false
     const { error } = await requireSupabase().from('inventory_status').update({ available: !active }).eq('variant_id', variant.id)
-    if (error) throw new Error(error.message)
+    if (error) throw new Error(italianErrorMessage(error.message, 'Aggiornamento della disponibilità non riuscito.'))
+    await reload()
+  }
+  const removeProduct = async (product: Row) => {
+    if (!window.confirm(`Eliminare il prodotto "${product.name}"?`)) return
+    setMessage('')
+    const db = requireSupabase()
+    const paths = (product.product_media ?? [])
+      .map((media: Row) => media.storage_path)
+      .filter((path: unknown): path is string => typeof path === 'string' && path.length > 0)
+    const { error } = await db.rpc('admin_delete_product', { p_product_id: product.id })
+    if (error) {
+      setMessage(italianErrorMessage(error.message, 'Eliminazione del prodotto non riuscita.'))
+      return
+    }
+    if (paths.length) {
+      const removed = await db.storage.from('product-media').remove(paths)
+      if (removed.error) setMessage('Prodotto eliminato, ma alcuni file multimediali non sono stati rimossi.')
+    }
     await reload()
   }
   return (
-    <Section title="Catalogo dimostrativo" note="Prezzi a peso con scelta personalizzata in grammi; nessuna vendita o consegna reale.">
-      <form onSubmit={addCategory} className="flex gap-2 mb-4">
-        <input name="name" required placeholder="Nuova categoria" style={input} />
-        <button style={primary}>Categoria</button>
-      </form>
-      <form onSubmit={addProduct} className="grid md:grid-cols-4 gap-2 mb-6">
-        <input name="name" required placeholder="Articolo dimostrativo" style={input} />
-        <select name="category" required style={input}><option value="">Categoria</option>{categories.map(category => <option value={category.id} key={category.id}>{category.name}</option>)}</select>
-        {[25, 50, 100, 300, 500, 1000].map(grams => <input key={grams} name={`price${grams}`} type="number" min="0" step="5" required placeholder={`EUR ${grams} g`} style={input} />)}
+    <Section title="Catalogo" note="Configura prodotti, prezzi per grammi e contenuti multimediali.">
+      <form onSubmit={addProduct} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 mb-6">
+        <input className="w-full" name="name" required placeholder="Nome prodotto" style={input} />
+        <select className="w-full" name="category" required style={input}><option value="">Categoria</option>{categories.map(category => <option value={category.id} key={category.id}>{category.name}</option>)}</select>
+        {[25, 50, 100, 300, 500, 1000].map(grams => <input className="w-full" key={grams} name={`price${grams}`} type="number" min="0" step="5" required placeholder={`EUR ${grams} g`} style={input} />)}
         <button style={primary}>Crea non pubblicato</button>
-        <label className="md:col-span-4 flex items-center gap-2" style={muted}>
+        <label className="sm:col-span-2 lg:col-span-4 flex items-start gap-2" style={muted}>
           <input type="checkbox" name="announce" />
-          Crea notizia nuovo prodotto come bozza (pubblicala dopo media e pubblicazione catalogo)
+          Crea una notizia in bozza per il nuovo prodotto
         </label>
       </form>
+      {message && <p className="mb-4" style={{ color: '#EF4444' }}>{message}</p>}
       {products.map(product => (
         <div key={product.id} className="p-3 mb-2 rounded-xl" style={{ background: 'rgba(245,245,245,.035)' }}>
-          <div className="flex gap-2 items-center mb-3">
-            <div className="flex-1"><strong>{product.name}</strong><div style={muted}>{product.categories?.name} {product.badge ? `/ ${product.badge === 'NEW' ? 'NOVITÀ' : 'IN EVIDENZA'}` : ''}</div></div>
+          <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 sm:items-center mb-3">
+            <div className="flex-1 min-w-0"><strong>{product.name}</strong><div style={muted}>{product.categories?.name} {product.badge ? `/ ${product.badge === 'NEW' ? 'NOVITÀ' : 'IN EVIDENZA'}` : ''}</div></div>
             <Toggle label="In evidenza" active={product.featured} onClick={() => toggle(product, 'featured')} />
             <Toggle label="Pubblicato" active={product.published} onClick={() => toggle(product, 'published')} />
+            <button type="button" style={dangerButton} onClick={() => removeProduct(product)}>Elimina</button>
           </div>
-          <div className="flex gap-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
             {(product.product_variants ?? []).filter((variant: Row) => variant.unit_amount).map((variant: Row) => (
-              <div key={variant.id} className="flex gap-2 items-center">
+              <div key={variant.id} className="grid grid-cols-[1fr_82px] sm:grid-cols-[1fr_82px_auto] gap-2 items-center p-2 rounded-lg" style={{ background: '#080C0E' }}>
                 <span>{variant.unit_amount} g / +{variant.token_award}</span>
                 <input type="number" min="0" step="5" defaultValue={roundPrice(Number(variant.price))} onBlur={event => setPrice(variant.id, Number(event.target.value))} style={{ ...input, width: 78 }} />
-                <Toggle label="Disponibilità" active={variant.inventory_status?.available ?? false} onClick={() => setAvailability(variant)} />
+                <div className="col-span-2 sm:col-span-1"><Toggle label="Disponibile" active={variant.inventory_status?.available ?? false} onClick={() => setAvailability(variant)} /></div>
               </div>
             ))}
           </div>
           <MediaUploader product={product} reload={reload} />
         </div>
       ))}
+    </Section>
+  )
+}
+
+function CategoriesAdmin({ products, categories, reload }: { products: Row[]; categories: Row[]; reload: () => Promise<void> }) {
+  const [message, setMessage] = useState('')
+  const addCategory = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setMessage('')
+    const name = String(new FormData(event.currentTarget).get('name'))
+    const { error } = await requireSupabase().from('categories').insert({ name, slug: name.toLowerCase().replace(/\s+/g, '-') })
+    if (error) {
+      setMessage(italianErrorMessage(error.message, 'Creazione della categoria non riuscita.'))
+      return
+    }
+    event.currentTarget.reset()
+    await reload()
+  }
+  const removeCategory = async (category: Row) => {
+    const count = products.filter(product => product.category_id === category.id).length
+    if (count > 0) {
+      setMessage('La categoria contiene prodotti. Elimina prima i prodotti associati.')
+      return
+    }
+    if (!window.confirm(`Eliminare la categoria "${category.name}"?`)) return
+    setMessage('')
+    const { error } = await requireSupabase().rpc('admin_delete_category', { p_category_id: category.id })
+    if (error) {
+      setMessage(italianErrorMessage(error.message, 'Eliminazione della categoria non riuscita.'))
+      return
+    }
+    await reload()
+  }
+  return (
+    <Section title="Categorie" note="Crea categorie e rimuovi quelle senza prodotti.">
+      <form onSubmit={addCategory} className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2 mb-5">
+        <input className="w-full" name="name" required placeholder="Nome categoria" style={input} />
+        <button style={primary}>Crea categoria</button>
+      </form>
+      {message && <p className="mb-4" style={{ color: '#EF4444' }}>{message}</p>}
+      {categories.map(category => {
+        const count = products.filter(product => product.category_id === category.id).length
+        return (
+          <div key={category.id} className="flex flex-col sm:flex-row sm:items-center gap-3" style={row}>
+            <div className="flex-1 min-w-0">
+              <strong>{category.name}</strong>
+              <div style={muted}>{count} {count === 1 ? 'prodotto' : 'prodotti'}</div>
+            </div>
+            <button
+              type="button"
+              disabled={count > 0}
+              style={{ ...dangerButton, opacity: count > 0 ? 0.45 : 1 }}
+              onClick={() => removeCategory(category)}
+            >
+              Elimina
+            </button>
+          </div>
+        )
+      })}
     </Section>
   )
 }
@@ -210,7 +289,7 @@ function BroadcastAdmin({ broadcasts, reload }: { broadcasts: Broadcast[]; reloa
       p_publish: values.get('publish') === 'on',
     })
     if (error) {
-      setMessage(error.message)
+      setMessage(italianErrorMessage(error.message, 'Creazione della notizia non riuscita.'))
       return
     }
     event.currentTarget.reset()
@@ -223,23 +302,23 @@ function BroadcastAdmin({ broadcasts, reload }: { broadcasts: Broadcast[]; reloa
       : { status }
     const { error } = await requireSupabase().from('broadcasts').update(updates).eq('id', broadcast.id)
     if (error) {
-      setMessage(error.message)
+      setMessage(italianErrorMessage(error.message, 'Aggiornamento della notizia non riuscito.'))
       return
     }
     await reload()
   }
   return (
-    <Section title="Notizie riservate" note="Gli annunci pubblicati appaiono nel centro notifiche degli utenti ammessi. Le notizie prodotto vengono create come bozze.">
-      <form onSubmit={create} className="grid md:grid-cols-2 gap-2 mb-6">
-        <input name="title" maxLength={120} required placeholder="Titolo annuncio" style={input} />
-        <input name="message" maxLength={500} required placeholder="Messaggio" style={input} />
+    <Section title="Notizie" note="Pubblica comunicazioni visibili agli utenti.">
+      <form onSubmit={create} className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-6">
+        <input className="w-full" name="title" maxLength={120} required placeholder="Titolo" style={input} />
+        <input className="w-full" name="message" maxLength={500} required placeholder="Messaggio" style={input} />
         <label className="flex items-center gap-2" style={muted}><input type="checkbox" name="publish" /> Pubblica subito</label>
         <button style={primary}>Crea notizia</button>
       </form>
       {message && <p className="mb-4" style={{ color: '#EF4444' }}>{message}</p>}
       {broadcasts.map(broadcast => (
-        <div key={broadcast.id} style={row}>
-          <div className="flex-1">
+        <div key={broadcast.id} className="flex flex-col sm:flex-row sm:items-center gap-3" style={row}>
+          <div className="flex-1 min-w-0">
             <strong>{broadcast.title}</strong>
             <div style={muted}>{broadcast.kind === 'product_new' ? 'Nuovo prodotto' : 'Annuncio'} / {broadcastStatusLabel[broadcast.status]} / {new Date(broadcast.createdAt).toLocaleDateString('it-IT')}</div>
             <div style={{ ...muted, marginTop: 4 }}>{broadcast.message}</div>
@@ -274,7 +353,7 @@ function MediaUploader({ product, reload }: { product: Row; reload: () => Promis
       }
       await reload()
     } catch (caught) {
-      setUploadError(caught instanceof Error ? caught.message : 'Caricamento non riuscito.')
+      setUploadError(italianErrorMessage(caught, 'Caricamento non riuscito.'))
       await reload()
     } finally {
       event.target.value = ''
@@ -293,7 +372,7 @@ function MediaUploader({ product, reload }: { product: Row; reload: () => Promis
       alt: `${product.name} ${mediaType}`,
       sort_order: existing.length,
     }).select('id').single()
-    if (inserted.error) throw new Error(inserted.error.message)
+    if (inserted.error) throw new Error(italianErrorMessage(inserted.error.message, 'Caricamento del file non riuscito.'))
     const mediaId = inserted.data.id
     setUploads(current => ({ ...current, [mediaId]: { progress: 0, status: 'uploading' } }))
     try {
@@ -301,7 +380,7 @@ function MediaUploader({ product, reload }: { product: Row; reload: () => Promis
         setUploads(current => ({ ...current, [mediaId]: { progress, status: 'uploading' } }))
       })
       const ready = await db.from('product_media').update({ upload_status: 'ready' }).eq('id', mediaId)
-      if (ready.error) throw new Error(ready.error.message)
+      if (ready.error) throw new Error(italianErrorMessage(ready.error.message, 'Salvataggio del file non riuscito.'))
       setUploads(current => ({ ...current, [mediaId]: { progress: 100, status: 'ready' } }))
     } catch (caught) {
       await db.from('product_media').update({ upload_status: 'failed' }).eq('id', mediaId)
@@ -312,7 +391,7 @@ function MediaUploader({ product, reload }: { product: Row; reload: () => Promis
 
   return (
     <div className="mt-3 pt-3" style={{ borderTop: '1px solid rgba(245,245,245,.08)' }}>
-      <div className="flex justify-between items-center mb-2">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-2">
         <span style={muted}>Contenuti: {imageCount}/5 foto, {videoCount}/3 video</span>
         <label style={{ ...smallButton, cursor: 'pointer' }}>
           Carica file
@@ -323,8 +402,8 @@ function MediaUploader({ product, reload }: { product: Row; reload: () => Promis
         const status = uploads[media.id]?.status ?? media.upload_status
         const progress = uploads[media.id]?.progress ?? 0
         return (
-          <div key={media.id} className="flex gap-2 items-center mb-1" style={{ fontSize: 12 }}>
-            <span className="flex-1">{media.media_type === 'image' ? 'foto' : 'video'} {media.storage_path?.split('/').pop() ?? 'contenuto iniziale'}</span>
+          <div key={media.id} className="flex flex-wrap gap-2 items-center mb-1" style={{ fontSize: 12 }}>
+            <span className="flex-1 min-w-0 break-all">{media.media_type === 'image' ? 'foto' : 'video'} {media.storage_path?.split('/').pop() ?? 'contenuto iniziale'}</span>
             {status === 'uploading' && <span style={{ color: '#7E9CA8' }}>Caricamento {progress}%</span>}
             {status === 'ready' && <span style={{ color: '#D7FE55' }}>Pronto</span>}
             {status === 'failed' && <span style={{ color: '#EF4444' }}>Non riuscito</span>}
@@ -356,7 +435,7 @@ async function xhrStorageUpload(path: string, file: File, onProgress: (value: nu
   })
 }
 
-function UsersAdmin({ profiles, allowlist, reload }: { profiles: Row[]; allowlist: Row[]; reload: () => Promise<void> }) {
+function UsersAdmin({ profiles, allowlist, initialKycUserId, reload }: { profiles: Row[]; allowlist: Row[]; initialKycUserId: string; reload: () => Promise<void> }) {
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState('')
   const [points, setPoints] = useState(0)
@@ -365,6 +444,7 @@ function UsersAdmin({ profiles, allowlist, reload }: { profiles: Row[]; allowlis
   const [reviewUser, setReviewUser] = useState<Row | null>(null)
   const [documents, setDocuments] = useState<KycReviewDocument[]>([])
   const [kycError, setKycError] = useState('')
+  const [openedKycUserId, setOpenedKycUserId] = useState('')
   const visibleProfiles = profiles.filter(profile => `${profile.username} ${profile.telegram_subject}`.toLowerCase().includes(query.toLowerCase()))
   const adjust = async (event: FormEvent) => {
     event.preventDefault()
@@ -380,7 +460,7 @@ function UsersAdmin({ profiles, allowlist, reload }: { profiles: Row[]; allowlis
       role: values.get('role'),
       note: 'Creato dall’interfaccia amministrazione',
     })
-    if (error) throw new Error(error.message)
+    if (error) throw new Error(italianErrorMessage(error.message, 'Autorizzazione utente non riuscita.'))
     event.currentTarget.reset()
     await reload()
   }
@@ -390,9 +470,16 @@ function UsersAdmin({ profiles, allowlist, reload }: { profiles: Row[]; allowlis
     try {
       setDocuments(await getAdminKycDocuments(profile.id))
     } catch (caught) {
-      setKycError(caught instanceof Error ? caught.message : 'Accesso documenti negato.')
+      setKycError(italianErrorMessage(caught, 'Accesso documenti negato.'))
     }
   }
+  useEffect(() => {
+    if (!initialKycUserId || openedKycUserId === initialKycUserId) return
+    const profile = profiles.find(entry => entry.id === initialKycUserId)
+    if (!profile) return
+    setOpenedKycUserId(initialKycUserId)
+    void openKyc(profile)
+  }, [initialKycUserId, openedKycUserId, profiles])
   const decide = async (decision: 'approved' | 'rejected') => {
     if (!reviewUser) return
     const rejectionReason = decision === 'rejected'
@@ -405,24 +492,24 @@ function UsersAdmin({ profiles, allowlist, reload }: { profiles: Row[]; allowlis
       setDocuments([])
       await reload()
     } catch (caught) {
-      setKycError(caught instanceof Error ? caught.message : 'Decisione non salvata.')
+      setKycError(italianErrorMessage(caught, 'Decisione non salvata.'))
     }
   }
   return (
-    <Section title="Utenti e saldo" note="Contatti Telegram, KYC e correzioni gettoni sono tracciati nel registro di controllo.">
-      <form onSubmit={addAccess} className="mb-5 flex gap-2">
-        <input name="subject" required placeholder="ID numerico utente Telegram" style={input} />
-        <select name="role" style={input}><option value="user">utente</option><option value="admin">amministratore</option></select>
+    <Section title="Utenti e saldo" note="Gestisci accessi, verifica KYC e saldo gettoni.">
+      <form onSubmit={addAccess} className="mb-5 grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-2">
+        <input className="w-full" name="subject" required placeholder="ID utente Telegram" style={input} />
+        <select className="w-full" name="role" style={input}><option value="user">utente</option><option value="admin">amministratore</option></select>
         <button style={primary}>Autorizza</button>
       </form>
-      {allowlist.map(entry => <div key={entry.telegram_subject} style={row}><span className="flex-1">{entry.telegram_subject}</span><span>{entry.role === 'admin' ? 'amministratore' : 'utente'} / {entry.enabled ? 'abilitato' : 'bloccato'}</span></div>)}
+      {allowlist.map(entry => <div key={entry.telegram_subject} className="flex flex-col sm:flex-row sm:justify-between gap-2" style={row}><span className="break-all">{entry.telegram_subject}</span><span>{entry.role === 'admin' ? 'amministratore' : 'utente'} / {entry.enabled ? 'abilitato' : 'bloccato'}</span></div>)}
       <h3 className="mt-5 mb-3">Profili registrati</h3>
       <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Cerca username o Telegram ID" style={{ ...input, width: '100%', marginBottom: 12 }} />
       {visibleProfiles.map(profile => (
-        <div key={profile.id} style={row}>
-          <div className="flex-1">
+        <div key={profile.id} className="flex flex-col lg:flex-row lg:items-center gap-3" style={row}>
+          <div className="flex-1 min-w-0">
             <strong>@{profile.username}</strong>
-            <div style={muted}>{profile.role === 'admin' ? 'amministratore' : 'utente'} / {profile.telegram_subject}</div>
+            <div className="break-all" style={muted}>{profile.role === 'admin' ? 'amministratore' : 'utente'} / {profile.telegram_subject}</div>
             <div style={muted}>
               {(profile.orders ?? []).filter((order: Row) => order.status === 'completed').length} completate / {(profile.feedback ?? []).length} recensioni
               {profile.kyc_cases?.retain_until ? ` / documenti fino a ${new Date(profile.kyc_cases.retain_until).toLocaleDateString('it-IT')}` : ''}
@@ -433,24 +520,24 @@ function UsersAdmin({ profiles, allowlist, reload }: { profiles: Row[]; allowlis
           <span>{profile.wallet_balances?.points ?? 0} gettoni / {profile.wallet_balances?.xp ?? 0} XP / {profile.wallet_balances?.spin_tickets ?? 0} biglietti</span>
         </div>
       ))}
-      <form onSubmit={adjust} className="mt-5 grid md:grid-cols-4 gap-2">
-        <select required value={selected} onChange={e => setSelected(e.target.value)} style={input}><option value="">Utente</option>{profiles.map(p => <option key={p.id} value={p.id}>@{p.username}</option>)}</select>
-        <input type="number" value={points} onChange={e => setPoints(Number(e.target.value))} placeholder="Gettoni +/-" style={input} />
-        <input required value={reason} onChange={e => setReason(e.target.value)} placeholder="Motivo della registrazione" style={input} />
+      <form onSubmit={adjust} className="mt-5 grid grid-cols-1 md:grid-cols-4 gap-2">
+        <select className="w-full" required value={selected} onChange={e => setSelected(e.target.value)} style={input}><option value="">Utente</option>{profiles.map(p => <option key={p.id} value={p.id}>@{p.username}</option>)}</select>
+        <input className="w-full" type="number" value={points} onChange={e => setPoints(Number(e.target.value))} placeholder="Gettoni +/-" style={input} />
+        <input className="w-full" required value={reason} onChange={e => setReason(e.target.value)} placeholder="Motivo" style={input} />
         <button style={primary}>Registra</button>
       </form>
       {reviewUser && (
-        <div className="fixed inset-0 z-50 p-5 flex items-center justify-center" style={{ background: 'rgba(0,0,0,.85)' }}>
+        <div className="fixed inset-0 z-50 p-3 sm:p-5 flex items-center justify-center" style={{ background: 'rgba(0,0,0,.85)' }}>
           <div className="p-5 rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto" style={panel}>
-            <div className="flex justify-between mb-4">
-              <div>
+            <div className="flex flex-col sm:flex-row justify-between gap-3 mb-4">
+              <div className="min-w-0">
                 <h2 style={{ ...heading, fontSize: 22 }}>KYC @{reviewUser.username}</h2>
                 <p style={muted}>Link temporanei validi 60 secondi. Visualizzazione registrata nel registro di controllo.</p>
               </div>
               <button style={smallButton} onClick={() => { setReviewUser(null); setDocuments([]) }}>Chiudi</button>
             </div>
             {kycError && <p style={{ color: '#EF4444' }}>{kycError}</p>}
-            <div className="grid md:grid-cols-3 gap-3 mb-5">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
               {documents.map(document => (
                 <div key={document.id}>
                   <div style={{ ...muted, marginBottom: 6 }}>{documentLabel[document.documentType]}</div>
@@ -459,7 +546,7 @@ function UsersAdmin({ profiles, allowlist, reload }: { profiles: Row[]; allowlis
               ))}
             </div>
             {reviewUser.kyc_cases?.status === 'submitted' && (
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <button style={{ ...primary, background: '#10B981' }} onClick={() => decide('approved')}>Approva KYC</button>
                 <button style={{ ...primary, background: '#EF4444' }} onClick={() => decide('rejected')}>Rifiuta KYC</button>
               </div>
@@ -472,20 +559,36 @@ function UsersAdmin({ profiles, allowlist, reload }: { profiles: Row[]; allowlis
 }
 
 function OrdersAdmin({ orders, reload }: { orders: Row[]; reload: () => Promise<void> }) {
-  const updateStatus = async (orderId: string, status: string) => {
-    const db = requireSupabase()
-    const { error } = await db.rpc('admin_update_order_status', { p_order_id: orderId, p_status: status, p_note: 'Aggiornato dal pannello amministrazione' })
-    if (error) throw new Error(error.message)
+  const [message, setMessage] = useState('')
+  const updateStatus = async (orderId: string, status: 'processing' | 'completed' | 'cancelled') => {
+    setMessage('')
+    const { error } = await requireSupabase().rpc('admin_update_order_status', {
+      p_order_id: orderId,
+      p_status: status,
+      p_note: status === 'completed' ? 'Ordine completato e premi accreditati' : 'Aggiornato dal pannello amministrazione',
+    })
+    if (error) {
+      setMessage(italianErrorMessage(error.message, 'Aggiornamento dell’ordine non riuscito.'))
+      return
+    }
     await reload()
   }
   return (
-    <Section title="Richieste di prova" note="Questi record non attivano pagamento, spedizione o incontro.">
+    <Section title="Ordini attivi" note="Accetta o rifiuta gli ordini. I premi vengono accreditati solo con la spunta su un ordine accettato.">
+      {message && <p className="mb-4" style={{ color: '#EF4444' }}>{message}</p>}
+      {orders.length === 0 && <p style={muted}>Nessun ordine attivo.</p>}
       {orders.map(order => (
-        <div key={order.id} style={row}>
-          <div className="flex-1"><strong>{order.display_id}</strong><div style={muted}>@{order.profiles?.username} / {order.total_units} g / EUR {order.total} simulati / {scenarioLabel[order.scenario_type] ?? order.scenario_type} {order.scenario_city}</div><div style={muted}>Riserva: {order.tokens_reserved} / premio al completamento: +{order.points_awarded} gettoni</div></div>
-          <select value={order.status} onChange={event => updateStatus(order.id, event.target.value)} style={input}>
-            {['submitted', 'processing', 'completed', 'cancelled'].map(status => <option key={status} value={status}>{orderStatusLabel[status]}</option>)}
-          </select>
+        <div key={order.id} className="flex flex-col sm:flex-row sm:items-center gap-3" style={row}>
+          <div className="flex-1 min-w-0">
+            <strong>{order.display_id} / {orderStatusLabel[order.status]}</strong>
+            <div style={muted}>@{order.profiles?.username} / {order.total_units} g / EUR {order.total} / {scenarioLabel[order.scenario_type] ?? order.scenario_type} {order.scenario_city}{order.scenario_street ? `, ${order.scenario_street}` : ''}</div>
+            <div style={muted}>Gettoni usati: {order.tokens_reserved} / premio dopo completamento: +{order.points_awarded}</div>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2">
+            {order.status === 'submitted' && <button style={{ ...primary, background: '#10B981' }} onClick={() => updateStatus(order.id, 'processing')}>Accetta</button>}
+            {order.status === 'processing' && <button style={{ ...primary, background: '#10B981' }} onClick={() => updateStatus(order.id, 'completed')}>✓ Completa e accredita</button>}
+            <button style={dangerButton} onClick={() => updateStatus(order.id, 'cancelled')}>Rifiuta</button>
+          </div>
         </div>
       ))}
     </Section>
@@ -495,28 +598,28 @@ function OrdersAdmin({ orders, reload }: { orders: Row[]; reload: () => Promise<
 function EconomyAdmin({ games, options, reload }: { games: Row[]; options: Row[]; reload: () => Promise<void> }) {
   const update = async (game: Row, changes: Row) => {
     const { error } = await requireSupabase().from('game_configs').update(changes).eq('game_type', game.game_type)
-    if (error) throw new Error(error.message)
+    if (error) throw new Error(italianErrorMessage(error.message, 'Aggiornamento del gioco non riuscito.'))
     await reload()
   }
   const updateOption = async (id: string, changes: Row) => {
     const { error } = await requireSupabase().from('game_reward_options').update(changes).eq('id', id)
-    if (error) throw new Error(error.message)
+    if (error) throw new Error(italianErrorMessage(error.message, 'Aggiornamento del premio non riuscito.'))
     await reload()
   }
   return (
-    <Section title="Ruota dei premi" note="Un biglietto viene emesso ogni cinque richieste dimostrative completate; l'estrazione avviene sul server.">
+    <Section title="Ruota dei premi" note="Configura attivazione, gettoni e probabilità dei premi.">
       {games.filter(game => game.game_type === 'spin').map(game => (
-        <div key={game.game_type} style={row}>
-          <div className="flex-1"><strong>{game.title}</strong><div style={muted}>{game.game_type}</div></div>
+        <div key={game.game_type} className="flex flex-col sm:flex-row sm:items-center gap-3" style={row}>
+          <div className="flex-1 min-w-0"><strong>{game.title}</strong></div>
           <Toggle label="Attivo" active={game.active} onClick={() => update(game, { active: !game.active })} />
         </div>
       ))}
       <h3 className="my-4">Caselle configurabili</h3>
-      {options.map(option => <div key={option.id} style={row}>
-        <input defaultValue={option.label} onBlur={event => updateOption(option.id, { label: event.target.value })} style={{ ...input, flex: 1 }} />
-        <label style={muted}>Gettoni <input type="number" min={0} defaultValue={option.points_awarded} onBlur={event => updateOption(option.id, { points_awarded: Number(event.target.value) })} style={{ ...input, width: 70 }} /></label>
-        <label style={muted}>Peso <input type="number" min={1} defaultValue={option.weight} onBlur={event => updateOption(option.id, { weight: Number(event.target.value) })} style={{ ...input, width: 65 }} /></label>
-        <Toggle label="Attiva" active={option.active} onClick={() => updateOption(option.id, { active: !option.active })} />
+      {options.map(option => <div key={option.id} className="grid grid-cols-2 md:grid-cols-[1fr_auto_auto_auto] gap-3 items-end" style={row}>
+        <input className="col-span-2 md:col-span-1 w-full" defaultValue={option.label} onBlur={event => updateOption(option.id, { label: event.target.value })} style={input} />
+        <label style={muted}>Gettoni <input type="number" min={0} defaultValue={option.points_awarded} onBlur={event => updateOption(option.id, { points_awarded: Number(event.target.value) })} style={{ ...input, width: 80, display: 'block' }} /></label>
+        <label style={muted}>Peso <input type="number" min={1} defaultValue={option.weight} onBlur={event => updateOption(option.id, { weight: Number(event.target.value) })} style={{ ...input, width: 80, display: 'block' }} /></label>
+        <div className="col-span-2 md:col-span-1"><Toggle label="Attiva" active={option.active} onClick={() => updateOption(option.id, { active: !option.active })} /></div>
       </div>)}
     </Section>
   )
@@ -525,13 +628,13 @@ function EconomyAdmin({ games, options, reload }: { games: Row[]; options: Row[]
 function FeedbackAdmin({ feedback, reload }: { feedback: Row[]; reload: () => Promise<void> }) {
   const moderate = async (id: string, status: 'published' | 'hidden') => {
     const { error } = await requireSupabase().rpc('admin_moderate_feedback', { p_feedback_id: id, p_status: status })
-    if (error) throw new Error(error.message)
+    if (error) throw new Error(italianErrorMessage(error.message, 'Moderazione della recensione non riuscita.'))
     await reload()
   }
   return (
-    <Section title="Recensioni dimostrative" note="Solo le recensioni approvate vengono mostrate ai membri autorizzati.">
-      {feedback.map(item => <div key={item.id} className="p-4 mb-3" style={row}>
-        <div className="flex-1">
+    <Section title="Recensioni" note="Pubblica o nascondi le recensioni degli utenti.">
+      {feedback.map(item => <div key={item.id} className="flex flex-col sm:flex-row sm:items-start gap-3 p-4 mb-3" style={row}>
+        <div className="flex-1 min-w-0">
           <strong>@{item.profiles?.username ?? 'membro'} / {item.rating} stelle</strong>
           <div style={muted}>{item.orders?.display_id} / {feedbackStatusLabel[item.status]}</div>
           <p style={{ marginTop: 7 }}>{item.message}</p>
@@ -545,7 +648,6 @@ function FeedbackAdmin({ feedback, reload }: { feedback: Row[]; reload: () => Pr
 
 function SettingsAdmin({ locations, settings, tokenTiers, reload }: { locations: Row[]; settings: Row[]; tokenTiers: Row[]; reload: () => Promise<void> }) {
   const retention = settings.find(setting => setting.key === 'kyc_retention')?.value ?? { approved_days: 365 }
-  const rules = settings.find(setting => setting.key === 'demo_rules')?.value ?? { disclaimer: 'Ambiente dimostrativo: nessun pagamento, scambio o gestione reale degli ordini.' }
   const links = settings.find(setting => setting.key === 'community_links')?.value ?? { instagram: '', viber: '', signal: null }
   const addLocation = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -557,7 +659,7 @@ function SettingsAdmin({ locations, settings, tokenTiers, reload }: { locations:
       minimum_units: Number(values.get('minimum')),
       requires_street: scenario !== 'meetup',
     })
-    if (error) throw new Error(error.message)
+    if (error) throw new Error(italianErrorMessage(error.message, 'Aggiunta dell’area non riuscita.'))
     event.currentTarget.reset()
     await reload()
   }
@@ -567,7 +669,7 @@ function SettingsAdmin({ locations, settings, tokenTiers, reload }: { locations:
     const value = { approved_days: Number(values.get('days')) }
     if (value.approved_days < 1) throw new Error('Conservazione non valida')
     const { error } = await requireSupabase().from('app_settings').upsert({ key: 'kyc_retention', value })
-    if (error) throw new Error(error.message)
+    if (error) throw new Error(italianErrorMessage(error.message, 'Salvataggio della conservazione non riuscito.'))
     await reload()
   }
   const updateTier = async (minimumUnits: number, tokensAwarded: number) => {
@@ -575,7 +677,7 @@ function SettingsAdmin({ locations, settings, tokenTiers, reload }: { locations:
       p_minimum_units: minimumUnits,
       p_tokens_awarded: tokensAwarded,
     })
-    if (error) throw new Error(error.message)
+    if (error) throw new Error(italianErrorMessage(error.message, 'Aggiornamento dei gettoni non riuscito.'))
     await reload()
   }
   const updatePublicInfo = async (event: FormEvent<HTMLFormElement>) => {
@@ -583,75 +685,73 @@ function SettingsAdmin({ locations, settings, tokenTiers, reload }: { locations:
     const values = new FormData(event.currentTarget)
     const db = requireSupabase()
     const results = await Promise.all([
-      db.from('app_settings').upsert({ key: 'demo_rules', value: { ...rules, disclaimer: String(values.get('disclaimer')) } }),
       db.from('app_settings').upsert({ key: 'community_links', value: {
         instagram: String(values.get('instagram')), viber: String(values.get('viber')),
         signal: String(values.get('signal') ?? '').trim() || null,
       } }),
     ])
     const error = results.find(result => result.error)?.error
-    if (error) throw new Error(error.message)
+    if (error) throw new Error(italianErrorMessage(error.message, 'Salvataggio delle informazioni non riuscito.'))
     await reload()
   }
   return (
-    <Section title="Scenari e privacy" note="Tutte le località sono campi dimostrativi; non devono descrivere esecuzioni reali.">
+    <Section title="Impostazioni" note="Configura informazioni pubbliche, KYC, premi e aree di servizio.">
       <form onSubmit={updatePublicInfo} className="grid gap-2 mb-6">
-        <h3>Regolamento e link della community</h3>
-        <input name="disclaimer" required defaultValue={rules.disclaimer} placeholder="Avviso dimostrativo" style={input} />
-        <input name="instagram" defaultValue={links.instagram} placeholder="URL notizie Instagram" style={input} />
-        <input name="viber" defaultValue={links.viber} placeholder="URL notizie Viber" style={input} />
-        <input name="signal" defaultValue={links.signal ?? ''} placeholder="Signal URL (opzionale)" style={input} />
-        <button style={primary}>Salva informazioni pubbliche</button>
+        <h3>Link pubblici</h3>
+        <input className="w-full" name="instagram" defaultValue={links.instagram} placeholder="URL Instagram" style={input} />
+        <input className="w-full" name="viber" defaultValue={links.viber} placeholder="URL Viber" style={input} />
+        <input className="w-full" name="signal" defaultValue={links.signal ?? ''} placeholder="URL Signal (opzionale)" style={input} />
+        <button style={primary}>Salva link</button>
       </form>
-      <form onSubmit={updateRetention} className="flex gap-2 mb-5 items-center">
-        <label>Conservazione KYC in giorni <input name="days" type="number" min="1" defaultValue={retention.approved_days} style={{ ...input, width: 90 }} /></label>
+      <form onSubmit={updateRetention} className="flex flex-col sm:flex-row gap-2 mb-5 sm:items-end">
+        <label style={muted}>Conservazione documenti KYC (giorni)<input name="days" type="number" min="1" defaultValue={retention.approved_days} style={{ ...input, width: 150, display: 'block', marginTop: 5 }} /></label>
         <button style={primary}>Salva conservazione</button>
       </form>
-      <h3 className="mb-3">Gettoni per scenario completato</h3>
+      <h3 className="mb-3">Gettoni per ordine completato</h3>
       <div className="flex flex-wrap gap-3 mb-6">
         {tokenTiers.map(tier => <label key={tier.minimum_units} style={muted}>{tier.minimum_units}+ g
           <input type="number" min={0} max={100} defaultValue={tier.tokens_awarded} onBlur={event => updateTier(tier.minimum_units, Number(event.target.value))} style={{ ...input, width: 70, display: 'block' }} />
         </label>)}
       </div>
-      <h3 className="mb-3 mt-6">INCONTRO - possono scegliere solo città</h3>
+      <h3 className="mb-3 mt-6">MEETUP</h3>
       <div className="mb-4">
-        {locations.filter(l => l.scenario_type === 'meetup').map(location => <div key={location.id} style={row}><strong>{location.city}</strong><span>minimo {location.minimum_units} g</span></div>)}
+        {locations.filter(l => l.scenario_type === 'meetup').map(location => <div key={location.id} className="flex flex-wrap justify-between gap-2" style={row}><strong>{location.city}</strong><span>minimo {location.minimum_units} g</span></div>)}
       </div>
-      <form onSubmit={addLocation} className="flex flex-wrap gap-2 mb-6">
+      <form onSubmit={addLocation} className="grid grid-cols-1 sm:grid-cols-[1fr_150px_auto] gap-2 mb-6">
         <input type="hidden" name="scenario" value="meetup" />
-        <input name="city" required placeholder="Nuova città incontro" style={input} />
-        <input name="minimum" type="number" min="1" required placeholder="Grammi minimi" style={input} />
-        <button style={primary}>Aggiungi incontro</button>
+        <input className="w-full" name="city" required placeholder="Città" style={input} />
+        <input className="w-full" name="minimum" type="number" min="1" required placeholder="Minimo g" style={input} />
+        <button style={primary}>Aggiungi</button>
       </form>
-      <h3 className="mb-3">CONSEGNA IN ZONA - possono scegliere città/via</h3>
+      <h3 className="mb-3">DELIVERY LOCALE</h3>
       <div className="mb-4">
-        {locations.filter(l => l.scenario_type === 'delivery_zone').map(location => <div key={location.id} style={row}><strong>{location.city}</strong><span>minimo {location.minimum_units} g + via</span></div>)}
+        {locations.filter(l => l.scenario_type === 'delivery_zone').map(location => <div key={location.id} className="flex flex-wrap justify-between gap-2" style={row}><strong>{location.city}</strong><span>minimo {location.minimum_units} g</span></div>)}
       </div>
-      <form onSubmit={addLocation} className="flex flex-wrap gap-2 mb-6">
+      <form onSubmit={addLocation} className="grid grid-cols-1 sm:grid-cols-[1fr_150px_auto] gap-2 mb-6">
         <input type="hidden" name="scenario" value="delivery_zone" />
-        <input name="city" required placeholder="Nuova città per consegna in zona" style={input} />
-        <input name="minimum" type="number" min="1" required placeholder="Grammi minimi" style={input} />
-        <button style={primary}>Aggiungi consegna in zona</button>
+        <input className="w-full" name="city" required placeholder="Città" style={input} />
+        <input className="w-full" name="minimum" type="number" min="1" required placeholder="Minimo g" style={input} />
+        <button style={primary}>Aggiungi</button>
       </form>
-      <h3 className="mb-3">CONSEGNA ITALIA - possono inserire città/via</h3>
+      <h3 className="mb-3">DELIVERY TUTTA ITALIA</h3>
       <div className="mb-4">
-        {locations.filter(l => l.scenario_type === 'delivery_italia').map(location => <div key={location.id} style={row}><strong>{location.city}</strong><span>minimo {location.minimum_units} g + via</span></div>)}
+        {locations.filter(l => l.scenario_type === 'delivery_italia').map(location => <div key={location.id} className="flex flex-wrap justify-between gap-2" style={row}><strong>{location.city}</strong><span>minimo {location.minimum_units} g</span></div>)}
       </div>
-      <form onSubmit={addLocation} className="flex flex-wrap gap-2">
+      <form onSubmit={addLocation} className="grid grid-cols-1 sm:grid-cols-[1fr_150px_auto] gap-2">
         <input type="hidden" name="scenario" value="delivery_italia" />
-        <input name="city" required placeholder="Nuova città per consegna Italia" style={input} />
-        <input name="minimum" type="number" min="1" required placeholder="Grammi minimi" style={input} />
-        <button style={primary}>Aggiungi consegna Italia</button>
+        <input className="w-full" name="city" required placeholder="Città" style={input} />
+        <input className="w-full" name="minimum" type="number" min="1" required placeholder="Minimo g" style={input} />
+        <button style={primary}>Aggiungi</button>
       </form>
     </Section>
   )
 }
 
 function AdminFrame({ children }: { children: ReactNode }) {
-  return <div style={{ minHeight: '100vh', padding: '120px 20px 40px', background: '#080C0E', color: '#F5F5F5' }}><div className="max-w-6xl mx-auto">{children}</div></div>
+  return <div className="px-3 sm:px-5 pb-10" style={{ minHeight: '100vh', paddingTop: 'clamp(88px, 14vw, 120px)', background: '#080C0E', color: '#F5F5F5' }}><div className="max-w-6xl mx-auto min-w-0">{children}</div></div>
 }
 function Section({ title, note, children }: { title: string; note: string; children: ReactNode }) {
-  return <section className="p-5 rounded-2xl" style={panel}><h2 style={{ ...heading, fontSize: 21 }}>{title}</h2><p style={{ ...muted, marginBottom: 18 }}>{note}</p>{children}</section>
+  return <section className="p-3 sm:p-5 rounded-2xl min-w-0" style={panel}><h2 style={{ ...heading, fontSize: 21 }}>{title}</h2><p style={{ ...muted, marginBottom: 18 }}>{note}</p>{children}</section>
 }
 function Metric({ label, value }: { label: string; value: number }) {
   return <div className="p-4 rounded-xl" style={panel}><div style={muted}>{label}</div><div style={{ fontFamily: 'Orbitron', fontSize: 25, color: '#D7FE55' }}>{value}</div></div>
@@ -663,9 +763,10 @@ function roundPrice(price: number) {
   return Math.round(price / 5) * 5
 }
 const panel = { background: '#11181B', border: '1px solid rgba(126,156,168,.18)' }
-const row = { display: 'flex', alignItems: 'center', gap: 12, padding: 12, marginBottom: 8, background: 'rgba(245,245,245,.035)', borderRadius: 10 }
-const heading = { fontFamily: 'Space Grotesk', fontWeight: 700, fontSize: 30, color: '#F5F5F5' }
+const row = { padding: 12, marginBottom: 8, background: 'rgba(245,245,245,.035)', borderRadius: 10, minWidth: 0 }
+const heading = { fontFamily: 'Space Grotesk', fontWeight: 700, fontSize: 'clamp(24px, 7vw, 30px)', color: '#F5F5F5' }
 const muted = { color: 'rgba(245,245,245,.55)', fontSize: 13 }
-const input = { padding: '9px 12px', background: '#080C0E', border: '1px solid rgba(245,245,245,.18)', color: '#F5F5F5', borderRadius: 8 }
-const primary = { ...input, background: '#7E9CA8', fontWeight: 700 }
+const input = { minWidth: 0, maxWidth: '100%', boxSizing: 'border-box' as const, padding: '9px 12px', background: '#080C0E', border: '1px solid rgba(245,245,245,.18)', color: '#F5F5F5', borderRadius: 8 }
+const primary = { ...input, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#7E9CA8', fontWeight: 700 }
 const smallButton = { display: 'inline-flex', alignItems: 'center', gap: 5, padding: '9px 12px', borderRadius: 8, border: '1px solid rgba(126,156,168,.25)', background: '#11181B', color: '#F5F5F5' }
+const dangerButton = { ...smallButton, border: '1px solid rgba(239,68,68,.38)', color: '#FCA5A5' }
