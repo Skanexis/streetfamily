@@ -3,5 +3,3 @@ dist/
 .env
 .env.*
 !.env.example
-!.env.deploy.example
-supabase/functions/.env

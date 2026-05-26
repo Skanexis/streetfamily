@@ -35,12 +35,30 @@ export function envAdminIds() {
 }
 
 export async function sendTelegramMessage(chatId: string, text: string) {
+  return sendTelegramMessageWithOptions(chatId, text)
+}
+
+export async function sendTelegramMessageWithOptions(chatId: string, text: string, replyMarkup?: unknown) {
   const token = Deno.env.get('TELEGRAM_BOT_TOKEN')
   if (!token) throw new Error('TELEGRAM_BOT_TOKEN missing')
   const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text }),
+    body: JSON.stringify({ chat_id: chatId, text, reply_markup: replyMarkup }),
   })
   if (!response.ok) throw new Error(`Telegram send failed: ${response.status}`)
+}
+
+export async function setTelegramMiniAppMenu(chatId: string, url: string) {
+  const token = Deno.env.get('TELEGRAM_BOT_TOKEN')
+  if (!token) throw new Error('TELEGRAM_BOT_TOKEN missing')
+  const response = await fetch(`https://api.telegram.org/bot${token}/setChatMenuButton`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      chat_id: chatId,
+      menu_button: { type: 'web_app', text: 'Apri demo', web_app: { url } },
+    }),
+  })
+  if (!response.ok) throw new Error(`Telegram menu setup failed: ${response.status}`)
 }

@@ -1,4 +1,4 @@
-import { adminClient, envAdminIds, json, sendTelegramMessage, sha256 } from '../_shared/clients.ts'
+import { adminClient, envAdminIds, json, sendTelegramMessage, sendTelegramMessageWithOptions, setTelegramMiniAppMenu, sha256 } from '../_shared/clients.ts'
 
 interface TelegramUpdate {
   message?: {
@@ -16,10 +16,39 @@ Deno.serve(async req => {
   const update: TelegramUpdate = await req.json()
   const message = update.message
   const match = message?.text?.match(/^\/start\s+login_([A-Za-z0-9_-]+)$/)
-  if (!message || !message.from || !match) return json({ ok: true })
+  if (!message || !message.from) return json({ ok: true })
   const telegramId = String(message.from.id)
-  const tokenHash = await sha256(match[1])
   const db = adminClient()
+  const isAdmin = envAdminIds().has(telegramId)
+
+  if (message.text?.match(/^\/start(?:\s*)$/)) {
+    const appUrl = Deno.env.get('TELEGRAM_MINI_APP_URL')
+    if (!appUrl) {
+      await sendTelegramMessage(String(message.chat.id), 'Mini App non configurata. Contatta un amministratore.')
+      return json({ ok: true })
+    }
+    const { data: existing } = await db.from('staging_allowlist').select('enabled,role').eq('telegram_subject', telegramId).maybeSingle()
+    if (existing?.enabled === false && !isAdmin) {
+      await sendTelegramMessage(String(message.chat.id), 'Il tuo account non e autorizzato allo staging.')
+      return json({ ok: true })
+    }
+    await db.from('staging_allowlist').upsert({
+      telegram_subject: telegramId,
+      role: isAdmin ? 'admin' : existing?.role ?? 'user',
+      enabled: true,
+      note: isAdmin ? 'TELEGRAM_ADMIN_IDS' : 'Telegram bot start',
+    })
+    await Promise.allSettled([setTelegramMiniAppMenu(telegramId, appUrl)])
+    await sendTelegramMessageWithOptions(
+      String(message.chat.id),
+      isAdmin ? 'Accesso admin disponibile. Apri la Mini App demo.' : 'Benvenuto nello staging demo. Apri la Mini App per accedere.',
+      { inline_keyboard: [[{ text: 'Apri Street Family Demo', web_app: { url: appUrl } }]] },
+    )
+    return json({ ok: true })
+  }
+
+  if (!match) return json({ ok: true })
+  const tokenHash = await sha256(match[1])
   const { data: challenge } = await db.from('telegram_login_challenges')
     .select('id,state,expires_at')
     .eq('token_hash', tokenHash)
@@ -30,9 +59,14 @@ Deno.serve(async req => {
     return json({ ok: true })
   }
 
-  const isAdmin = envAdminIds().has(telegramId)
-  if (isAdmin) {
-    await db.from('staging_allowlist').upsert({ telegram_subject: telegramId, role: 'admin', enabled: true, note: 'TELEGRAM_ADMIN_IDS' })
+  const { data: existing } = await db.from('staging_allowlist').select('enabled').eq('telegram_subject', telegramId).maybeSingle()
+  if (!existing || isAdmin) {
+    await db.from('staging_allowlist').upsert({
+      telegram_subject: telegramId,
+      role: isAdmin ? 'admin' : 'user',
+      enabled: true,
+      note: isAdmin ? 'TELEGRAM_ADMIN_IDS' : 'Telegram login registration',
+    })
   }
   const { data: allowed } = await db.from('staging_allowlist').select('role,enabled').eq('telegram_subject', telegramId).eq('enabled', true).maybeSingle()
   if (!allowed) {

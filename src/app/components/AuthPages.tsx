@@ -16,6 +16,7 @@ const card = {
 export function LoginPage() {
   const auth = useAuth()
   const [challenge, setChallenge] = useState<{ token: string; botUrl: string } | null>(null)
+  const [miniAppAttempted, setMiniAppAttempted] = useState(false)
   const [error, setError] = useState('')
   const login = async () => {
     try {
@@ -26,6 +27,18 @@ export function LoginPage() {
       setError(caught instanceof Error ? caught.message : 'Impossibile avviare Telegram.')
     }
   }
+  useEffect(() => {
+    const telegram = (window as Window & {
+      Telegram?: { WebApp?: { initData?: string; ready?: () => void; expand?: () => void } }
+    }).Telegram?.WebApp
+    if (miniAppAttempted || auth.session || !telegram?.initData) return
+    setMiniAppAttempted(true)
+    telegram.ready?.()
+    telegram.expand?.()
+    auth.loginFromTelegramMiniApp(telegram.initData).catch(caught => {
+      setError(caught instanceof Error ? caught.message : 'Accesso Mini App non riuscito.')
+    })
+  }, [auth, miniAppAttempted])
   useEffect(() => {
     if (!challenge) return
     const timer = window.setInterval(async () => {
@@ -53,7 +66,7 @@ export function LoginPage() {
       <div style={card}>
         <div style={{ fontFamily: 'Orbitron', fontWeight: 900, fontSize: 25, marginBottom: 8 }}>STREET FAMILY</div>
         <div style={{ color: '#D7FE55', fontFamily: 'Orbitron', fontSize: 11, marginBottom: 24 }}>CLOSED TEST MODE</div>
-        <p style={{ color: 'rgba(245,245,245,.65)', marginBottom: 24 }}>Apri il bot Telegram e premi Start per confermare il tuo account. Ambiente staging senza pagamento o fulfillment.</p>
+        <p style={{ color: 'rgba(245,245,245,.65)', marginBottom: 24 }}>{miniAppAttempted ? 'Autorizzazione Telegram Mini App in corso...' : 'Apri il bot Telegram e premi Start per confermare il tuo account. Ambiente staging senza pagamento o fulfillment.'}</p>
         {!auth.configured ? (
           <p style={{ color: '#F59E0B' }}>Configura `VITE_SUPABASE_URL` e `VITE_SUPABASE_PUBLISHABLE_KEY` per abilitare l'accesso.</p>
         ) : (

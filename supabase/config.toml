@@ -7,6 +7,9 @@ verify_jwt = false
 [functions.telegram-bot-webhook]
 verify_jwt = false
 
+[functions.telegram-miniapp-auth]
+verify_jwt = false
+
 [functions.submit-test-order]
 verify_jwt = true
 
@@ -24,3 +27,6 @@ verify_jwt = true
 
 [functions.review-kyc]
 verify_jwt = true
+
+[functions.purge-expired-kyc]
+verify_jwt = false

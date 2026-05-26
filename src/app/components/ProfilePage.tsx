@@ -1,14 +1,14 @@
 import { useState } from 'react'
 import { motion } from 'motion/react'
-import { Package, Star, Ticket, Trophy } from 'lucide-react'
+import { Package, ShieldCheck, Star, Ticket, Trophy } from 'lucide-react'
 import type { LedgerEntry, Level, TestOrder, User, UserReward } from '../data'
 import { submitFeedback } from '../lib/api'
 
-interface Props { user: User; levels: Level[]; orders: TestOrder[]; ledger: LedgerEntry[]; rewards: UserReward[]; onChanged: () => Promise<void> }
+interface Props { user: User; levels: Level[]; orders: TestOrder[]; ledger: LedgerEntry[]; rewards: UserReward[]; onChanged: () => Promise<void>; onAdmin?: () => void }
 type Tab = 'orders' | 'tokens' | 'levels'
 const statusLabel = { submitted: 'Inviato', processing: 'In revisione', completed: 'Completato demo', cancelled: 'Annullato' }
 
-export function ProfilePage({ user, levels, orders, ledger, rewards, onChanged }: Props) {
+export function ProfilePage({ user, levels, orders, ledger, rewards, onChanged, onAdmin }: Props) {
   const [tab, setTab] = useState<Tab>('orders')
   const current = levels.find(level => level.level === user.level) ?? levels[0]
   if (!current) return null
@@ -18,6 +18,7 @@ export function ProfilePage({ user, levels, orders, ledger, rewards, onChanged }
       <section className="p-6 mb-7" style={panel}>
         <h1 style={{ fontFamily: 'Orbitron', fontSize: 25 }}>@{user.name}</h1>
         <p style={{ color: '#D7FE55', margin: '7px 0 22px' }}>{current.name} / LV. {user.level}</p>
+        {user.role === 'admin' && <button onClick={onAdmin} className="mb-5 px-4 py-3 flex items-center gap-2" style={notice}><ShieldCheck size={17} /> Admin / Apri pannello amministrazione</button>}
         <div className="grid grid-cols-3 gap-3">
           <Stat Icon={Star} value={user.tokens} label="Gettoni" />
           <Stat Icon={Ticket} value={user.spinTickets} label="Ticket" />

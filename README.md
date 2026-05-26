@@ -6,7 +6,9 @@ React/Vite storefront and admin interface backed by Supabase. This environment c
 
 The repository now includes a production frontend container, Docker Compose configuration and a host Nginx reverse-proxy example. For a beginner-friendly Russian guide covering Git, choosing a free port alongside existing VPS projects, HTTPS and later updates, see [`docs/DEPLOY_VPS_RU.md`](docs/DEPLOY_VPS_RU.md).
 
-## Local Frontend
+## One Environment File
+
+The project uses exactly one local/deployment configuration file: `.env` in the repository root.
 
 ```bash
 npm install
@@ -14,12 +16,7 @@ copy .env.example .env
 npm run dev
 ```
 
-Client-side environment:
-
-```dotenv
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_PUBLISHABLE_KEY=your_publishable_key
-```
+The same `.env` is used for Vite, Docker Compose and `supabase secrets set --env-file .env`. It is ignored by Git. For the complete Russian step-by-step Supabase and Telegram setup, use [`docs/SUPABASE_SETUP_RU.md`](docs/SUPABASE_SETUP_RU.md).
 
 Checks:
 
@@ -30,7 +27,7 @@ npm run build
 
 ## Supabase Backend
 
-Apply the migrations in order:
+The exact beginner setup commands are in [`docs/SUPABASE_SETUP_RU.md`](docs/SUPABASE_SETUP_RU.md). Backend migrations are:
 
 - [`supabase/migrations/202605250001_street_family_mvp.sql`](supabase/migrations/202605250001_street_family_mvp.sql)
 - [`supabase/migrations/202605250002_telegram_bot_media.sql`](supabase/migrations/202605250002_telegram_bot_media.sql)
@@ -38,29 +35,26 @@ Apply the migrations in order:
 - [`supabase/migrations/202605250004_broadcasts.sql`](supabase/migrations/202605250004_broadcasts.sql)
 - [`supabase/migrations/202605250005_demo_loyalty_feedback_rules.sql`](supabase/migrations/202605250005_demo_loyalty_feedback_rules.sql)
 
-Deploy these Edge Functions:
+After `npx supabase@latest login` and `npx supabase@latest link --project-ref YOUR_PROJECT_REF`, apply and deploy:
 
 ```bash
-supabase functions deploy telegram-auth-start
-supabase functions deploy telegram-auth-status
-supabase functions deploy telegram-bot-webhook
-supabase functions deploy submit-test-order
-supabase functions deploy kyc-status
-supabase functions deploy upload-kyc-capture
-supabase functions deploy submit-kyc
-supabase functions deploy admin-kyc-documents
-supabase functions deploy review-kyc
-supabase functions deploy purge-expired-kyc
-supabase secrets set --env-file supabase/functions/.env
+npx supabase@latest db push
+npx supabase@latest secrets set --env-file .env
+npx supabase@latest functions deploy --use-api
 ```
 
-Create `supabase/functions/.env` from `supabase/functions/.env.example`. These are server-side secrets only:
+All configuration values are defined once in root `.env`, copied from `.env.example`:
 
 ```dotenv
+VITE_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_REPLACE_ME
+STREET_FAMILY_PORT=18087
 TELEGRAM_BOT_TOKEN=123456:telegram_bot_token
 TELEGRAM_BOT_USERNAME=your_bot_username
 TELEGRAM_WEBHOOK_SECRET=long_random_webhook_secret
 TELEGRAM_ADMIN_IDS=123456789,987654321
+TELEGRAM_MINI_APP_URL=https://street.example.com
+TELEGRAM_INIT_DATA_MAX_AGE_SECONDS=600
 KYC_PURGE_SECRET=long_random_cron_secret
 ```
 
@@ -72,11 +66,15 @@ https://api.telegram.org/bot<BOT_TOKEN>/setWebhook?url=https://<project-ref>.sup
 
 ## Authentication And Admins
 
-- Website login opens the Telegram bot with a one-time deep link. The browser session is issued only after the user confirms in the bot.
-- `TELEGRAM_ADMIN_IDS` contains Telegram numeric user IDs. When one of these users logs in through the bot, they are automatically added to the staging allowlist with role `admin`.
-- Admin users see the admin badge in their profile and the `/admin` entry in navigation.
+- Website login opens the Telegram bot with a one-time deep link. The browser session is issued only after confirmation in the bot.
+- Sending a plain `/start` message makes the bot return an `Apri Street Family Demo` Mini App button and installs an equivalent chat menu button. Telegram does not allow a bot to open a Mini App without the user's button tap.
+- When the app is opened inside Telegram, `telegram-miniapp-auth` validates signed `Telegram.WebApp.initData` on the server and creates the Supabase session automatically. Do not trust `initDataUnsafe` in frontend code.
+- `TELEGRAM_MINI_APP_URL` must be the public HTTPS URL of the deployed frontend.
+- `TELEGRAM_ADMIN_IDS` contains comma-separated Telegram numeric user IDs, for example `123456789,987654321`. When any of these users enters through the bot or Mini App, they are assigned role `admin` automatically.
+- Admin users see an admin badge and panel link in their profile and the admin navigation action.
 - The admin panel additionally requires TOTP MFA (`aal2`) before protected operations are accessible.
-- Non-admin users remain closed-staging allowlist members and can be admitted from the admin panel using their Telegram numeric ID.
+- Non-admin Telegram users registering through the bot receive member access to this closed demo; an explicitly disabled member remains blocked.
+- Functions receiving unsigned browser startup requests or Telegram webhooks are configured with `verify_jwt = false` in [`supabase/config.toml`](supabase/config.toml). They authenticate through Telegram signatures or challenge secrets in their handlers.
 
 ## Orders And Notifications
 
@@ -118,7 +116,7 @@ https://api.telegram.org/bot<BOT_TOKEN>/setWebhook?url=https://<project-ref>.sup
 - KYC images are stored in the separate private `kyc-documents` Storage bucket. There are no browser read/upload policies for this bucket; authenticated uploads and reviews go through Edge Functions only.
 - Administrators may view KYC images only after MFA (`aal2`). Document views generate 60-second signed URLs and an audit event; approve/reject decisions are also audited.
 - Approving or rejecting KYC sends a Telegram status notification to the member. When KYC is rejected, captured image objects and metadata are removed so the user must perform fresh camera captures before resubmitting.
-- Approved images receive a retention deadline, defaulting to `365` days and configurable in the admin panel. Invoke `purge-expired-kyc` daily with a secret header to delete expired document objects and metadata while keeping the reviewed case record:
+- Approved images are retained permanently (default: 36500 days / 100 years) and configurable in the admin panel. Invoke `purge-expired-kyc` daily with a secret header to delete expired document objects and metadata while keeping the reviewed case record:
 
 ```bash
 curl -X POST "https://<project-ref>.supabase.co/functions/v1/purge-expired-kyc" \

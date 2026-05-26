@@ -13,6 +13,7 @@ interface AuthValue {
   isAdminMfa: boolean
   beginTelegramBotLogin: () => Promise<{ token: string; botUrl: string }>
   checkTelegramBotLogin: (token: string) => Promise<'pending' | 'confirmed' | 'denied' | 'expired'>
+  loginFromTelegramMiniApp: (initData: string) => Promise<void>
   logout: () => Promise<void>
   refreshProfile: () => Promise<void>
 }
@@ -79,6 +80,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (verified.error) throw new Error(verified.error.message)
       }
       return data.state
+    },
+    loginFromTelegramMiniApp: async (initData: string) => {
+      const db = requireSupabase()
+      const { data, error } = await db.functions.invoke('telegram-miniapp-auth', { body: { initData } })
+      if (error) throw new Error(error.message)
+      const verified = await db.auth.verifyOtp({ token_hash: data.tokenHash, type: 'magiclink' })
+      if (verified.error) throw new Error(verified.error.message)
     },
     logout: async () => {
       const db = requireSupabase()

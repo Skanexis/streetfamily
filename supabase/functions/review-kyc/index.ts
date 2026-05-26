@@ -21,7 +21,7 @@ Deno.serve(async req => {
   }
   if (decision === 'approved') {
     const settings = await db.from('app_settings').select('value').eq('key', 'kyc_retention').maybeSingle()
-    const retentionDays = Number(settings.data?.value?.approved_days ?? 365)
+    const retentionDays = Number(settings.data?.value?.approved_days ?? 36500)
     await db.from('kyc_cases').update({
       retain_until: new Date(Date.now() + retentionDays * 24 * 60 * 60 * 1000).toISOString(),
     }).eq('user_id', userId)

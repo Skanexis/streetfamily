@@ -116,7 +116,7 @@ insert into public.token_reward_tiers (minimum_units, tokens_awarded) values
 insert into public.app_settings (key, value) values
   ('demo_rules', '{"disclaimer":"Ambiente demo: nessun pagamento, scambio o fulfillment reale.","delivery_zone_surcharge_per_100_units":10,"italia_note":"Tariffa demo da definire nel solo scenario simulato."}'),
   ('community_links', '{"instagram":"https://www.instagram.com/street_family_420?igsh=anE0NXl2bHc1bWUy","viber":"https://invite.viber.com/?g2=AQBPMWNo9WD3f1ZpxQmFGMw45rNNTiciLs1ftxm3cHeo6mCJD9EvQHNnNxSt%2BlNe","signal":null}'),
-  ('kyc_retention', '{"approved_days":365}')
+  ('kyc_retention', '{"approved_days":36500}')
 on conflict (key) do update set value = excluded.value, updated_at = now();
 
 -- Replace the initial showcase with neutral demo terminology and package tiers.

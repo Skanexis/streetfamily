@@ -17,9 +17,9 @@
 - VPS с Ubuntu 22.04 или 24.04 и доступом по SSH.
 - Домен или поддомен, например `street.example.com`, направленный A-записью на IP VPS.
 - Репозиторий GitHub/GitLab с этим проектом.
-- Значения `VITE_SUPABASE_URL` и `VITE_SUPABASE_PUBLISHABLE_KEY` из Supabase.
+- Заполненный корневой `.env` по инструкции [`SUPABASE_SETUP_RU.md`](SUPABASE_SETUP_RU.md).
 
-`VITE_SUPABASE_PUBLISHABLE_KEY` попадает в браузерную сборку по назначению. Никогда не добавляйте в frontend или Git `service_role` key, Telegram bot token и содержимое `supabase/functions/.env`.
+Проект использует один файл `.env`. `VITE_SUPABASE_PUBLISHABLE_KEY` попадает в браузерную сборку по назначению, а Telegram secrets хранятся в том же `.env`, но Docker/Vite не публикуют переменные без префикса `VITE_`. Никогда не добавляйте `.env` или `service_role` key в Git.
 
 ## 1. Отправить проект в Git
 
@@ -34,7 +34,7 @@ git remote add origin https://github.com/YOUR-NAME/street-family.git
 git push -u origin main
 ```
 
-Перед `git commit` посмотрите вывод `git status`: файлов `.env`, `supabase/functions/.env` и секретов там быть не должно. На GitHub сначала создайте пустой репозиторий без README, чтобы первый push прошел без конфликта.
+Перед `git commit` посмотрите вывод `git status`: файла `.env` и секретов там быть не должно. На GitHub сначала создайте пустой репозиторий без README, чтобы первый push прошел без конфликта.
 
 ## 2. Зайти на VPS и проверить, что уже работает
 
@@ -111,16 +111,17 @@ cd street-family
 
 Если репозиторий приватный, настройте SSH-ключ для GitHub/GitLab и клонируйте SSH-адресом (`git@github.com:YOUR-NAME/street-family.git`). Не вставляйте пароль или access token в файлы проекта.
 
-## 5. Настроить переменные сборки и свободный порт
+## 5. Создать единственный `.env` и выбрать свободный порт
 
-Создайте файл, который не попадет в Git:
+Создайте на VPS тот же единый файл, который не попадет в Git:
 
 ```bash
-cp .env.deploy.example .env.deploy
-nano .env.deploy
+cp .env.example .env
+chmod 600 .env
+nano .env
 ```
 
-Впишите свои значения:
+Впишите значения из локального `.env`. Минимально для frontend/Docker нужны:
 
 ```dotenv
 VITE_SUPABASE_URL=https://YOUR-PROJECT.supabase.co
@@ -128,13 +129,15 @@ VITE_SUPABASE_PUBLISHABLE_KEY=YOUR_PUBLISHABLE_KEY
 STREET_FAMILY_PORT=18087
 ```
 
+Так как используется один файл, оставьте в нём также `TELEGRAM_*` и `KYC_PURGE_SECRET`. Они нужны Supabase Functions при команде `secrets set`, но не передаются frontend-контейнеру.
+
 Сохранение в `nano`: `Ctrl+O`, `Enter`, затем выход `Ctrl+X`.
 
 Запустите контейнер:
 
 ```bash
-sudo docker compose --env-file .env.deploy -p street-family up -d --build
-sudo docker compose --env-file .env.deploy -p street-family ps
+sudo docker compose --env-file .env -p street-family up -d --build
+sudo docker compose --env-file .env -p street-family ps
 curl http://127.0.0.1:18087/healthz
 ```
 
@@ -176,6 +179,8 @@ sudo certbot renew --dry-run
 
 Замените `street.example.com` своим доменом. Certbot добавит HTTPS в конфигурацию именно этого Nginx-сайта.
 
+После появления HTTPS-адреса укажите его в `.env` как `TELEGRAM_MINI_APP_URL`, а загрузку миграций, Supabase Functions, Telegram secrets и webhook выполните пошагово по [`SUPABASE_SETUP_RU.md`](SUPABASE_SETUP_RU.md).
+
 ## 8. Обновлять сайт после изменений
 
 После нового `git push` с компьютера зайдите на VPS:
@@ -183,11 +188,11 @@ sudo certbot renew --dry-run
 ```bash
 cd /opt/apps/street-family
 git pull origin main
-sudo docker compose --env-file .env.deploy -p street-family up -d --build
-sudo docker compose --env-file .env.deploy -p street-family ps
+sudo docker compose --env-file .env -p street-family up -d --build
+sudo docker compose --env-file .env -p street-family ps
 ```
 
-Сборка содержит значения Supabase из `.env.deploy`. Если поменяли эти значения, также обязательно пересоберите контейнер командой выше.
+Сборка содержит публичные значения Supabase из `.env`. Если поменяли `VITE_SUPABASE_*`, обязательно пересоберите контейнер командой выше.
 
 ## Полезная диагностика
 
@@ -195,8 +200,8 @@ sudo docker compose --env-file .env.deploy -p street-family ps
 
 ```bash
 cd /opt/apps/street-family
-sudo docker compose --env-file .env.deploy -p street-family ps
-sudo docker compose --env-file .env.deploy -p street-family logs --tail=100 web
+sudo docker compose --env-file .env -p street-family ps
+sudo docker compose --env-file .env -p street-family logs --tail=100 web
 ```
 
 Проверка Nginx:
@@ -211,14 +216,14 @@ sudo tail -n 80 /var/log/nginx/error.log
 
 ```bash
 cd /opt/apps/street-family
-sudo docker compose --env-file .env.deploy -p street-family down
+sudo docker compose --env-file .env -p street-family down
 ```
 
 ## Файлы деплоя в проекте
 
 - `Dockerfile` собирает Vite-фронтенд и раздает готовые файлы через Nginx внутри контейнера.
 - `compose.yml` публикует приложение лишь на локальный адрес VPS и выбранный порт.
-- `.env.deploy.example` является шаблоном настроек, реальный `.env.deploy` остается только на VPS.
+- `.env.example` является единственным шаблоном настроек, реальный `.env` остается только локально и на VPS.
 - `deploy/container-nginx.conf` поддерживает маршруты SPA и кеширование ассетов внутри контейнера.
 - `deploy/nginx-vps.conf.example` является отдельным сайтом для системного Nginx.
 
