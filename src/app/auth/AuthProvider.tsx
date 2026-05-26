@@ -20,6 +20,19 @@ interface AuthValue {
 
 const AuthContext = createContext<AuthValue | undefined>(undefined)
 
+async function edgeFunctionError(error: unknown, fallback: string) {
+  const functionError = error as { message?: string; context?: Response }
+  try {
+    if (functionError.context) {
+      const body = await functionError.context.clone().json() as { error?: string }
+      if (body.error) return body.error
+    }
+  } catch {
+    // Keep the client fallback when the failed response is not JSON.
+  }
+  return functionError.message ?? fallback
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
@@ -68,13 +81,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     beginTelegramBotLogin: async () => {
       const db = requireSupabase()
       const { data, error } = await db.functions.invoke('telegram-auth-start', { body: {} })
-      if (error) throw new Error(error.message)
+      if (error) throw new Error(await edgeFunctionError(error, 'Impossibile avviare Telegram.'))
       return data as { token: string; botUrl: string }
     },
     checkTelegramBotLogin: async (token: string) => {
       const db = requireSupabase()
       const { data, error } = await db.functions.invoke('telegram-auth-status', { body: { token } })
-      if (error) throw new Error(error.message)
+      if (error) throw new Error(await edgeFunctionError(error, 'Impossibile verificare Telegram.'))
       if (data.state === 'confirmed') {
         const verified = await db.auth.verifyOtp({ token_hash: data.tokenHash, type: 'magiclink' })
         if (verified.error) throw new Error(verified.error.message)
@@ -84,7 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loginFromTelegramMiniApp: async (initData: string) => {
       const db = requireSupabase()
       const { data, error } = await db.functions.invoke('telegram-miniapp-auth', { body: { initData } })
-      if (error) throw new Error(error.message)
+      if (error) throw new Error(await edgeFunctionError(error, 'Accesso Mini App non riuscito.'))
       const verified = await db.auth.verifyOtp({ token_hash: data.tokenHash, type: 'magiclink' })
       if (verified.error) throw new Error(verified.error.message)
     },
