@@ -449,6 +449,7 @@ async function xhrStorageUpload(path: string, file: File, onProgress: (value: nu
 
 function UsersAdmin({ profiles, initialKycUserId, reload }: { profiles: Row[]; initialKycUserId: string; reload: () => Promise<void> }) {
   const [query, setQuery] = useState('')
+  const [kycGroup, setKycGroup] = useState<'approved' | 'unapproved'>('unapproved')
   const [message, setMessage] = useState('')
   const [messageError, setMessageError] = useState(false)
   const [reviewUser, setReviewUser] = useState<Row | null>(null)
@@ -458,6 +459,7 @@ function UsersAdmin({ profiles, initialKycUserId, reload }: { profiles: Row[]; i
   const visibleProfiles = profiles.filter(profile => `${profile.username} ${profile.telegram_subject}`.toLowerCase().includes(query.toLowerCase()))
   const approvedProfiles = visibleProfiles.filter(profile => profile.kyc_cases?.status === 'approved')
   const unapprovedProfiles = visibleProfiles.filter(profile => profile.kyc_cases?.status !== 'approved')
+  const displayedProfiles = kycGroup === 'approved' ? approvedProfiles : unapprovedProfiles
   const toggleBlocked = async (profile: Row) => {
     setMessage('')
     setMessageError(false)
@@ -549,10 +551,23 @@ function UsersAdmin({ profiles, initialKycUserId, reload }: { profiles: Row[]; i
     <Section title="Utenti" note="I profili vengono creati al primo accesso Telegram. Gestisci KYC, blocco o eliminazione definitiva dell’account.">
       {message && <p className="mb-4" style={{ color: messageError || message === 'Utente bloccato.' ? '#FCA5A5' : '#D7FE55' }}>{message}</p>}
       <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Cerca username o Telegram ID" style={{ ...input, width: '100%', marginBottom: 12 }} />
-      <h3 style={{ ...heading, fontSize: 18, margin: '12px 0 8px' }}>KYC approvata ({approvedProfiles.length})</h3>
-      {approvedProfiles.length ? userRows(approvedProfiles) : <p style={muted}>Nessun utente con verifica KYC approvata.</p>}
-      <h3 style={{ ...heading, fontSize: 18, margin: '24px 0 8px' }}>KYC non approvata ({unapprovedProfiles.length})</h3>
-      {unapprovedProfiles.length ? userRows(unapprovedProfiles) : <p style={muted}>Nessun utente in attesa di verifica KYC.</p>}
+      <div className="flex flex-col sm:flex-row gap-2" style={{ margin: '12px 0 16px' }}>
+        <button
+          style={kycGroup === 'unapproved' ? { ...smallButton, color: '#D7FE55', borderColor: 'rgba(215,254,85,.45)' } : smallButton}
+          onClick={() => setKycGroup('unapproved')}
+        >
+          KYC non approvata ({unapprovedProfiles.length})
+        </button>
+        <button
+          style={kycGroup === 'approved' ? { ...smallButton, color: '#D7FE55', borderColor: 'rgba(215,254,85,.45)' } : smallButton}
+          onClick={() => setKycGroup('approved')}
+        >
+          KYC approvata ({approvedProfiles.length})
+        </button>
+      </div>
+      {displayedProfiles.length
+        ? userRows(displayedProfiles)
+        : <p style={muted}>{kycGroup === 'approved' ? 'Nessun utente con verifica KYC approvata.' : 'Nessun utente in attesa di verifica KYC.'}</p>}
       {reviewUser && (
         <div className="fixed inset-0 z-50 p-3 sm:p-5 flex items-center justify-center" style={{ background: 'rgba(0,0,0,.85)' }}>
           <div className="p-5 rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto" style={panel}>
