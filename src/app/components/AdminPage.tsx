@@ -456,6 +456,8 @@ function UsersAdmin({ profiles, initialKycUserId, reload }: { profiles: Row[]; i
   const [kycError, setKycError] = useState('')
   const [openedKycUserId, setOpenedKycUserId] = useState('')
   const visibleProfiles = profiles.filter(profile => `${profile.username} ${profile.telegram_subject}`.toLowerCase().includes(query.toLowerCase()))
+  const approvedProfiles = visibleProfiles.filter(profile => profile.kyc_cases?.status === 'approved')
+  const unapprovedProfiles = visibleProfiles.filter(profile => profile.kyc_cases?.status !== 'approved')
   const toggleBlocked = async (profile: Row) => {
     setMessage('')
     setMessageError(false)
@@ -520,33 +522,37 @@ function UsersAdmin({ profiles, initialKycUserId, reload }: { profiles: Row[]; i
       setKycError(italianErrorMessage(caught, 'Decisione non salvata.'))
     }
   }
+  const userRows = (items: Row[]) => items.map(profile => (
+    <div key={profile.id} className="flex flex-col lg:flex-row lg:items-center gap-3" style={row}>
+      <div className="flex-1 min-w-0">
+        <strong>@{profile.username}</strong>
+        <div className="break-all" style={muted}>Telegram ID: {profile.telegram_subject} / {profile.role === 'admin' ? 'amministratore' : 'utente'}</div>
+        <div style={muted}>
+          {(profile.orders ?? []).filter((order: Row) => order.status === 'completed').length} completate / {(profile.feedback ?? []).length} recensioni
+          {profile.kyc_cases?.retain_until ? ` / documenti fino a ${new Date(profile.kyc_cases.retain_until).toLocaleDateString('it-IT')}` : ''}
+        </div>
+      </div>
+      {profile.blocked && <span style={{ color: '#FCA5A5' }}>BLOCCATO</span>}
+      <span style={{ color: profile.kyc_cases?.status === 'approved' ? '#D7FE55' : '#F59E0B' }}>KYC: {kycStatusLabel[profile.kyc_cases?.status ?? 'not_started']}</span>
+      <button style={smallButton} onClick={() => openKyc(profile)}>Documenti</button>
+      {profile.role !== 'admin' && (
+        <>
+          <button style={profile.blocked ? smallButton : dangerButton} onClick={() => toggleBlocked(profile)}>
+            {profile.blocked ? 'Sblocca' : 'Blocca'}
+          </button>
+          <button style={dangerButton} onClick={() => removeAccount(profile)}>Elimina</button>
+        </>
+      )}
+    </div>
+  ))
   return (
     <Section title="Utenti" note="I profili vengono creati al primo accesso Telegram. Gestisci KYC, blocco o eliminazione definitiva dell’account.">
       {message && <p className="mb-4" style={{ color: messageError || message === 'Utente bloccato.' ? '#FCA5A5' : '#D7FE55' }}>{message}</p>}
       <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Cerca username o Telegram ID" style={{ ...input, width: '100%', marginBottom: 12 }} />
-      {visibleProfiles.map(profile => (
-        <div key={profile.id} className="flex flex-col lg:flex-row lg:items-center gap-3" style={row}>
-          <div className="flex-1 min-w-0">
-            <strong>@{profile.username}</strong>
-            <div className="break-all" style={muted}>Telegram ID: {profile.telegram_subject} / {profile.role === 'admin' ? 'amministratore' : 'utente'}</div>
-            <div style={muted}>
-              {(profile.orders ?? []).filter((order: Row) => order.status === 'completed').length} completate / {(profile.feedback ?? []).length} recensioni
-              {profile.kyc_cases?.retain_until ? ` / documenti fino a ${new Date(profile.kyc_cases.retain_until).toLocaleDateString('it-IT')}` : ''}
-            </div>
-          </div>
-          {profile.blocked && <span style={{ color: '#FCA5A5' }}>BLOCCATO</span>}
-          <span style={{ color: profile.kyc_cases?.status === 'approved' ? '#D7FE55' : '#F59E0B' }}>KYC: {kycStatusLabel[profile.kyc_cases?.status ?? 'not_started']}</span>
-          <button style={smallButton} onClick={() => openKyc(profile)}>Documenti</button>
-          {profile.role !== 'admin' && (
-            <>
-              <button style={profile.blocked ? smallButton : dangerButton} onClick={() => toggleBlocked(profile)}>
-                {profile.blocked ? 'Sblocca' : 'Blocca'}
-              </button>
-              <button style={dangerButton} onClick={() => removeAccount(profile)}>Elimina</button>
-            </>
-          )}
-        </div>
-      ))}
+      <h3 style={{ ...heading, fontSize: 18, margin: '12px 0 8px' }}>KYC approvata ({approvedProfiles.length})</h3>
+      {approvedProfiles.length ? userRows(approvedProfiles) : <p style={muted}>Nessun utente con verifica KYC approvata.</p>}
+      <h3 style={{ ...heading, fontSize: 18, margin: '24px 0 8px' }}>KYC non approvata ({unapprovedProfiles.length})</h3>
+      {unapprovedProfiles.length ? userRows(unapprovedProfiles) : <p style={muted}>Nessun utente in attesa di verifica KYC.</p>}
       {reviewUser && (
         <div className="fixed inset-0 z-50 p-3 sm:p-5 flex items-center justify-center" style={{ background: 'rgba(0,0,0,.85)' }}>
           <div className="p-5 rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto" style={panel}>
