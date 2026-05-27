@@ -1,4 +1,4 @@
-import { Home, ShoppingBag, Gamepad2, User, ShoppingCart } from 'lucide-react'
+import { Home, ShoppingBag, Gamepad2, MessageCircle, User, ShoppingCart } from 'lucide-react'
 import type { Page } from '../data'
 
 interface BottomNavProps {
@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { label: 'Inizio', page: 'home' as Page, Icon: Home },
   { label: 'Catalogo', page: 'catalog' as Page, Icon: ShoppingBag },
   { label: 'Giochi', page: 'games' as Page, Icon: Gamepad2 },
+  { label: 'Contatti', page: 'contacts' as Page, Icon: MessageCircle },
   { label: 'Profilo', page: 'profile' as Page, Icon: User },
 ]
 

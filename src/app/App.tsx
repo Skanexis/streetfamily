@@ -8,6 +8,7 @@ import { CatalogPage } from './components/CatalogPage'
 import { GamesPage } from './components/GamesPage'
 import { ProfilePage } from './components/ProfilePage'
 import { InfoPage } from './components/InfoPage'
+import { ContactsPage } from './components/ContactsPage'
 import { CartDrawer } from './components/CartDrawer'
 import { AdminPage } from './components/AdminPage'
 import { AccessDeniedPage, BlockedPage, CallbackPage, LoginPage, RequireAdmin, RequireMember } from './components/AuthPages'
@@ -17,7 +18,7 @@ import { getBroadcasts, getCatalog, getCatalogCategories, getKycStatus, getLevel
 import { italianErrorMessage } from './lib/errors'
 import '../styles/fonts.css'
 
-const PAGE_PATHS: Record<Page, string> = { home: '/', catalog: '/catalog', games: '/games', profile: '/profile', info: '/info' }
+const PAGE_PATHS: Record<Page, string> = { home: '/', catalog: '/catalog', games: '/games', profile: '/profile', info: '/info', contacts: '/contacts' }
 
 export default function App() {
   return (
@@ -133,6 +134,8 @@ function MemberApplication() {
         ? 'profile'
         : location.pathname === '/info'
           ? 'info'
+        : location.pathname === '/contacts'
+          ? 'contacts'
         : 'home'
   const navigate = (destination: Page) => {
     navigateRouter(PAGE_PATHS[destination])
@@ -171,6 +174,7 @@ function MemberApplication() {
             <Route path="/games" element={<GamesPage user={user} onPlay={playGame} onComplete={refreshAccount} />} />
             <Route path="/profile" element={<ProfilePage user={user} levels={levels} orders={orders} ledger={ledger} rewards={rewards} onChanged={refreshAccount} onAdmin={() => navigateRouter('/admin')} />} />
             <Route path="/info" element={<InfoPage />} />
+            <Route path="/contacts" element={<ContactsPage />} />
             <Route path="/admin" element={<RequireAdmin><AdminPage /></RequireAdmin>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

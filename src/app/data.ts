@@ -1,4 +1,4 @@
-export type Page = 'home' | 'catalog' | 'games' | 'profile' | 'info'
+export type Page = 'home' | 'catalog' | 'games' | 'profile' | 'info' | 'contacts'
 export type GameType = 'spin' | 'scratch' | 'box'
 export type ScenarioType = 'meetup' | 'delivery_zone' | 'delivery_italia'
 

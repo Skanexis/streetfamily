@@ -20,6 +20,7 @@ const NAV_LINKS: { label: string; page: Page }[] = [
   { label: 'Catalogo', page: 'catalog' },
   { label: 'Giochi', page: 'games' },
   { label: 'Regolamento', page: 'info' },
+  { label: 'Contatti', page: 'contacts' },
   { label: 'Profilo', page: 'profile' },
 ]
 
