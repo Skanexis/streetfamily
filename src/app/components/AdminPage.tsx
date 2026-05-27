@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { Package, Tags, Users, Gamepad2, ClipboardList, Settings, Megaphone, MessageSquare, Minus, Plus, Wallet } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
-import { adminAdjustWallet, adminDeleteGameOption, adminSaveGameOptions, adminSetGameActive, adminSimulateGame, getAdminDashboard, getAdminKycDocuments, reviewKyc } from '../lib/api'
+import { adminAdjustWallet, adminDeleteAccount, adminDeleteGameOption, adminSaveGameOptions, adminSetGameActive, adminSimulateGame, getAdminDashboard, getAdminKycDocuments, reviewKyc } from '../lib/api'
 import { requireSupabase } from '../lib/supabase'
 import { italianErrorMessage } from '../lib/errors'
 import type { Broadcast, DashboardData, GameType, KycReviewDocument } from '../data'
@@ -450,6 +450,7 @@ async function xhrStorageUpload(path: string, file: File, onProgress: (value: nu
 function UsersAdmin({ profiles, initialKycUserId, reload }: { profiles: Row[]; initialKycUserId: string; reload: () => Promise<void> }) {
   const [query, setQuery] = useState('')
   const [message, setMessage] = useState('')
+  const [messageError, setMessageError] = useState(false)
   const [reviewUser, setReviewUser] = useState<Row | null>(null)
   const [documents, setDocuments] = useState<KycReviewDocument[]>([])
   const [kycError, setKycError] = useState('')
@@ -457,17 +458,36 @@ function UsersAdmin({ profiles, initialKycUserId, reload }: { profiles: Row[]; i
   const visibleProfiles = profiles.filter(profile => `${profile.username} ${profile.telegram_subject}`.toLowerCase().includes(query.toLowerCase()))
   const toggleBlocked = async (profile: Row) => {
     setMessage('')
+    setMessageError(false)
     const nextBlocked = !profile.blocked
     const { error } = await requireSupabase().rpc('admin_set_profile_blocked', {
       p_user_id: profile.id,
       p_blocked: nextBlocked,
     })
     if (error) {
+      setMessageError(true)
       setMessage(italianErrorMessage(error.message, 'Aggiornamento del blocco non riuscito.'))
       return
     }
     setMessage(nextBlocked ? 'Utente bloccato.' : 'Utente sbloccato.')
     await reload()
+  }
+  const removeAccount = async (profile: Row) => {
+    if (!window.confirm(`Eliminare definitivamente l'account @${profile.username}? Tutti i dati associati verranno rimossi.`)) return
+    setMessage('')
+    setMessageError(false)
+    try {
+      await adminDeleteAccount(profile.id)
+      if (reviewUser?.id === profile.id) {
+        setReviewUser(null)
+        setDocuments([])
+      }
+      setMessage('Account eliminato definitivamente.')
+      await reload()
+    } catch (caught) {
+      setMessageError(true)
+      setMessage(italianErrorMessage(caught, 'Eliminazione account non riuscita.'))
+    }
   }
   const openKyc = async (profile: Row) => {
     setKycError('')
@@ -501,8 +521,8 @@ function UsersAdmin({ profiles, initialKycUserId, reload }: { profiles: Row[]; i
     }
   }
   return (
-    <Section title="Utenti" note="I profili vengono creati al primo accesso Telegram. Gestisci KYC e blocco dell’account.">
-      {message && <p className="mb-4" style={{ color: message === 'Utente bloccato.' ? '#FCA5A5' : '#D7FE55' }}>{message}</p>}
+    <Section title="Utenti" note="I profili vengono creati al primo accesso Telegram. Gestisci KYC, blocco o eliminazione definitiva dell’account.">
+      {message && <p className="mb-4" style={{ color: messageError || message === 'Utente bloccato.' ? '#FCA5A5' : '#D7FE55' }}>{message}</p>}
       <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Cerca username o Telegram ID" style={{ ...input, width: '100%', marginBottom: 12 }} />
       {visibleProfiles.map(profile => (
         <div key={profile.id} className="flex flex-col lg:flex-row lg:items-center gap-3" style={row}>
@@ -518,9 +538,12 @@ function UsersAdmin({ profiles, initialKycUserId, reload }: { profiles: Row[]; i
           <span style={{ color: profile.kyc_cases?.status === 'approved' ? '#D7FE55' : '#F59E0B' }}>KYC: {kycStatusLabel[profile.kyc_cases?.status ?? 'not_started']}</span>
           <button style={smallButton} onClick={() => openKyc(profile)}>Documenti</button>
           {profile.role !== 'admin' && (
-            <button style={profile.blocked ? smallButton : dangerButton} onClick={() => toggleBlocked(profile)}>
-              {profile.blocked ? 'Sblocca' : 'Blocca'}
-            </button>
+            <>
+              <button style={profile.blocked ? smallButton : dangerButton} onClick={() => toggleBlocked(profile)}>
+                {profile.blocked ? 'Sblocca' : 'Blocca'}
+              </button>
+              <button style={dangerButton} onClick={() => removeAccount(profile)}>Elimina</button>
+            </>
           )}
         </div>
       ))}

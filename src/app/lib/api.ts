@@ -417,3 +417,9 @@ export async function reviewKyc(userId: string, decision: 'approved' | 'rejected
   const { error } = await db.functions.invoke('review-kyc', { body: { userId, decision, reason } })
   if (error) throw new Error(await edgeFunctionError(error, 'Decisione sulla verifica non riuscita.'))
 }
+
+export async function adminDeleteAccount(userId: string) {
+  const db = requireSupabase()
+  const { error } = await db.functions.invoke('admin-delete-account', { body: { userId } })
+  if (error) throw new Error(await edgeFunctionError(error, 'Eliminazione account non riuscita.'))
+}
