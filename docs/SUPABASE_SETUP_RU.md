@@ -206,13 +206,27 @@ Telegram не разрешает автоматически открыть Mini 
 
 ## 11. Обновления
 
-После изменений базы или Functions:
+На VPS новый SSH-сеанс не наследует `SUPABASE_ACCESS_TOKEN` из предыдущего
+сеанса. Перед каждой серией команд Supabase введите Personal Access Token:
 
-```powershell
+```bash
+cd /opt/apps/streetfamily
+read -s -p "Paste Supabase Personal Access Token: " SUPABASE_ACCESS_TOKEN; echo
+export SUPABASE_ACCESS_TOKEN
+npx supabase@latest projects list
+```
+
+Если последняя команда показывает ваш проект, примените изменения базы и
+Functions:
+
+```bash
 npx supabase@latest db push
 npx supabase@latest secrets set --env-file .env.deploy
 npx supabase@latest functions deploy --use-api
 ```
+
+Не добавляйте `SUPABASE_ACCESS_TOKEN` в `.env.deploy`: этот token даёт доступ
+к управлению проектом Supabase и должен вводиться только в текущий SSH-сеанс.
 
 После изменений frontend отправьте код в Git и пересоберите контейнер на VPS по инструкции деплоя.
 

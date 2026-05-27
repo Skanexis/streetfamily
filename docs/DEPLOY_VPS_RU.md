@@ -192,6 +192,11 @@ sudo docker compose --env-file .env.deploy -p street-family ps
 
 Сборка содержит публичные значения Supabase из `.env.deploy`. Если поменяли эти значения, также обязательно пересоберите контейнер командой выше.
 
+Если обновление также содержит миграции или Supabase Edge Functions, команды
+`npx supabase@latest db push` и `npx supabase@latest functions deploy` требуют
+отдельный `SUPABASE_ACCESS_TOKEN` в текущем SSH-сеансе. Выполните блок
+обновлений из [`SUPABASE_SETUP_RU.md`](SUPABASE_SETUP_RU.md#11-обновления).
+
 ## Полезная диагностика
 
 Статус и лог контейнера:

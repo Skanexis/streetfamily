@@ -1,10 +1,10 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { Package, Tags, Users, Gamepad2, ClipboardList, Settings, Megaphone, MessageSquare, Wallet } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
-import { adminAdjustWallet, getAdminDashboard, getAdminKycDocuments, reviewKyc } from '../lib/api'
+import { adminAdjustWallet, adminDeleteGameOption, adminSaveGameOptions, adminSetGameActive, adminSimulateGame, getAdminDashboard, getAdminKycDocuments, reviewKyc } from '../lib/api'
 import { requireSupabase } from '../lib/supabase'
 import { italianErrorMessage } from '../lib/errors'
-import type { Broadcast, DashboardData, KycReviewDocument } from '../data'
+import type { Broadcast, DashboardData, GameType, KycReviewDocument } from '../data'
 
 type Tab = 'catalog' | 'categories' | 'broadcasts' | 'users' | 'balance' | 'orders' | 'economy' | 'feedback' | 'settings'
 type Row = Record<string, any>
@@ -45,14 +45,14 @@ export function AdminPage() {
         getAdminDashboard(),
         db.from('products').select('id,category_id,name,badge,published,featured,categories(name),product_variants(id,label,price,unit_amount,token_award,inventory_status(available)),product_media(id,url,storage_path,media_type,upload_status,sort_order)').order('name'),
         db.from('categories').select('*').order('sort_order'),
-        db.from('profiles').select('id,username,telegram_subject,role,blocked,wallet_balances(points,xp,spin_tickets),kyc_cases:kyc_cases!kyc_cases_user_id_fkey(status,submitted_at,rejection_reason,retain_until),orders(status),feedback:feedback!feedback_user_id_fkey(status)').order('created_at', { ascending: false }),
+        db.from('profiles').select('id,username,telegram_subject,role,blocked,wallet_balances(points,xp,spin_tickets,scratch_tickets,box_tickets),kyc_cases:kyc_cases!kyc_cases_user_id_fkey(status,submitted_at,rejection_reason,retain_until),orders(status),feedback:feedback!feedback_user_id_fkey(status)').order('created_at', { ascending: false }),
         db.from('orders').select('id,display_id,status,total,total_units,tokens_reserved,scenario_type,scenario_city,scenario_street,points_awarded,xp_awarded,created_at,profiles(username)').in('status', ['submitted', 'processing']).order('created_at', { ascending: false }),
         db.from('game_configs').select('*').order('game_type'),
         db.from('service_areas').select('*').order('sort_order'),
         db.from('app_settings').select('*'),
         db.from('broadcasts').select('id,kind,title,message,product_id,status,published_at,created_at').order('created_at', { ascending: false }),
         db.from('feedback').select('id,rating,message,status,created_at,profiles:profiles!feedback_user_id_fkey(username),orders(display_id)').order('created_at', { ascending: false }),
-        db.from('game_reward_options').select('*').eq('game_type', 'spin').order('id'),
+        db.from('game_reward_options').select('*').in('game_type', ['spin', 'scratch', 'box']).order('id'),
         db.from('token_reward_tiers').select('*').order('minimum_units'),
       ])
       for (const result of [productResult, categoryResult, profileResult, orderResult, gameResult, locationResult, settingsResult, broadcastResult, feedbackResult, optionsResult, tiersResult]) {
@@ -549,7 +549,9 @@ function BalanceAdmin({ profiles, reload }: { profiles: Row[]; reload: () => Pro
   const [selected, setSelected] = useState('')
   const [points, setPoints] = useState(0)
   const [xp, setXp] = useState(0)
-  const [tickets, setTickets] = useState(0)
+  const [spinTickets, setSpinTickets] = useState(0)
+  const [scratchTickets, setScratchTickets] = useState(0)
+  const [boxTickets, setBoxTickets] = useState(0)
   const [reason, setReason] = useState('')
   const [message, setMessage] = useState('')
   const visibleProfiles = profiles.filter(profile => `${profile.username} ${profile.telegram_subject}`.toLowerCase().includes(query.toLowerCase()))
@@ -557,10 +559,12 @@ function BalanceAdmin({ profiles, reload }: { profiles: Row[]; reload: () => Pro
     event.preventDefault()
     setMessage('')
     try {
-      await adminAdjustWallet(selected, points, xp, tickets, reason)
+      await adminAdjustWallet(selected, points, xp, spinTickets, scratchTickets, boxTickets, reason)
       setPoints(0)
       setXp(0)
-      setTickets(0)
+      setSpinTickets(0)
+      setScratchTickets(0)
+      setBoxTickets(0)
       setReason('')
       setMessage('Saldo aggiornato.')
       await reload()
@@ -573,23 +577,31 @@ function BalanceAdmin({ profiles, reload }: { profiles: Row[]; reload: () => Pro
       {message && <p className="mb-4" style={{ color: message.includes('aggiornato') ? '#D7FE55' : '#EF4444' }}>{message}</p>}
       <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Cerca username o Telegram ID" style={{ ...input, width: '100%', marginBottom: 12 }} />
       {visibleProfiles.map(profile => (
-        <div key={profile.id} className="flex flex-col sm:flex-row sm:items-center gap-3" style={row}>
+        <div key={profile.id} className="sf-admin-wallet-row flex flex-col sm:flex-row sm:items-center gap-3" style={row}>
           <div className="flex-1 min-w-0">
             <strong>@{profile.username}</strong>
             <div className="break-all" style={muted}>Telegram ID: {profile.telegram_subject}{profile.blocked ? ' / bloccato' : ''}</div>
           </div>
-          <span>{profile.wallet_balances?.points ?? 0} gettoni / {profile.wallet_balances?.xp ?? 0} XP / {profile.wallet_balances?.spin_tickets ?? 0} biglietti</span>
+          <div className="sf-admin-wallet-pills">
+            <span>{profile.wallet_balances?.points ?? 0} gettoni</span>
+            <span>XP {profile.wallet_balances?.xp ?? 0}</span>
+            <span>Ruota {profile.wallet_balances?.spin_tickets ?? 0}</span>
+            <span>Scratch {profile.wallet_balances?.scratch_tickets ?? 0}</span>
+            <span>Box {profile.wallet_balances?.box_tickets ?? 0}</span>
+          </div>
           <button type="button" style={smallButton} onClick={() => setSelected(profile.id)}>Seleziona</button>
         </div>
       ))}
-      <form onSubmit={adjust} className="mt-5 grid grid-cols-1 md:grid-cols-6 gap-2">
+      <form onSubmit={adjust} className="mt-5 grid grid-cols-1 md:grid-cols-4 gap-2">
         <select className="w-full" required value={selected} onChange={event => setSelected(event.target.value)} style={input}>
           <option value="">Partecipante</option>
           {profiles.map(profile => <option key={profile.id} value={profile.id}>@{profile.username}</option>)}
         </select>
         <input className="w-full" type="number" value={points} onChange={event => setPoints(Number(event.target.value))} placeholder="Gettoni +/-" style={input} />
         <input className="w-full" type="number" value={xp} onChange={event => setXp(Number(event.target.value))} placeholder="XP +/-" style={input} />
-        <input className="w-full" type="number" value={tickets} onChange={event => setTickets(Number(event.target.value))} placeholder="Biglietti +/-" style={input} />
+        <input className="w-full" type="number" value={spinTickets} onChange={event => setSpinTickets(Number(event.target.value))} placeholder="Biglietti ruota +/-" style={input} />
+        <input className="w-full" type="number" value={scratchTickets} onChange={event => setScratchTickets(Number(event.target.value))} placeholder="Biglietti scratch +/-" style={input} />
+        <input className="w-full" type="number" value={boxTickets} onChange={event => setBoxTickets(Number(event.target.value))} placeholder="Biglietti box +/-" style={input} />
         <input className="w-full" required minLength={4} value={reason} onChange={event => setReason(event.target.value)} placeholder="Motivo" style={input} />
         <button style={primary}>Registra</button>
       </form>
@@ -635,118 +647,184 @@ function OrdersAdmin({ orders, reload }: { orders: Row[]; reload: () => Promise<
 }
 
 function EconomyAdmin({ games, options, reload }: { games: Row[]; options: Row[]; reload: () => Promise<void> }) {
-  const [drafts, setDrafts] = useState<Row[]>(options)
-  const [exampleSpins, setExampleSpins] = useState(100)
+  const [selectedGame, setSelectedGame] = useState<GameType>('spin')
+  const [drafts, setDrafts] = useState<Row[]>([])
+  const [exampleSpins, setExampleSpins] = useState(1000)
   const [message, setMessage] = useState('')
   const [saving, setSaving] = useState(false)
+  const [simulation, setSimulation] = useState<Record<string, number> | null>(null)
 
-  useEffect(() => { setDrafts(options) }, [options])
+  useEffect(() => {
+    setDrafts(options.filter(option => option.game_type === selectedGame))
+    setSimulation(null)
+    setMessage('')
+  }, [options, selectedGame])
 
   const activeOptions = drafts.filter(option => option.active)
   const totalWeight = activeOptions.reduce((total, option) => total + Math.max(0, Number(option.weight) || 0), 0)
   const expectedTokens = totalWeight > 0
     ? activeOptions.reduce((total, option) => total + Number(option.points_awarded || 0) * Number(option.weight || 0), 0) / totalWeight
     : 0
+  const game = games.find(item => item.game_type === selectedGame)
 
-  const updateGame = async (game: Row, changes: Row) => {
+  const toggleGame = async () => {
     setMessage('')
-    const { error } = await requireSupabase().from('game_configs').update(changes).eq('game_type', game.game_type)
-    if (error) {
-      setMessage(italianErrorMessage(error.message, 'Aggiornamento del gioco non riuscito.'))
+    try {
+      await adminSetGameActive(selectedGame, !game?.active)
+      await reload()
+    } catch (caught) {
+      setMessage(italianErrorMessage(caught, 'Aggiornamento del gioco non riuscito.'))
+    }
+  }
+  const updateDraft = (draftKey: string, changes: Row) => {
+    setDrafts(current => current.map(option => (option.id ?? option.draftKey) === draftKey ? { ...option, ...changes } : option))
+  }
+  const addPrize = () => {
+    const draftKey = `new-${Date.now()}`
+    setDrafts(current => [...current, {
+      draftKey, game_type: selectedGame, code: '', label: '', points_awarded: 0, xp_awarded: 0,
+      weight: 1, color: '#8B5CF6', active: true, reward_definition_id: null,
+    }])
+  }
+  const removePrize = async (option: Row) => {
+    if (!option.id) {
+      setDrafts(current => current.filter(entry => entry.draftKey !== option.draftKey))
       return
     }
-    await reload()
-  }
-  const updateDraft = (id: string, changes: Row) => {
-    setDrafts(current => current.map(option => option.id === id ? { ...option, ...changes } : option))
+    try {
+      await adminDeleteGameOption(option.id)
+      setMessage('Premio eliminato.')
+      await reload()
+    } catch (caught) {
+      setMessage(italianErrorMessage(caught, 'Eliminazione del premio non riuscita.'))
+    }
   }
   const saveOptions = async () => {
     setMessage('')
-    if (!activeOptions.length) {
-      setMessage('Attiva almeno un premio.')
+    if (activeOptions.length > 0 && totalWeight !== 100) {
+      setMessage('Le probabilità attive devono totalizzare esattamente 100%.')
       return
     }
-    if (drafts.some(option => !String(option.label ?? '').trim() || !Number.isInteger(Number(option.weight)) || Number(option.weight) < 1 || !Number.isInteger(Number(option.points_awarded)) || Number(option.points_awarded) < 0)) {
-      setMessage('Inserisci nomi, pesi interi maggiori di zero e gettoni validi.')
+    if (game?.active && activeOptions.length === 0) {
+      setMessage('Disattiva il gioco prima di rimuovere tutti i premi.')
+      return
+    }
+    if (drafts.some(option => !String(option.code ?? '').trim() || !String(option.label ?? '').trim() || !Number.isInteger(Number(option.weight)) || Number(option.weight) < 1 || !Number.isInteger(Number(option.points_awarded)) || Number(option.points_awarded) < 0 || !Number.isInteger(Number(option.xp_awarded)) || Number(option.xp_awarded) < 0)) {
+      setMessage('Inserisci codice, nome, probabilità, gettoni e XP validi.')
       return
     }
     setSaving(true)
     try {
-      const db = requireSupabase()
-      const results = await Promise.all(drafts.map(option => db.from('game_reward_options').update({
+      await adminSaveGameOptions(selectedGame, drafts.map(option => ({
+        code: String(option.code).trim(),
         label: String(option.label).trim(),
         points_awarded: Number(option.points_awarded),
+        xp_awarded: Number(option.xp_awarded),
         weight: Number(option.weight),
+        color: String(option.color || '#8B5CF6'),
         active: Boolean(option.active),
-      }).eq('id', option.id)))
-      const error = results.find(result => result.error)?.error
-      if (error) {
-        setMessage(italianErrorMessage(error.message, 'Aggiornamento del premio non riuscito.'))
-        return
-      }
+        reward_definition_id: option.reward_definition_id ?? null,
+      })))
       setMessage('Configurazione premi salvata.')
       await reload()
+    } catch (caught) {
+      setMessage(italianErrorMessage(caught, 'Aggiornamento del premio non riuscito.'))
     } finally {
       setSaving(false)
     }
   }
+  const simulate = async () => {
+    setMessage('')
+    try {
+      setSimulation(await adminSimulateGame(selectedGame, exampleSpins))
+    } catch (caught) {
+      setMessage(italianErrorMessage(caught, 'Simulazione non riuscita.'))
+    }
+  }
   return (
-    <Section title="Ruota dei premi" note="Imposta i pesi dei premi e controlla subito quante volte potrebbero uscire.">
-      {games.filter(game => game.game_type === 'spin').map(game => (
-        <div key={game.game_type} className="flex flex-col sm:flex-row sm:items-center gap-3" style={row}>
-          <div className="flex-1 min-w-0"><strong>{game.title}</strong></div>
-          <Toggle label="Attivo" active={game.active} onClick={() => updateGame(game, { active: !game.active })} />
+    <Section title="Giochi e premi" note="Configura probabilità e simula le estrazioni. Ogni gioco attivo richiede probabilità totali pari al 100%.">
+      <div className="sf-admin-game-config">
+      <div className="sf-admin-game-tabs flex gap-2 overflow-x-auto mb-4">
+        {([['spin', 'Ruota'], ['scratch', 'Scratch'], ['box', 'Mystery Box']] as Array<[GameType, string]>).map(([type, label]) => (
+          <button key={type} className={selectedGame === type ? 'is-active' : ''} onClick={() => setSelectedGame(type)}>{label}</button>
+        ))}
+      </div>
+      <div className="sf-admin-game-header flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="sf-admin-game-label">CONFIGURAZIONE ATTIVA</div>
+          <strong>{game?.title ?? selectedGame}</strong>
+          {!drafts.length && <div style={muted}>Nessun premio configurato: il gioco resta non disponibile.</div>}
         </div>
-      ))}
-      <div className="p-3 sm:p-4 my-5 rounded-xl" style={{ background: 'rgba(215,254,85,.06)', border: '1px solid rgba(215,254,85,.18)' }}>
+        {game && <Toggle label="Attivo" active={game.active} onClick={toggleGame} />}
+      </div>
+      <div className="sf-admin-probability p-3 sm:p-4 my-5 rounded-xl">
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-4">
           <div>
             <strong>Anteprima probabilità</strong>
-            <div style={muted}>Il peso è proporzionale: peso 20 su totale 100 equivale al 20%.</div>
+            <div style={muted}>La probabilità è percentuale: i premi attivi devono totalizzare 100.</div>
           </div>
           <label style={muted}>
-            Esempio su
+            Simula
             <select value={exampleSpins} onChange={event => setExampleSpins(Number(event.target.value))} style={{ ...input, marginLeft: 8 }}>
-              {[10, 100, 1000].map(value => <option key={value} value={value}>{value} giri</option>)}
+              {[100, 1000, 10000].map(value => <option key={value} value={value}>{value} partite</option>)}
             </select>
           </label>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-          <Metric label="Premi attivi" value={activeOptions.length} />
-          <Metric label="Peso totale" value={totalWeight} />
-          <div className="p-4 rounded-xl" style={panel}>
-            <div style={muted}>Gettoni medi / giro</div>
-            <div style={{ fontFamily: 'Orbitron', fontSize: 22, color: '#D7FE55' }}>{formatItalianNumber(expectedTokens, 2)}</div>
+        <div className="sf-admin-distribution">
+          <div className="sf-admin-ring" style={{ background: `conic-gradient(${totalWeight === 100 && activeOptions.length ? '#22C55E' : '#8B5CF6'} ${Math.min(totalWeight, 100)}%, rgba(245,245,245,.08) 0)` }}>
+            <div><strong>{totalWeight}%</strong><span>TOTALE</span></div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 flex-1">
+            <Metric label="Premi attivi" value={activeOptions.length} />
+            <Metric label="Probabilità totale" value={totalWeight} />
+            <div className="sf-admin-metric p-4 rounded-xl">
+              <div style={muted}>Gettoni medi / giro</div>
+              <div style={{ fontFamily: 'Orbitron', fontSize: 22, color: '#D7FE55' }}>{formatItalianNumber(expectedTokens, 2)}</div>
+            </div>
           </div>
         </div>
         <div className="mt-3" style={muted}>
-          In {exampleSpins} giri: circa {formatItalianNumber(expectedTokens * exampleSpins, 0)} gettoni complessivi.
+          In {exampleSpins} partite: valore atteso circa {formatItalianNumber(expectedTokens * exampleSpins, 0)} gettoni.
         </div>
+        <div className={`sf-admin-validation ${totalWeight === 100 && activeOptions.length ? 'is-valid' : ''}`}>{activeOptions.length && totalWeight === 100 ? 'Distribuzione valida / pronta per il gioco' : `Da completare / ${totalWeight}% di 100%`}</div>
+        <button type="button" onClick={simulate} disabled={!activeOptions.length || totalWeight !== 100} className="sf-admin-simulate" style={{ opacity: !activeOptions.length || totalWeight !== 100 ? .45 : 1 }}>Esegui simulazione server</button>
+        {simulation && <div className="sf-admin-results mt-3 grid grid-cols-2 gap-2">{Object.entries(simulation).map(([code, count]) => <div key={code}><strong>{code}</strong><span>{count}</span></div>)}</div>}
       </div>
-      <h3 className="my-4">Premi configurabili</h3>
+      <div className="sf-admin-reward-title flex items-center justify-between my-4"><h3>Premi configurabili</h3><button type="button" style={smallButton} onClick={addPrize}>+ Aggiungi premio</button></div>
+      {!drafts.length && <p className="mb-4" style={muted}>Aggiungi il primo premio; potrai attivare il gioco dopo aver raggiunto il 100%.</p>}
       {drafts.map(option => {
         const weight = Math.max(0, Number(option.weight) || 0)
-        const probability = option.active && totalWeight > 0 ? weight / totalWeight : 0
+        const probability = option.active ? weight / 100 : 0
         const expected = probability * exampleSpins
         const onceEvery = probability > 0 ? Math.round(1 / probability) : 0
+        const key = option.id ?? option.draftKey
         return (
-          <div key={option.id} className="p-3 mb-3 rounded-xl" style={{ background: 'rgba(245,245,245,.035)' }}>
-            <div className="grid grid-cols-2 md:grid-cols-[minmax(160px,1fr)_94px_94px_auto] gap-3 items-end">
+          <div key={key} className="sf-admin-reward-card p-3 mb-3 rounded-xl">
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-3 items-end">
+              <label style={muted}>Codice
+                <input className="w-full" value={option.code} onChange={event => updateDraft(key, { code: event.target.value })} style={{ ...input, display: 'block', marginTop: 5 }} />
+              </label>
               <label className="col-span-2 md:col-span-1" style={muted}>Nome premio
-                <input className="w-full" value={option.label} onChange={event => updateDraft(option.id, { label: event.target.value })} style={{ ...input, display: 'block', marginTop: 5 }} />
+                <input className="w-full" value={option.label} onChange={event => updateDraft(key, { label: event.target.value })} style={{ ...input, display: 'block', marginTop: 5 }} />
               </label>
               <label style={muted}>Gettoni
-                <input type="number" min={0} step={1} value={option.points_awarded} onChange={event => updateDraft(option.id, { points_awarded: Number(event.target.value) })} style={{ ...input, width: '100%', display: 'block', marginTop: 5 }} />
+                <input type="number" min={0} step={1} value={option.points_awarded} onChange={event => updateDraft(key, { points_awarded: Number(event.target.value) })} style={{ ...input, width: '100%', display: 'block', marginTop: 5 }} />
               </label>
-              <label style={muted}>Peso
-                <input type="number" min={1} step={1} value={option.weight} onChange={event => updateDraft(option.id, { weight: Number(event.target.value) })} style={{ ...input, width: '100%', display: 'block', marginTop: 5 }} />
+              <label style={muted}>XP
+                <input type="number" min={0} step={1} value={option.xp_awarded} onChange={event => updateDraft(key, { xp_awarded: Number(event.target.value) })} style={{ ...input, width: '100%', display: 'block', marginTop: 5 }} />
               </label>
-              <div className="col-span-2 md:col-span-1"><Toggle label="Attiva" active={option.active} onClick={() => updateDraft(option.id, { active: !option.active })} /></div>
+              <label style={muted}>Probabilità %
+                <input type="number" min={1} max={100} step={1} value={option.weight} onChange={event => updateDraft(key, { weight: Number(event.target.value) })} style={{ ...input, width: '100%', display: 'block', marginTop: 5 }} />
+              </label>
+              <label style={muted}>Colore
+                <input type="color" value={option.color} onChange={event => updateDraft(key, { color: event.target.value })} style={{ ...input, width: '100%', height: 42, display: 'block', marginTop: 5 }} />
+              </label>
             </div>
+            <div className="flex flex-wrap justify-between gap-2 mt-3"><Toggle label="Attiva" active={option.active} onClick={() => updateDraft(key, { active: !option.active })} /><button type="button" style={dangerButton} onClick={() => removePrize(option)}>Elimina</button></div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3">
-              <div style={muted}>Probabilità: <strong style={{ color: option.active ? '#D7FE55' : 'rgba(245,245,245,.45)' }}>{formatItalianNumber(probability * 100, 2)}%</strong></div>
-              <div style={muted}>Su {exampleSpins} giri: <strong style={{ color: '#F5F5F5' }}>{formatItalianNumber(expected, expected < 10 ? 1 : 0)} volte</strong></div>
-              <div style={muted}>{onceEvery ? `Circa 1 ogni ${onceEvery} giri` : 'Premio disattivato'}</div>
+              <div style={muted}>Probabilità: <strong style={{ color: option.active ? '#D7FE55' : 'rgba(245,245,245,.45)' }}>{option.active ? weight : 0}%</strong></div>
+              <div style={muted}>Su {exampleSpins}: <strong style={{ color: '#F5F5F5' }}>{formatItalianNumber(expected, expected < 10 ? 1 : 0)} volte</strong></div>
+              <div style={muted}>{onceEvery ? `Circa 1 ogni ${onceEvery} partite` : 'Premio disattivato'}</div>
             </div>
           </div>
         )
@@ -755,6 +833,7 @@ function EconomyAdmin({ games, options, reload }: { games: Row[]; options: Row[]
       <button type="button" disabled={saving} onClick={saveOptions} style={{ ...primary, width: '100%', opacity: saving ? 0.65 : 1 }}>
         {saving ? 'Salvataggio...' : 'Salva configurazione premi'}
       </button>
+      </div>
     </Section>
   )
 }

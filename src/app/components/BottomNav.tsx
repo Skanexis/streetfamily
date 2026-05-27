@@ -11,14 +11,14 @@ interface BottomNavProps {
 const NAV_ITEMS = [
   { label: 'Inizio', page: 'home' as Page, Icon: Home },
   { label: 'Catalogo', page: 'catalog' as Page, Icon: ShoppingBag },
-  { label: 'Ruota', page: 'games' as Page, Icon: Gamepad2 },
+  { label: 'Giochi', page: 'games' as Page, Icon: Gamepad2 },
   { label: 'Profilo', page: 'profile' as Page, Icon: User },
 ]
 
 export function BottomNav({ page, navigate, cartCount, onCartOpen }: BottomNavProps) {
   return (
     <nav
-      className="md:hidden fixed bottom-0 left-0 right-0 z-50 flex items-center"
+      className={`sf-bottom-nav ${page === 'games' ? 'sf-bottom-nav-arcade' : ''} md:hidden fixed bottom-0 left-0 right-0 z-50 flex items-center`}
       style={{
         height: 'calc(64px + env(safe-area-inset-bottom, 0px))',
         paddingBottom: 'env(safe-area-inset-bottom, 0px)',

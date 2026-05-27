@@ -6,8 +6,964 @@
   padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
 }
 
+.sf-arcade {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  color: #f5f5f5;
+  background:
+    radial-gradient(circle at 14% 12%, rgba(139, 92, 246, .16), transparent 27rem),
+    radial-gradient(circle at 86% 15%, rgba(34, 197, 94, .1), transparent 25rem),
+    #0a0a0b;
+}
+
+.sf-arcade::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  opacity: .36;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, .045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, .045) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: radial-gradient(ellipse at center top, black, transparent 68%);
+}
+
+.sf-arcade-orb {
+  position: absolute;
+  z-index: -1;
+  width: 22rem;
+  height: 22rem;
+  border-radius: 50%;
+  pointer-events: none;
+  filter: blur(80px);
+  opacity: .3;
+}
+
+.sf-arcade-orb-purple {
+  top: 9rem;
+  left: -11rem;
+  background: #8b5cf6;
+}
+
+.sf-arcade-orb-green {
+  top: 28rem;
+  right: -11rem;
+  background: #22c55e;
+}
+
+.sf-arcade-hero {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 2rem;
+  margin: 2.3rem 0 2.2rem;
+}
+
+.sf-arcade-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: .65rem;
+  margin-bottom: 1.2rem;
+  color: #a78bfa;
+  font: 700 .68rem/1 'Orbitron', sans-serif;
+  letter-spacing: .22em;
+  text-transform: uppercase;
+}
+
+.sf-live-dot {
+  display: inline-block;
+  width: .48rem;
+  height: .48rem;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 12px #22c55e;
+  animation: sf-pulse-dot 1.8s ease-in-out infinite;
+}
+
+.sf-arcade-title {
+  margin: 0 0 1.1rem;
+  font: 900 clamp(3.1rem, 9vw, 5.5rem)/.88 'Orbitron', sans-serif;
+  letter-spacing: -.065em;
+}
+
+.sf-arcade-title span {
+  color: transparent;
+  background: linear-gradient(110deg, #a78bfa, #8b5cf6 45%, #22c55e 110%);
+  background-clip: text;
+}
+
+.sf-arcade-copy {
+  max-width: 34rem;
+  color: rgba(245, 245, 245, .58);
+  font-size: .98rem;
+  line-height: 1.7;
+}
+
+.sf-arcade-trust {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .55rem;
+  margin-top: 1.35rem;
+}
+
+.sf-arcade-trust span {
+  display: inline-flex;
+  align-items: center;
+  gap: .36rem;
+  padding: .45rem .65rem;
+  border: 1px solid rgba(255, 255, 255, .07);
+  border-radius: 999px;
+  color: rgba(245, 245, 245, .56);
+  background: rgba(18, 18, 20, .55);
+  font-size: .69rem;
+}
+
+.sf-arcade-trust svg {
+  color: #22c55e;
+}
+
+.sf-arcade-pass {
+  position: relative;
+  min-width: 270px;
+  padding: 1.2rem;
+  overflow: hidden;
+  border: 1px solid rgba(139, 92, 246, .28);
+  border-radius: 1.35rem;
+  background: linear-gradient(135deg, rgba(139, 92, 246, .14), rgba(18, 18, 20, .84) 42%, rgba(34, 197, 94, .08));
+  box-shadow: inset 0 1px rgba(255, 255, 255, .06), 0 24px 65px rgba(0, 0, 0, .25);
+}
+
+.sf-arcade-pass::after {
+  content: '';
+  position: absolute;
+  width: 12rem;
+  height: 12rem;
+  top: -8rem;
+  right: -5rem;
+  border-radius: 50%;
+  background: rgba(139, 92, 246, .38);
+  filter: blur(32px);
+}
+
+.sf-pass-label {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  color: rgba(245, 245, 245, .55);
+  font: 700 .63rem 'Orbitron', sans-serif;
+  letter-spacing: .16em;
+}
+
+.sf-pass-value {
+  margin-top: 1rem;
+  color: #fff;
+  font: 700 2.8rem/1 'Orbitron', sans-serif;
+}
+
+.sf-pass-caption {
+  margin: .25rem 0 1rem;
+  color: rgba(245, 245, 245, .5);
+  font-size: .78rem;
+}
+
+.sf-pass-tickets {
+  display: flex;
+  gap: .45rem;
+}
+
+.sf-pass-tickets div {
+  flex: 1;
+  padding: .55rem .42rem;
+  border: 1px solid rgba(255, 255, 255, .06);
+  border-radius: .7rem;
+  background: rgba(10, 10, 11, .58);
+}
+
+.sf-pass-tickets span {
+  display: block;
+  margin-bottom: .25rem;
+  color: rgba(245, 245, 245, .4);
+  font-size: .62rem;
+}
+
+.sf-pass-tickets strong {
+  color: #22c55e;
+  font: 700 .88rem 'Orbitron', sans-serif;
+}
+
+.sf-game-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.sf-game-card {
+  position: relative;
+  min-height: 295px;
+  padding: 1.3rem;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, .08);
+  border-radius: 1.35rem;
+  background: linear-gradient(145deg, rgba(24, 24, 27, .88), rgba(14, 14, 16, .98));
+  transition: transform .3s ease, border-color .3s ease, box-shadow .3s ease;
+}
+
+.sf-game-card-spin {
+  grid-column: span 1;
+}
+
+.sf-game-card::after {
+  content: '';
+  position: absolute;
+  right: -4rem;
+  bottom: -6rem;
+  width: 13rem;
+  height: 13rem;
+  border-radius: 50%;
+  opacity: .24;
+  filter: blur(40px);
+  transition: opacity .3s ease;
+}
+
+.sf-game-card-spin::after { background: #8b5cf6; }
+.sf-game-card-scratch::after { background: #22c55e; }
+.sf-game-card-box::after { background: #a78bfa; }
+
+.sf-game-card:hover,
+.sf-game-card:focus-visible {
+  transform: translateY(-5px) scale(1.01);
+  border-color: rgba(139, 92, 246, .43);
+  box-shadow: 0 24px 62px rgba(0, 0, 0, .36), 0 0 34px rgba(139, 92, 246, .13);
+  outline: none;
+}
+
+.sf-game-card:hover::after,
+.sf-game-card:focus-visible::after {
+  opacity: .55;
+}
+
+.sf-game-card-noise {
+  position: absolute;
+  inset: 0;
+  opacity: .18;
+  background-image: radial-gradient(rgba(255, 255, 255, .22) .8px, transparent .8px);
+  background-size: 16px 16px;
+  mask-image: linear-gradient(to bottom, transparent, black 40%, transparent);
+}
+
+.sf-game-card-head,
+.sf-game-card-status {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sf-card-layout {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: .5rem;
+  align-items: end;
+}
+
+.sf-game-tag {
+  color: rgba(245, 245, 245, .38);
+  font: 700 .62rem 'Orbitron', sans-serif;
+  letter-spacing: .2em;
+}
+
+.sf-game-card-icon {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 60px;
+  height: 60px;
+  margin: 2rem 0 1.55rem;
+  border-radius: 1rem;
+  color: #a78bfa;
+  background: rgba(139, 92, 246, .13);
+  border: 1px solid rgba(139, 92, 246, .25);
+}
+
+.sf-game-card-scratch .sf-game-card-icon {
+  color: #22c55e;
+  background: rgba(34, 197, 94, .1);
+  border-color: rgba(34, 197, 94, .22);
+}
+
+.sf-game-card-title {
+  position: relative;
+  z-index: 1;
+  margin-bottom: .34rem;
+  font: 700 1.42rem 'Space Grotesk', sans-serif;
+}
+
+.sf-game-card-copy {
+  position: relative;
+  z-index: 1;
+  color: rgba(245, 245, 245, .52);
+  font-size: .82rem;
+}
+
+.sf-game-card-status {
+  margin-top: 1.4rem;
+  justify-content: flex-start;
+  gap: .45rem;
+  color: rgba(245, 245, 245, .38);
+  font-size: .72rem;
+}
+
+.sf-game-card-status.is-ready {
+  color: #22c55e;
+}
+
+.sf-game-card-status svg:last-child {
+  margin-left: auto;
+}
+
+.sf-card-art {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 86px;
+  height: 106px;
+  transform: translate(8px, 11px);
+}
+
+.sf-card-wheel-disc {
+  position: relative;
+  width: 78px;
+  height: 78px;
+  border: 3px solid rgba(255, 255, 255, .12);
+  border-radius: 50%;
+  background: conic-gradient(#8b5cf6 0 25%, #22c55e 25% 38%, #312e81 38% 62%, #a78bfa 62% 80%, #22c55e 80% 100%);
+  box-shadow: 0 0 30px rgba(139, 92, 246, .24);
+  transform: rotate(-18deg);
+}
+
+.sf-card-wheel-disc::before {
+  content: '';
+  position: absolute;
+  top: -9px;
+  left: calc(50% - 6px);
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 12px solid #22c55e;
+  transform: rotate(18deg);
+}
+
+.sf-card-wheel-disc span {
+  position: absolute;
+  inset: 26px;
+  border-radius: 50%;
+  background: #0e0e11;
+}
+
+.sf-card-scratch div {
+  position: relative;
+  width: 74px;
+  height: 94px;
+  padding: .65rem .55rem;
+  border: 1px solid rgba(167, 139, 250, .42);
+  border-radius: .65rem;
+  background: linear-gradient(145deg, #8b5cf6, #4c1d95);
+  box-shadow: 0 12px 28px rgba(139, 92, 246, .23);
+  transform: rotate(7deg);
+}
+
+.sf-card-scratch div::after {
+  content: '';
+  position: absolute;
+  inset: 25px 10px 10px;
+  border-radius: .35rem;
+  background-image: radial-gradient(rgba(255,255,255,.32) 1px, transparent 1px);
+  background-size: 7px 7px;
+}
+
+.sf-card-scratch span {
+  color: rgba(255,255,255,.58);
+  font: 700 .52rem 'Orbitron', sans-serif;
+}
+
+.sf-card-scratch strong {
+  position: absolute;
+  right: .5rem;
+  top: .42rem;
+  color: #fff;
+  font: 700 1rem 'Orbitron', sans-serif;
+}
+
+.sf-card-box {
+  flex-direction: column;
+  justify-content: end;
+  padding-bottom: 8px;
+}
+
+.sf-card-box-lid {
+  width: 68px;
+  height: 13px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #8b5cf6, #a78bfa);
+  box-shadow: 0 -8px 28px rgba(139, 92, 246, .42);
+  transform: translateY(-5px) rotate(-8deg);
+}
+
+.sf-card-box-body {
+  position: relative;
+  width: 60px;
+  height: 53px;
+  border: 1px solid rgba(167, 139, 250, .34);
+  border-radius: 4px 4px 9px 9px;
+  background: linear-gradient(145deg, #2e1065, #15121c);
+}
+
+.sf-card-box-body::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(50% - 4px);
+  width: 8px;
+  background: rgba(34, 197, 94, .68);
+}
+
+.sf-card-box-body span {
+  position: absolute;
+  top: 0;
+  left: -10px;
+  right: -10px;
+  height: 22px;
+  opacity: .38;
+  background: radial-gradient(ellipse, #22c55e, transparent 66%);
+  transform: translateY(-18px);
+}
+
+.sf-game-overlay {
+  background:
+    radial-gradient(circle at 50% 20%, rgba(139, 92, 246, .16), transparent 27rem),
+    #09090b;
+}
+
+.sf-overlay-glow {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(circle at 50% 52%, transparent, rgba(0, 0, 0, .4));
+}
+
+.sf-overlay-header {
+  padding: .25rem 0 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, .06);
+}
+
+.sf-overlay-label {
+  margin-bottom: .28rem;
+  color: #a78bfa;
+  font: 700 .6rem 'Orbitron', sans-serif;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+}
+
+.sf-overlay-title {
+  color: #f5f5f5;
+  font: 700 1.55rem 'Space Grotesk', sans-serif;
+}
+
+.sf-game-stage {
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, .08);
+  background: linear-gradient(150deg, rgba(24, 24, 27, .88), rgba(12, 12, 14, .96));
+  box-shadow: 0 28px 80px rgba(0, 0, 0, .38), inset 0 1px rgba(255, 255, 255, .055);
+}
+
+.sf-ticket-balance {
+  border: 1px solid rgba(139, 92, 246, .19);
+  color: rgba(245, 245, 245, .62);
+  background: rgba(10, 10, 11, .56);
+  font-size: .83rem;
+}
+
+.sf-ticket-balance svg,
+.sf-ticket-balance strong {
+  color: #22c55e;
+}
+
+.sf-ticket-balance strong {
+  font: 700 1rem 'Orbitron', sans-serif;
+}
+
+.sf-wheel-wrap {
+  position: relative;
+  width: fit-content;
+  margin: 0 auto;
+}
+
+.sf-wheel-pointer {
+  position: absolute;
+  top: 1.25rem;
+  left: calc(50% - 11px);
+  z-index: 2;
+  width: 0;
+  height: 0;
+  border-left: 11px solid transparent;
+  border-right: 11px solid transparent;
+  border-top: 22px solid #22c55e;
+  filter: drop-shadow(0 0 8px rgba(34, 197, 94, .7));
+}
+
+.sf-wheel {
+  width: min(68vw, 276px);
+  height: min(68vw, 276px);
+  padding: 5px;
+  border: 5px solid #1c1c20;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, .1), 0 20px 45px rgba(0, 0, 0, .35);
+}
+
+.sf-wheel-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 96px;
+  height: 96px;
+  border: 1px solid rgba(139, 92, 246, .35);
+  border-radius: 50%;
+  background: #0a0a0b;
+  color: #22c55e;
+  font: 700 .82rem 'Orbitron', sans-serif;
+  letter-spacing: .14em;
+  box-shadow: inset 0 0 30px rgba(139, 92, 246, .12);
+}
+
+.sf-idle-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .55rem;
+  margin: 2rem 0;
+  padding: 2rem 1rem;
+  color: #a78bfa;
+  border: 1px dashed rgba(139, 92, 246, .25);
+  border-radius: 1.2rem;
+  background: rgba(139, 92, 246, .045);
+}
+
+.sf-idle-state strong {
+  color: #f5f5f5;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 1.15rem;
+}
+
+.sf-idle-state span {
+  color: rgba(245, 245, 245, .52);
+  font-size: .83rem;
+}
+
+.sf-idle-compact {
+  margin: 0;
+  border: none;
+  background: transparent;
+}
+
+.sf-scratch-ticket {
+  border: 1px solid rgba(139, 92, 246, .28);
+  background:
+    radial-gradient(circle at center, rgba(34, 197, 94, .16), transparent 70%),
+    #0a0a0b;
+}
+
+.sf-scratch-ticket.is-revealed {
+  border-color: rgba(34, 197, 94, .38);
+  box-shadow: 0 0 54px rgba(34, 197, 94, .22);
+}
+
+.sf-progress {
+  margin: 0 0 1.4rem;
+}
+
+.sf-progress-label {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: .5rem;
+  color: rgba(245, 245, 245, .52);
+  font-size: .76rem;
+}
+
+.sf-progress-label strong {
+  color: #22c55e;
+  font-family: 'Orbitron', sans-serif;
+}
+
+.sf-progress-track {
+  overflow: hidden;
+  height: 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, .08);
+}
+
+.sf-progress-track div {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #8b5cf6, #22c55e);
+  transition: width .18s ease;
+}
+
+.sf-box-viewport {
+  min-height: 130px;
+  border: 1px solid rgba(139, 92, 246, .15);
+  border-radius: 1.1rem;
+  background: rgba(10, 10, 11, .58);
+}
+
+.sf-box-marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  z-index: 10;
+  width: 2px;
+  background: #22c55e;
+  box-shadow: 0 0 12px #22c55e;
+}
+
+.sf-box-marker::before,
+.sf-box-marker::after {
+  content: '';
+  position: absolute;
+  left: -6px;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+}
+
+.sf-box-marker::before {
+  top: 0;
+  border-top: 10px solid #22c55e;
+}
+
+.sf-box-marker::after {
+  bottom: 0;
+  border-bottom: 10px solid #22c55e;
+}
+
+.sf-box-item {
+  border: 1px solid;
+  background: linear-gradient(145deg, rgba(139, 92, 246, .1), rgba(10, 10, 11, .95));
+  color: rgba(245, 245, 245, .85);
+}
+
+.sf-reward-card {
+  border: 1px solid rgba(34, 197, 94, .28);
+  background: linear-gradient(120deg, rgba(34, 197, 94, .1), rgba(139, 92, 246, .08));
+  box-shadow: inset 0 1px rgba(255, 255, 255, .06);
+}
+
+.sf-reward-compact {
+  position: relative;
+  z-index: 0;
+}
+
+.sf-game-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .55rem;
+  color: #fff;
+  font-weight: 700;
+  background: linear-gradient(100deg, #7c3aed, #8b5cf6 55%, #6d28d9);
+  box-shadow: 0 14px 30px rgba(124, 58, 237, .28);
+  transition: transform .16s ease, box-shadow .16s ease, opacity .16s ease;
+}
+
+.sf-game-action:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 18px 38px rgba(124, 58, 237, .38);
+}
+
+.sf-game-action:disabled {
+  cursor: not-allowed;
+  opacity: .42;
+  box-shadow: none;
+}
+
+.sf-game-message {
+  color: rgba(245, 245, 245, .67);
+  border: 1px solid rgba(255, 255, 255, .065);
+  background: rgba(18, 18, 20, .76);
+}
+
+.sf-game-message.is-error {
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, .18);
+  background: rgba(239, 68, 68, .09);
+}
+
+.sf-admin-wallet-row {
+  border: 1px solid rgba(126, 156, 168, .08);
+}
+
+.sf-admin-wallet-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .38rem;
+}
+
+.sf-admin-wallet-pills span {
+  padding: .32rem .58rem;
+  border: 1px solid rgba(215, 254, 85, .12);
+  border-radius: 999px;
+  color: rgba(245, 245, 245, .66);
+  background: rgba(215, 254, 85, .045);
+  font-size: .72rem;
+}
+
+.sf-admin-wallet-pills span:nth-child(n+3) {
+  border-color: rgba(139, 92, 246, .2);
+  background: rgba(139, 92, 246, .08);
+}
+
+.sf-admin-game-config {
+  margin: 0 -.15rem;
+}
+
+.sf-admin-game-tabs {
+  padding: .3rem;
+  border: 1px solid rgba(126, 156, 168, .12);
+  border-radius: .85rem;
+  background: rgba(8, 12, 14, .45);
+}
+
+.sf-admin-game-tabs button {
+  flex: 1;
+  min-width: 92px;
+  padding: .68rem .85rem;
+  border-radius: .62rem;
+  color: rgba(245, 245, 245, .55);
+  font-size: .85rem;
+  transition: background .18s ease, color .18s ease, box-shadow .18s ease;
+}
+
+.sf-admin-game-tabs button.is-active {
+  color: #f5f5f5;
+  background: linear-gradient(105deg, rgba(139, 92, 246, .58), rgba(139, 92, 246, .22));
+  box-shadow: 0 8px 25px rgba(139, 92, 246, .16);
+}
+
+.sf-admin-game-header {
+  padding: 1rem;
+  border: 1px solid rgba(139, 92, 246, .17);
+  border-radius: .9rem;
+  background: linear-gradient(110deg, rgba(139, 92, 246, .09), rgba(17, 24, 27, .2));
+}
+
+.sf-admin-game-label {
+  margin-bottom: .3rem;
+  color: #a78bfa;
+  font: 700 .58rem 'Orbitron', sans-serif;
+  letter-spacing: .18em;
+}
+
+.sf-admin-probability {
+  border: 1px solid rgba(139, 92, 246, .16);
+  background:
+    radial-gradient(circle at 100% 0, rgba(139, 92, 246, .13), transparent 17rem),
+    rgba(8, 12, 14, .36);
+}
+
+.sf-admin-distribution {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.sf-admin-ring {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 102px;
+  height: 102px;
+  border-radius: 50%;
+}
+
+.sf-admin-ring div {
+  display: grid;
+  place-items: center;
+  width: 78px;
+  height: 78px;
+  border-radius: 50%;
+  background: #11181b;
+}
+
+.sf-admin-ring strong {
+  color: #f5f5f5;
+  font: 700 1rem 'Orbitron', sans-serif;
+}
+
+.sf-admin-ring span {
+  color: rgba(245,245,245,.45);
+  font: 700 .48rem 'Orbitron', sans-serif;
+  letter-spacing: .16em;
+}
+
+.sf-admin-metric {
+  border: 1px solid rgba(126, 156, 168, .15);
+  background: rgba(17, 24, 27, .76);
+}
+
+.sf-admin-validation {
+  display: inline-flex;
+  margin-top: .8rem;
+  padding: .42rem .7rem;
+  border: 1px solid rgba(245, 158, 11, .2);
+  border-radius: 999px;
+  color: #fbbf24;
+  background: rgba(245, 158, 11, .07);
+  font-size: .72rem;
+}
+
+.sf-admin-validation.is-valid {
+  border-color: rgba(34, 197, 94, .25);
+  color: #4ade80;
+  background: rgba(34, 197, 94, .08);
+}
+
+.sf-admin-simulate {
+  display: block;
+  margin-top: .85rem;
+  padding: .65rem .9rem;
+  border: 1px solid rgba(139, 92, 246, .25);
+  border-radius: .65rem;
+  color: #c4b5fd;
+  background: rgba(139, 92, 246, .1);
+  font-size: .82rem;
+}
+
+.sf-admin-results div {
+  display: flex;
+  justify-content: space-between;
+  padding: .68rem;
+  border: 1px solid rgba(34, 197, 94, .14);
+  border-radius: .6rem;
+  background: rgba(34, 197, 94, .05);
+}
+
+.sf-admin-results span {
+  color: #d7fe55;
+  font-family: 'Orbitron', sans-serif;
+}
+
+.sf-admin-reward-title h3 {
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700;
+}
+
+.sf-admin-reward-card {
+  border: 1px solid rgba(126, 156, 168, .11);
+  background: linear-gradient(135deg, rgba(245, 245, 245, .035), rgba(139, 92, 246, .035));
+}
+
+.sf-admin-reward-card:focus-within {
+  border-color: rgba(139, 92, 246, .3);
+}
+
+@keyframes sf-pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: .48; transform: scale(.72); }
+}
+
+.sf-top-nav-arcade {
+  background: rgba(10, 10, 11, .8) !important;
+  border-bottom-color: rgba(139, 92, 246, .18) !important;
+}
+
+.sf-top-nav-arcade .sf-nav-brand > div {
+  color: #f5f5f5 !important;
+  background: linear-gradient(135deg, #8b5cf6, #6d28d9) !important;
+  box-shadow: 0 0 22px rgba(139, 92, 246, .35);
+}
+
+.sf-top-nav-arcade .sf-nav-link.is-active {
+  color: #c4b5fd !important;
+  border-bottom-color: #8b5cf6 !important;
+}
+
+.sf-bottom-nav-arcade {
+  background: rgba(10, 10, 11, .94) !important;
+  border-top-color: rgba(139, 92, 246, .18) !important;
+}
+
+.sf-bottom-nav-arcade button:nth-child(3) {
+  color: #a78bfa !important;
+}
+
+.sf-bottom-nav-arcade button:nth-child(3) > div:last-child {
+  background: #8b5cf6 !important;
+  box-shadow: 0 0 15px #8b5cf6;
+}
+
 @media (min-width: 768px) {
   .sf-mobile-nav-space {
     padding-bottom: 0;
+  }
+}
+
+@media (max-width: 767px) {
+  .sf-arcade-hero {
+    display: block;
+    margin-top: 1.25rem;
+  }
+
+  .sf-arcade-title {
+    font-size: clamp(2.75rem, 16vw, 4rem);
+  }
+
+  .sf-arcade-pass {
+    margin: 1.7rem 0 1.4rem;
+    min-width: 0;
+  }
+
+  .sf-game-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sf-game-card {
+    min-height: 225px;
+  }
+
+  .sf-game-card-icon {
+    margin: 1.45rem 0 1rem;
+  }
+
+  .sf-card-layout {
+    grid-template-columns: 1fr 84px;
+  }
+
+  .sf-card-art {
+    transform: translate(12px, 10px) scale(.94);
+  }
+
+  .sf-admin-distribution {
+    display: block;
+  }
+
+  .sf-admin-ring {
+    margin: 0 auto 1rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sf-live-dot {
+    animation: none;
+  }
+
+  .sf-game-card,
+  .sf-game-action {
+    transition: none;
   }
 }

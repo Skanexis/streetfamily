@@ -1,5 +1,5 @@
 export type Page = 'home' | 'catalog' | 'games' | 'profile' | 'info'
-export type GameType = 'spin'
+export type GameType = 'spin' | 'scratch' | 'box'
 export type ScenarioType = 'meetup' | 'delivery_zone' | 'delivery_italia'
 
 export interface ProductVariant {
@@ -58,6 +58,8 @@ export interface Profile {
   xpNeeded: number
   tokens: number
   spinTickets: number
+  scratchTickets: number
+  boxTickets: number
   streak: number
   totalOrders: number
   completedOrders: number
@@ -112,9 +114,22 @@ export interface GamePlayResult {
   tokensAwarded: number
   xpAwarded: number
   rewardKind: UserReward['kind'] | null
+  rewardColor: string
   balance: number
   xp: number
   spinTickets: number
+  scratchTickets: number
+  boxTickets: number
+  angle: number
+  segmentIndex: number
+  segmentCount: number
+  boxStopIndex: number
+}
+
+export interface PlayableGame {
+  gameType: GameType
+  title: string
+  options: Array<{ code: string; label: string; color: string }>
 }
 
 export interface ScenarioSelection {

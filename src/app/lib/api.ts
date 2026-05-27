@@ -13,6 +13,8 @@ import type {
   KycReviewDocument,
   KycStatus,
   OrderSubmitResult,
+  GameType,
+  PlayableGame,
   Product,
   Profile,
   ScenarioSelection,
@@ -80,6 +82,8 @@ export async function getAccessProfile(): Promise<Profile | null> {
     xpNeeded: p.next_level_xp ?? p.xp,
     tokens: p.tokens ?? p.points,
     spinTickets: p.spin_tickets ?? 0,
+    scratchTickets: p.scratch_tickets ?? 0,
+    boxTickets: p.box_tickets ?? 0,
     streak: p.streak,
     totalOrders: p.total_orders,
     completedOrders: p.completed_orders ?? 0,
@@ -212,22 +216,45 @@ export async function getProfileActivity() {
   return { orders, ledger, rewards, feedback }
 }
 
-export async function playWheel(): Promise<GamePlayResult> {
+export async function getPlayableGames(): Promise<PlayableGame[]> {
   const db = requireSupabase()
-  const response = await db.rpc('play_game', { p_game_type: 'spin' })
+  const { data, error } = await db.from('game_configs')
+    .select('game_type,title,game_reward_options(code,label,color,active)')
+    .eq('active', true)
+    .in('game_type', ['spin', 'scratch', 'box'])
+  if (error) throw new Error(italianErrorMessage(error.message, 'Caricamento giochi non riuscito.'))
+  return (data ?? []).map((game: RecordValue) => ({
+    gameType: game.game_type,
+    title: game.title,
+    options: (game.game_reward_options ?? [])
+      .filter((option: RecordValue) => option.active)
+      .map((option: RecordValue) => ({ code: option.code, label: option.label, color: option.color })),
+  }))
+}
+
+export async function playGame(gameType: GameType): Promise<GamePlayResult> {
+  const db = requireSupabase()
+  const response = await db.rpc('play_game', { p_game_type: gameType })
   if (response.error) throw new Error(italianErrorMessage(response.error.message))
   const result = unwrap(response) as RecordValue
   return {
     playId: result.play_id,
-    gameType: 'spin',
+    gameType,
     code: result.reward_code,
     label: result.reward_label,
     tokensAwarded: result.points_awarded,
     xpAwarded: result.xp_awarded,
     rewardKind: result.reward_kind,
+    rewardColor: result.reward_color,
     balance: result.balance,
     xp: result.xp,
     spinTickets: result.spin_tickets,
+    scratchTickets: result.scratch_tickets,
+    boxTickets: result.box_tickets,
+    angle: result.angle,
+    segmentIndex: result.segment_index,
+    segmentCount: result.segment_count,
+    boxStopIndex: result.box_stop_index,
   }
 }
 
@@ -296,16 +323,38 @@ export async function getAdminDashboard(): Promise<DashboardData> {
   }
 }
 
-export async function adminAdjustWallet(userId: string, points: number, xp: number, tickets: number, reason: string) {
+export async function adminAdjustWallet(userId: string, points: number, xp: number, spinTickets: number, scratchTickets: number, boxTickets: number, reason: string) {
   const db = requireSupabase()
   const { error } = await db.rpc('admin_adjust_wallet', {
     p_user_id: userId,
     p_points_delta: points,
     p_xp_delta: xp,
-    p_tickets_delta: tickets,
+    p_spin_tickets_delta: spinTickets,
+    p_scratch_tickets_delta: scratchTickets,
+    p_box_tickets_delta: boxTickets,
     p_reason: reason,
   })
   if (error) throw new Error(italianErrorMessage(error.message))
+}
+
+export async function adminSetGameActive(gameType: GameType, active: boolean) {
+  const { error } = await requireSupabase().rpc('admin_set_game_active', { p_game_type: gameType, p_active: active })
+  if (error) throw new Error(italianErrorMessage(error.message))
+}
+
+export async function adminSaveGameOptions(gameType: GameType, options: RecordValue[]) {
+  const { error } = await requireSupabase().rpc('admin_save_game_options', { p_game_type: gameType, p_options: options })
+  if (error) throw new Error(italianErrorMessage(error.message))
+}
+
+export async function adminDeleteGameOption(optionId: string) {
+  const { error } = await requireSupabase().rpc('admin_delete_game_option', { p_option_id: optionId })
+  if (error) throw new Error(italianErrorMessage(error.message))
+}
+
+export async function adminSimulateGame(gameType: GameType, attempts: number): Promise<Record<string, number>> {
+  const result = unwrap(await requireSupabase().rpc('admin_simulate_game', { p_game_type: gameType, p_attempts: attempts })) as Record<string, number>
+  return result
 }
 
 export async function getKycStatus(): Promise<KycStatus> {

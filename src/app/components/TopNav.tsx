@@ -28,7 +28,7 @@ export function TopNav({ page, navigate, cartCount, onCartOpen, tokens, isAdmin,
 
   return (
     <nav
-      className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 md:px-8"
+      className={`sf-top-nav ${page === 'games' ? 'sf-top-nav-arcade' : ''} fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 md:px-8`}
       style={{
         height: 64,
         background: 'rgba(8, 12, 14, 0.94)',
@@ -39,7 +39,7 @@ export function TopNav({ page, navigate, cartCount, onCartOpen, tokens, isAdmin,
       {/* Logo */}
       <button
         onClick={() => navigate('home')}
-        className="flex items-center gap-2 select-none"
+        className="sf-nav-brand flex items-center gap-2 select-none"
       >
         <div
           className="flex items-center justify-center"
@@ -75,7 +75,7 @@ export function TopNav({ page, navigate, cartCount, onCartOpen, tokens, isAdmin,
           <button
             key={link.page}
             onClick={() => navigate(link.page)}
-            className="px-4 py-2 rounded-lg transition-all"
+            className={`sf-nav-link ${page === link.page ? 'is-active' : ''} px-4 py-2 rounded-lg transition-all`}
             style={{
               fontFamily: 'Inter, sans-serif',
               fontWeight: 500,
