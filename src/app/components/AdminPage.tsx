@@ -192,7 +192,7 @@ function CatalogAdmin({ products, categories, reload }: { products: Row[]; categ
         <input className="w-full" name="name" required placeholder="Nome prodotto" style={input} />
         <select className="w-full" name="category" required style={input}><option value="">Categoria</option>{categories.map(category => <option value={category.id} key={category.id}>{category.name}</option>)}</select>
         {[25, 50, 100, 300, 500, 1000].map(grams => <input className="w-full" key={grams} name={`price${grams}`} inputMode="numeric" pattern="[0-9]*" required placeholder={`EUR ${grams} g`} style={input} />)}
-        <button style={primary}>Crea non pubblicato</button>
+        <button style={primary}>Crea e pubblica</button>
         <label className="sm:col-span-2 lg:col-span-4 flex items-start gap-2" style={muted}>
           <input type="checkbox" name="announce" />
           Crea una notizia in bozza per il nuovo prodotto

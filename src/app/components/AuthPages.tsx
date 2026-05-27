@@ -48,7 +48,7 @@ export function LoginPage() {
     const telegram = (window as Window & {
       Telegram?: { WebApp?: { initData?: string; ready?: () => void; expand?: () => void } }
     }).Telegram?.WebApp
-    if (miniAppAttempted || auth.session || !telegram?.initData) return
+    if (auth.loading || miniAppAttempted || auth.session || !telegram?.initData) return
     setChallenge(null)
     setPreparedChallenge(null)
     setMiniAppData(telegram.initData)

@@ -135,6 +135,17 @@ export async function getCatalog(): Promise<Product[]> {
   }))
 }
 
+export async function getCatalogCategories(): Promise<string[]> {
+  const db = requireSupabase()
+  const { data, error } = await db.from('categories')
+    .select('name')
+    .eq('published', true)
+    .order('sort_order')
+    .order('name')
+  if (error) throw new Error(italianErrorMessage(error.message))
+  return (data ?? []).map((category: RecordValue) => category.name)
+}
+
 export async function getLevels(): Promise<Level[]> {
   const db = requireSupabase()
   const { data, error } = await db.from('levels').select('*').order('level_number')

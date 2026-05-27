@@ -4,20 +4,24 @@ import { ShoppingCart, Star, X } from 'lucide-react'
 import type { CartItem, Feedback, Product, ProductVariant } from '../data'
 
 type AddFn = (item: Omit<CartItem, 'id'>) => void
-interface Props { products: Product[]; feedback: Feedback[]; addToCart: AddFn; selectedProductId: string | null; onProductSelect: (id: string | null) => void }
+interface Props { products: Product[]; categories: string[]; feedback: Feedback[]; addToCart: AddFn; selectedProductId: string | null; onProductSelect: (id: string | null) => void }
 const minimumGrams = 25
 const gramStep = 25
 
-export function CatalogPage({ products, feedback, addToCart, selectedProductId, onProductSelect }: Props) {
+export function CatalogPage({ products, categories, feedback, addToCart, selectedProductId, onProductSelect }: Props) {
   const [category, setCategory] = useState('Tutti')
-  const categories = ['Tutti', ...Array.from(new Set(products.map(product => product.category)))]
+  const categoryOptions = ['Tutti', ...Array.from(new Set(categories))]
   const shown = products.filter(product => category === 'Tutti' || product.category === category)
+  useEffect(() => {
+    if (category !== 'Tutti' && !categoryOptions.includes(category)) setCategory('Tutti')
+  }, [category, categoryOptions])
   return <div className="min-h-screen px-4 md:px-8 py-10" style={{ paddingTop: 100 }}>
     <div className="max-w-6xl mx-auto">
       <div className="sf-kicker mb-4">Catalogo</div>
       <h1 style={{ fontFamily: 'Space Grotesk', fontWeight: 700, fontSize: 36 }}>Collezioni</h1>
       <p style={{ color: 'rgba(245,245,245,.58)', margin: '8px 0 28px' }}>Prezzi per peso e scelta personalizzata in grammi.</p>
-      <div className="flex gap-2 mb-8 overflow-x-auto">{categories.map(value => <button key={value} onClick={() => setCategory(value)} className="px-4 py-2" style={{ background: category === value ? '#D7FE55' : '#11181B', color: category === value ? '#080C0E' : '#F5F5F5', border: '1px solid rgba(126,156,168,.2)' }}>{value}</button>)}</div>
+      <div className="flex gap-2 mb-8 overflow-x-auto">{categoryOptions.map(value => <button key={value} onClick={() => setCategory(value)} className="px-4 py-2" style={{ background: category === value ? '#D7FE55' : '#11181B', color: category === value ? '#080C0E' : '#F5F5F5', border: '1px solid rgba(126,156,168,.2)' }}>{value}</button>)}</div>
+      {shown.length === 0 && <p style={{ color: 'rgba(245,245,245,.58)' }}>Nessun prodotto disponibile in questa categoria.</p>}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">{shown.map(product => <Card key={product.id} product={product} onClick={() => onProductSelect(product.id)} />)}</div>
     </div>
     <AnimatePresence>{selectedProductId && <Detail product={products.find(product => product.id === selectedProductId)} feedback={feedback} onClose={() => onProductSelect(null)} addToCart={addToCart} />}</AnimatePresence>

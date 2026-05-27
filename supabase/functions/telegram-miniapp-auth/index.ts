@@ -32,7 +32,6 @@ async function validateInitData(initData: string): Promise<TelegramUser> {
   const authDate = Number(parameters.get('auth_date'))
   if (!receivedHash || !userValue || !Number.isFinite(authDate)) throw new Error('Dati Telegram non validi')
   parameters.delete('hash')
-  parameters.delete('signature')
   const checkString = Array.from(parameters.entries())
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([key, value]) => `${key}=${value}`)

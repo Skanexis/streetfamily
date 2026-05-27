@@ -13,7 +13,7 @@ import { AdminPage } from './components/AdminPage'
 import { AccessDeniedPage, BlockedPage, CallbackPage, LoginPage, RequireAdmin, RequireMember } from './components/AuthPages'
 
 import { useAuth } from './auth/AuthProvider'
-import { getBroadcasts, getCatalog, getKycStatus, getLevels, getProfileActivity, getServiceAreas, playGame, submitTestOrder } from './lib/api'
+import { getBroadcasts, getCatalog, getCatalogCategories, getKycStatus, getLevels, getProfileActivity, getServiceAreas, playGame, submitTestOrder } from './lib/api'
 import { italianErrorMessage } from './lib/errors'
 import '../styles/fonts.css'
 
@@ -40,6 +40,7 @@ function MemberApplication() {
   const [cartOpen, setCartOpen] = useState(false)
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null)
   const [products, setProducts] = useState<Product[]>([])
+  const [catalogCategories, setCatalogCategories] = useState<string[]>([])
   const [levels, setLevels] = useState<Level[]>([])
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([])
   const [orders, setOrders] = useState<TestOrder[]>([])
@@ -90,8 +91,9 @@ function MemberApplication() {
 
   const loadData = useCallback(async () => {
     try {
-      const [catalog, availableLevels, activity, currentKyc, publishedBroadcasts, areas] = await Promise.all([
+      const [catalog, categories, availableLevels, activity, currentKyc, publishedBroadcasts, areas] = await Promise.all([
         getCatalog(),
+        getCatalogCategories(),
         getLevels(),
         getProfileActivity(),
         getKycStatus(),
@@ -99,6 +101,7 @@ function MemberApplication() {
         getServiceAreas(),
       ])
       setProducts(catalog)
+      setCatalogCategories(categories)
       setLevels(availableLevels)
       setOrders(activity.orders)
       setLedger(activity.ledger)
@@ -164,7 +167,7 @@ function MemberApplication() {
         <main className="sf-mobile-nav-space" style={{ paddingTop: 28 }}>
           <Routes>
             <Route path="/" element={<HomePage navigate={navigate} products={products} levels={levels} addToCart={addToCart} user={user} onProductSelect={(id) => { setSelectedProductId(id); navigate('catalog') }} />} />
-            <Route path="/catalog" element={<CatalogPage products={products} feedback={feedback} addToCart={addToCart} selectedProductId={selectedProductId} onProductSelect={setSelectedProductId} />} />
+            <Route path="/catalog" element={<CatalogPage products={products} categories={catalogCategories} feedback={feedback} addToCart={addToCart} selectedProductId={selectedProductId} onProductSelect={setSelectedProductId} />} />
             <Route path="/games" element={<GamesPage user={user} onPlay={playGame} onComplete={refreshAccount} />} />
             <Route path="/profile" element={<ProfilePage user={user} levels={levels} orders={orders} ledger={ledger} rewards={rewards} onChanged={refreshAccount} onAdmin={() => navigateRouter('/admin')} />} />
             <Route path="/info" element={<InfoPage />} />
