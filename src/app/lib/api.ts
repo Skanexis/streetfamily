@@ -182,12 +182,12 @@ export async function getBroadcasts(): Promise<Broadcast[]> {
   }))
 }
 
-export async function getProfileActivity() {
+export async function getProfileActivity(userId: string) {
   const db = requireSupabase()
   const [ordersResponse, ledgerResponse, rewardsResponse, feedbackResponse] = await Promise.all([
-    db.from('orders').select('id,display_id,created_at,status,total,total_units,tokens_reserved,points_awarded,xp_awarded,order_items(name_snapshot,variant_label),feedback(status)').order('created_at', { ascending: false }),
-    db.from('loyalty_ledger').select('id,created_at,reason,points_delta,xp_delta').order('created_at', { ascending: false }).limit(30),
-    db.from('user_rewards').select('id,state,reward_definitions(label,kind)').order('created_at', { ascending: false }),
+    db.from('orders').select('id,display_id,created_at,status,total,total_units,tokens_reserved,points_awarded,xp_awarded,order_items(name_snapshot,variant_label),feedback(status)').eq('user_id', userId).order('created_at', { ascending: false }),
+    db.from('loyalty_ledger').select('id,created_at,reason,points_delta,xp_delta').eq('user_id', userId).order('created_at', { ascending: false }).limit(30),
+    db.from('user_rewards').select('id,state,reward_definitions(label,kind)').eq('user_id', userId).order('created_at', { ascending: false }),
     db.from('feedback').select('id,order_id,rating,message,status,created_at').eq('status', 'published').order('created_at', { ascending: false }).limit(20),
   ])
   if (ordersResponse.error) throw new Error(italianErrorMessage(ordersResponse.error.message))
@@ -312,6 +312,7 @@ export async function submitTestOrder(
     tokensReserved: result.tokens_reserved,
     tokensOnComplete: result.tokens_on_complete,
     xpOnComplete: result.xp_on_complete,
+    firstOrderGift: result.first_order_gift ?? 0,
     balance: result.balance,
     disclaimer: '',
   }

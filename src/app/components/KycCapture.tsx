@@ -24,6 +24,14 @@ export function KycCapture({ status, onChanged }: Props) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
+  useEffect(() => {
+    if (status.status !== 'submitted') return
+    const timer = window.setInterval(() => {
+      void onChanged().catch(() => undefined)
+    }, 5000)
+    return () => window.clearInterval(timer)
+  }, [status.status, onChanged])
+
   const stopStream = () => {
     streamRef.current?.getTracks().forEach(track => track.stop())
     streamRef.current = null
@@ -123,10 +131,10 @@ export function KycCapture({ status, onChanged }: Props) {
   }
 
   if (status.status === 'submitted') {
-    return <Notice text="Documenti inviati. Il primo ordine sarà disponibile dopo la verifica dell'amministratore." />
+    return <Notice text="Documenti inviati. Dopo l'approvazione potrai confermare il primo ordine e ricevere subito 5 gettoni regalo, una sola volta." />
   }
   if (status.status === 'approved') {
-    return <Notice text="Identità verificata. Puoi completare il primo ordine." ok />
+    return <Notice text="Identità verificata. Conferma il primo ordine per ricevere subito 5 gettoni regalo, una sola volta." ok />
   }
 
   const allCaptured = captures.every(capture => status.documents.includes(capture.type))
@@ -134,7 +142,7 @@ export function KycCapture({ status, onChanged }: Props) {
     <div>
       <div className="p-3 rounded-xl mb-4" style={{ background: 'rgba(249,115,22,.1)', border: '1px solid rgba(249,115,22,.3)' }}>
         <ShieldAlert size={16} className="inline mr-2" style={{ color: '#F97316' }} />
-        Verifica richiesta solo al primo ordine. Nessun file esterno: acquisizione esclusivamente dalla fotocamera.
+        Verifica richiesta solo al primo ordine. Dopo l'approvazione e la conferma dell'ordine ricevi subito 5 gettoni regalo, una sola volta. Nessun file esterno: acquisizione esclusivamente dalla fotocamera.
       </div>
       {status.status === 'rejected' && <p style={{ color: '#F87171' }}>Verifica rifiutata: {status.rejectionReason}. Ripeti le acquisizioni.</p>}
       <div className="grid grid-cols-1 gap-2 my-4">

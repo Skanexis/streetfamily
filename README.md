@@ -92,7 +92,7 @@ https://api.telegram.org/bot<BOT_TOKEN>/setWebhook?url=https://<project-ref>.sup
 
 - The authenticated `/info` page displays the simulation rules and community-news links for Instagram and Viber; Signal remains `In arrivo` until configured.
 - The catalogue exposes reference prices for `25`, `50`, `100`, `300`, `500` and `1000 g`. Members can select `50` to `1000 g` in `25 g` increments; intermediate prices are interpolated server-side between adjacent configured tiers and rounded to whole euro values ending in `0` or `5`.
-- `Gettoni` are the loyalty credit shown to members. They are reserved atomically when used in a demo request and awarded only when an admin marks that request `completed`; their balance is capped at `100`.
+- `Gettoni` are the loyalty credit shown to members. After KYC approval, a member receives a one-time `5` gettoni gift immediately upon submitting the first order; regular order rewards are awarded when an admin marks the order `completed`. Gettoni are reserved atomically when used and their balance is capped at `100`.
 - XP remains separate from gettoni. The only member game is `Ruota dei premi`, consuming one ticket earned on every fifth completed demo request.
 - A member may submit one feedback entry for each of their own completed requests. Only admin-published feedback is shown in staging.
 
@@ -113,6 +113,7 @@ https://api.telegram.org/bot<BOT_TOKEN>/setWebhook?url=https://<project-ref>.sup
 ## First-Order Manual KYC
 
 - Before a user's first test-order can be submitted, KYC status must be `approved`.
+- Once that KYC is approved, submitting the first order credits `5` gettoni immediately and only once.
 - The user must capture exactly three images: document front, document back and a selfie while holding the document.
 - The frontend uses `navigator.mediaDevices.getUserMedia()` and a canvas snapshot. It does not expose a file-picker input for KYC.
 - A browser application cannot cryptographically prove that a submitted image originated from the live camera without an external verification or device-attestation service. This implementation removes the normal upload path and requires active camera permission in the UI.

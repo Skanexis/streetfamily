@@ -165,6 +165,7 @@ export interface OrderSubmitResult {
   tokensReserved: number
   tokensOnComplete: number
   xpOnComplete: number
+  firstOrderGift: number
   balance: number
   disclaimer: string
 }

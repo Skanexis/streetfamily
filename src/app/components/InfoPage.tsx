@@ -31,6 +31,9 @@ export function InfoPage() {
                 Per i nuovi clienti abbiamo bisogno di una verifica d'identità per procedere con ordine! Una volta verificati saremo noi a decidere se andare avanti o no.
               </p>
               <p style={{ ...copy, color: '#D7FE55', fontWeight: 700, marginTop: 14, textTransform: 'uppercase' }}>
+                Verifica approvata e primo ordine confermato: 5 gettoni in regalo subito. Il regalo viene accreditato una sola volta.
+              </p>
+              <p style={{ ...copy, color: '#D7FE55', fontWeight: 700, marginTop: 14, textTransform: 'uppercase' }}>
                 Non accettiamo grandi ordini fuori regione per chi non ha mai comprato. Per usufruire del servizio Delivery quantità dovete essere clienti di fiducia!
               </p>
             </div>

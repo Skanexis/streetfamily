@@ -47,7 +47,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshProfile = async () => {
     if (!supabase) return
+    const { data: initialAuth } = await supabase.auth.getSession()
+    const expectedUserId = initialAuth.session?.user.id
+    if (!expectedUserId) {
+      setProfile(null)
+      return
+    }
     const accountBlocked = await getAccountBlocked()
+    const { data: currentAuth } = await supabase.auth.getSession()
+    if (currentAuth.session?.user.id !== expectedUserId) return
     if (accountBlocked) {
       setProfile(null)
       setBlocked(true)
@@ -55,6 +63,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return
     }
     const current = await getAccessProfile()
+    const { data: finalAuth } = await supabase.auth.getSession()
+    if (finalAuth.session?.user.id !== expectedUserId || (current && current.id !== expectedUserId)) return
     setProfile(current)
     setBlocked(false)
     setDenied(!current)
@@ -62,6 +72,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const exchangeTelegramMiniAppSession = async (initData: string) => {
     const db = requireSupabase()
+    setLoading(true)
+    setProfile(null)
+    setDenied(false)
+    setBlocked(false)
     const { data, error } = await db.functions.invoke('telegram-miniapp-auth', { body: { initData } })
     if (error) {
       const message = await edgeFunctionError(error, 'Accesso alla mini applicazione non riuscito.')
@@ -71,14 +85,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setProfile(null)
         setDenied(false)
         setBlocked(true)
+        setLoading(false)
         return
       }
+      setLoading(false)
       throw new Error(message)
     }
     const verified = await db.auth.verifyOtp({ token_hash: data.tokenHash, type: 'magiclink' })
-    if (verified.error) throw new Error(italianErrorMessage(verified.error.message, 'Accesso Telegram non riuscito.'))
+    if (verified.error) {
+      setLoading(false)
+      throw new Error(italianErrorMessage(verified.error.message, 'Accesso Telegram non riuscito.'))
+    }
     setSession(verified.data.session)
     await refreshProfile()
+    setLoading(false)
   }
 
   useEffect(() => {
@@ -100,7 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (data.session) await refreshProfile()
       setLoading(false)
     }).catch(() => setLoading(false))
-    const { data: listener } = db.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: listener } = db.auth.onAuthStateChange((event, nextSession) => {
       setSession(nextSession)
       if (!nextSession) {
         setProfile(null)
@@ -108,6 +128,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setBlocked(false)
         setLoading(false)
         return
+      }
+      if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
+        setProfile(null)
+        setDenied(false)
+        setBlocked(false)
+        setLoading(true)
       }
       window.setTimeout(() => {
         refreshProfile().finally(() => setLoading(false))
@@ -145,8 +171,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data, error } = await db.functions.invoke('telegram-auth-status', { body: { token } })
       if (error) throw new Error(await edgeFunctionError(error, 'Impossibile verificare Telegram.'))
       if (data.state === 'confirmed') {
+        setLoading(true)
+        setProfile(null)
+        setDenied(false)
+        setBlocked(false)
         const verified = await db.auth.verifyOtp({ token_hash: data.tokenHash, type: 'magiclink' })
-        if (verified.error) throw new Error(italianErrorMessage(verified.error.message, 'Accesso Telegram non riuscito.'))
+        if (verified.error) {
+          setLoading(false)
+          throw new Error(italianErrorMessage(verified.error.message, 'Accesso Telegram non riuscito.'))
+        }
       }
       return data.state
     },

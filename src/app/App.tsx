@@ -27,9 +27,14 @@ export default function App() {
       <Route path="/auth/callback" element={<CallbackPage />} />
       <Route path="/access-denied" element={<AccessDeniedPage />} />
       <Route path="/blocked" element={<BlockedPage />} />
-      <Route path="/*" element={<RequireMember><MemberApplication /></RequireMember>} />
+      <Route path="/*" element={<RequireMember><CurrentMemberApplication /></RequireMember>} />
     </Routes>
   )
+}
+
+function CurrentMemberApplication() {
+  const auth = useAuth()
+  return <MemberApplication key={auth.profile!.id} />
 }
 
 function MemberApplication() {
@@ -96,7 +101,7 @@ function MemberApplication() {
         getCatalog(),
         getCatalogCategories(),
         getLevels(),
-        getProfileActivity(),
+        getProfileActivity(user.id),
         getKycStatus(),
         getBroadcasts(),
         getServiceAreas(),
@@ -117,7 +122,7 @@ function MemberApplication() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [user.id])
 
   const refreshAccount = async () => {
     await auth.refreshProfile()
@@ -193,7 +198,7 @@ function MemberApplication() {
         firstOrder={orders.length === 0}
         isAdmin={user.role === 'admin'}
         kycStatus={kycStatus}
-        onKycChanged={loadData}
+        onKycChanged={refreshAccount}
         onSubmit={(selection) => submitTestOrder(cart, selection)}
         onComplete={async () => { setCart([]); await refreshAccount() }}
       />
