@@ -192,6 +192,25 @@ sudo docker compose --env-file .env.deploy -p street-family ps
 
 Сборка содержит публичные значения Supabase из `.env.deploy`. Если поменяли эти значения, также обязательно пересоберите контейнер командой выше.
 
+Если изменили серверные значения `TELEGRAM_ADMIN_IDS`, `TELEGRAM_BOT_TOKEN`,
+`TELEGRAM_WEBHOOK_SECRET`, `TELEGRAM_MINI_APP_URL` или `KYC_PURGE_SECRET`,
+одной пересборки Docker недостаточно. Эти значения используются Supabase Edge
+Functions и должны быть повторно отправлены в Supabase:
+
+```bash
+read -s -p "Paste Supabase Personal Access Token: " SUPABASE_ACCESS_TOKEN; echo
+export SUPABASE_ACCESS_TOKEN
+npx supabase@latest secrets set --env-file .env.deploy
+```
+
+После добавления Telegram ID в `TELEGRAM_ADMIN_IDS` пользователь должен заново
+открыть Mini App или отправить боту `/start`: при следующем входе существующий
+профиль автоматически получает роль администратора.
+
+После удаления ID из `TELEGRAM_ADMIN_IDS` задеплойте актуальные Telegram
+Functions и заново откройте Mini App исключённым аккаунтом: при следующем
+входе его роль меняется обратно на обычного пользователя.
+
 Если обновление также содержит миграции или Supabase Edge Functions, команды
 `npx supabase@latest db push` и `npx supabase@latest functions deploy` требуют
 отдельный `SUPABASE_ACCESS_TOKEN` в текущем SSH-сеансе. Выполните блок

@@ -181,6 +181,22 @@ npx supabase@latest secrets set --env-file .env.deploy
 
 Перепубликовывать функции после смены secrets не нужно.
 
+Если вы изменили состав `TELEGRAM_ADMIN_IDS`, актуальная версия Telegram
+Functions синхронизирует роль при следующем входе аккаунта: добавленный ID
+получит admin, удалённый ID потеряет admin и станет обычным пользователем.
+Чтобы отозвать уже сохранённую роль немедленно, не ожидая нового входа старого
+аккаунта, в Supabase Dashboard -> SQL Editor выполните, подставив удалённый ID:
+
+```sql
+update public.staging_allowlist
+set role = 'user', note = 'Admin role revoked from TELEGRAM_ADMIN_IDS'
+where telegram_subject = 'OLD_TELEGRAM_ID';
+
+update public.profiles
+set role = 'user'
+where telegram_subject = 'OLD_TELEGRAM_ID';
+```
+
 ## 9. Включить Telegram webhook
 
 В PowerShell, подставив ваши значения:

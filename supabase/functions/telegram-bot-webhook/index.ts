@@ -86,6 +86,12 @@ Deno.serve(async req => {
       return json({ ok: true })
     }
     const { data: existing } = await db.from('staging_allowlist').select('enabled,role').eq('telegram_subject', telegramId).maybeSingle()
+    await db.from('staging_allowlist').upsert({
+      telegram_subject: telegramId,
+      role: isAdmin ? 'admin' : 'user',
+      enabled: isAdmin ? true : existing?.enabled ?? true,
+      note: isAdmin ? 'TELEGRAM_ADMIN_IDS' : 'Avvio bot Telegram',
+    })
     if (existing?.enabled === false && !isAdmin) {
       await sendTelegramMessage(String(message.chat.id), 'Il tuo account non è autorizzato.')
       return json({ ok: true })
@@ -95,12 +101,6 @@ Deno.serve(async req => {
       await sendTelegramMessage(String(message.chat.id), "Il tuo account è bloccato. L'accesso non è disponibile.")
       return json({ ok: true })
     }
-    await db.from('staging_allowlist').upsert({
-      telegram_subject: telegramId,
-      role: isAdmin ? 'admin' : existing?.role ?? 'user',
-      enabled: true,
-      note: isAdmin ? 'TELEGRAM_ADMIN_IDS' : 'Avvio bot Telegram',
-    })
     const adminUrl = new URL('/admin', appUrl).toString()
     await Promise.allSettled([
       setTelegramMiniAppMenu(
@@ -136,21 +136,18 @@ Deno.serve(async req => {
     return json({ ok: true })
   }
 
+  const { data: existing } = await db.from('staging_allowlist').select('enabled').eq('telegram_subject', telegramId).maybeSingle()
+  await db.from('staging_allowlist').upsert({
+    telegram_subject: telegramId,
+    role: isAdmin ? 'admin' : 'user',
+    enabled: isAdmin ? true : existing?.enabled ?? true,
+    note: isAdmin ? 'TELEGRAM_ADMIN_IDS' : 'Registrazione accesso Telegram',
+  })
   const { data: loginProfile } = await db.from('profiles').select('id,blocked').eq('telegram_subject', telegramId).maybeSingle()
   if (loginProfile?.blocked && !isAdmin) {
     await db.from('telegram_login_challenges').update({ state: 'denied', telegram_id: telegramId }).eq('id', challenge.id)
     await sendTelegramMessage(String(message.chat.id), "Il tuo account è bloccato. L'accesso non è disponibile.")
     return json({ ok: true })
-  }
-
-  const { data: existing } = await db.from('staging_allowlist').select('enabled').eq('telegram_subject', telegramId).maybeSingle()
-  if (!existing || isAdmin) {
-    await db.from('staging_allowlist').upsert({
-      telegram_subject: telegramId,
-      role: isAdmin ? 'admin' : 'user',
-      enabled: true,
-      note: isAdmin ? 'TELEGRAM_ADMIN_IDS' : 'Registrazione accesso Telegram',
-    })
   }
   const { data: allowed } = await db.from('staging_allowlist').select('role,enabled').eq('telegram_subject', telegramId).eq('enabled', true).maybeSingle()
   if (!allowed) {
@@ -183,7 +180,7 @@ Deno.serve(async req => {
     const wallet = await db.from('wallet_balances').upsert({ user_id: userId, points: 0 }, { onConflict: 'user_id', ignoreDuplicates: true })
     if (wallet.error) return json({ error: publicErrorMessage(wallet.error.message, 'Creazione account non riuscita.') }, 500)
   } else {
-    const updated = await db.from('profiles').update({ username: metadata.username }).eq('id', profile.id)
+    const updated = await db.from('profiles').update({ username: metadata.username, role: isAdmin ? 'admin' : 'user' }).eq('id', profile.id)
     if (updated.error) return json({ error: publicErrorMessage(updated.error.message, 'Accesso Telegram non riuscito.') }, 500)
   }
   const authTokenHash = generated.data.properties.hashed_token

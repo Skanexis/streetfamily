@@ -64,16 +64,14 @@ Deno.serve(async req => {
       .eq('telegram_subject', telegramId)
       .maybeSingle()
     if (accessError) return json({ error: publicErrorMessage(accessError.message, 'Autorizzazione non riuscita.') }, 500)
+    const { error: roleSyncError } = await db.from('staging_allowlist').upsert({
+      telegram_subject: telegramId,
+      role: isAdmin ? 'admin' : 'user',
+      enabled: access?.enabled ?? true,
+      note: isAdmin ? 'TELEGRAM_ADMIN_IDS' : 'Registrazione dalla mini applicazione Telegram',
+    })
+    if (roleSyncError) return json({ error: publicErrorMessage(roleSyncError.message, 'Autorizzazione non riuscita.') }, 500)
     if (access && !access.enabled && !isAdmin) return json({ error: 'Accesso non autorizzato' }, 403)
-    if (isAdmin || !access) {
-      const { error } = await db.from('staging_allowlist').upsert({
-        telegram_subject: telegramId,
-        role: isAdmin ? 'admin' : 'user',
-        enabled: true,
-        note: isAdmin ? 'TELEGRAM_ADMIN_IDS' : 'Registrazione dalla mini applicazione Telegram',
-      })
-      if (error) return json({ error: publicErrorMessage(error.message, 'Autorizzazione non riuscita.') }, 500)
-    }
     const email = `telegram_${telegramId}@street-family.invalid`
     const metadata = {
       telegram_id: telegramId,
@@ -100,7 +98,7 @@ Deno.serve(async req => {
         telegram_subject: telegramId,
         username: metadata.username,
         avatar_url: metadata.avatar_url,
-        role: isAdmin ? 'admin' : access?.role ?? 'user',
+        role: isAdmin ? 'admin' : 'user',
       }, { onConflict: 'id' })
       if (repairProfileError) {
         return json({ error: publicErrorMessage(repairProfileError.message, 'Creazione account non riuscita.') }, 500)
@@ -114,6 +112,7 @@ Deno.serve(async req => {
       const { error: updateProfileError } = await db.from('profiles').update({
         username: metadata.username,
         avatar_url: metadata.avatar_url,
+        role: isAdmin ? 'admin' : 'user',
       }).eq('id', profile.id)
       if (updateProfileError) return json({ error: publicErrorMessage(updateProfileError.message, 'Accesso Telegram non riuscito.') }, 500)
     }
