@@ -76,6 +76,10 @@ Deno.serve(async req => {
   const isAdmin = envAdminIds().has(telegramId)
 
   if (message.text?.match(/^\/start(?:\s*)$/)) {
+    if (!isAdmin && !message.from.username?.trim()) {
+      await sendTelegramMessage(String(message.chat.id), 'Imposta un username @ nelle impostazioni Telegram prima di accedere.')
+      return json({ ok: true })
+    }
     const appUrl = Deno.env.get('TELEGRAM_MINI_APP_URL')
     if (!appUrl) {
       await sendTelegramMessage(String(message.chat.id), 'Mini applicazione non configurata. Contatta un amministratore.')
@@ -84,6 +88,11 @@ Deno.serve(async req => {
     const { data: existing } = await db.from('staging_allowlist').select('enabled,role').eq('telegram_subject', telegramId).maybeSingle()
     if (existing?.enabled === false && !isAdmin) {
       await sendTelegramMessage(String(message.chat.id), 'Il tuo account non è autorizzato.')
+      return json({ ok: true })
+    }
+    const { data: existingProfile } = await db.from('profiles').select('blocked').eq('telegram_subject', telegramId).maybeSingle()
+    if (existingProfile?.blocked && !isAdmin) {
+      await sendTelegramMessage(String(message.chat.id), "Il tuo account è bloccato. L'accesso non è disponibile.")
       return json({ ok: true })
     }
     await db.from('staging_allowlist').upsert({
@@ -121,6 +130,18 @@ Deno.serve(async req => {
     await sendTelegramMessage(String(message.chat.id), 'Link di accesso non valido o scaduto.')
     return json({ ok: true })
   }
+  if (!isAdmin && !message.from.username?.trim()) {
+    await db.from('telegram_login_challenges').update({ state: 'denied', telegram_id: telegramId }).eq('id', challenge.id)
+    await sendTelegramMessage(String(message.chat.id), 'Imposta un username @ nelle impostazioni Telegram prima di accedere.')
+    return json({ ok: true })
+  }
+
+  const { data: loginProfile } = await db.from('profiles').select('id,blocked').eq('telegram_subject', telegramId).maybeSingle()
+  if (loginProfile?.blocked && !isAdmin) {
+    await db.from('telegram_login_challenges').update({ state: 'denied', telegram_id: telegramId }).eq('id', challenge.id)
+    await sendTelegramMessage(String(message.chat.id), "Il tuo account è bloccato. L'accesso non è disponibile.")
+    return json({ ok: true })
+  }
 
   const { data: existing } = await db.from('staging_allowlist').select('enabled').eq('telegram_subject', telegramId).maybeSingle()
   if (!existing || isAdmin) {
@@ -143,10 +164,28 @@ Deno.serve(async req => {
   const { data: profile } = await db.from('profiles').select('id').eq('telegram_subject', telegramId).maybeSingle()
   if (!profile) {
     const created = await db.auth.admin.createUser({ email, email_confirm: true, user_metadata: metadata })
-    if (created.error) return json({ error: publicErrorMessage(created.error.message, 'Creazione account non riuscita.') }, 500)
+    if (created.error && !/already registered|already exists/i.test(created.error.message)) {
+      return json({ error: publicErrorMessage(created.error.message, 'Creazione account non riuscita.') }, 500)
+    }
   }
   const generated = await db.auth.admin.generateLink({ type: 'magiclink', email, options: { data: metadata } })
   if (generated.error) return json({ error: publicErrorMessage(generated.error.message, 'Accesso Telegram non riuscito.') }, 500)
+  if (!profile) {
+    const userId = generated.data.user?.id
+    if (!userId) return json({ error: 'Creazione account non riuscita.' }, 500)
+    const repaired = await db.from('profiles').upsert({
+      id: userId,
+      telegram_subject: telegramId,
+      username: metadata.username,
+      role: isAdmin ? 'admin' : allowed.role,
+    }, { onConflict: 'id' })
+    if (repaired.error) return json({ error: publicErrorMessage(repaired.error.message, 'Creazione account non riuscita.') }, 500)
+    const wallet = await db.from('wallet_balances').upsert({ user_id: userId, points: 0 }, { onConflict: 'user_id', ignoreDuplicates: true })
+    if (wallet.error) return json({ error: publicErrorMessage(wallet.error.message, 'Creazione account non riuscita.') }, 500)
+  } else {
+    const updated = await db.from('profiles').update({ username: metadata.username }).eq('id', profile.id)
+    if (updated.error) return json({ error: publicErrorMessage(updated.error.message, 'Accesso Telegram non riuscito.') }, 500)
+  }
   const authTokenHash = generated.data.properties.hashed_token
   await db.from('telegram_login_challenges').update({
     telegram_id: telegramId,

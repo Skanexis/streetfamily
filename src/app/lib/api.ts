@@ -23,6 +23,16 @@ import type {
 
 type RecordValue = Record<string, any>
 
+export async function getAccountBlocked(): Promise<boolean> {
+  const db = requireSupabase()
+  const { data, error } = await db.rpc('get_my_access_state')
+  if (error) {
+    if (/get_my_access_state|schema cache|could not find the function/i.test(error.message)) return false
+    throw new Error(italianErrorMessage(error.message))
+  }
+  return Boolean((data as RecordValue | null)?.blocked)
+}
+
 function unwrap<T>(result: { data: T | null; error: { message: string } | null }): T {
   if (result.error) throw new Error(italianErrorMessage(result.error.message))
   if (result.data == null) throw new Error('Nessun dato ricevuto.')
@@ -286,12 +296,13 @@ export async function getAdminDashboard(): Promise<DashboardData> {
   }
 }
 
-export async function adminAdjustWallet(userId: string, points: number, xp: number, reason: string) {
+export async function adminAdjustWallet(userId: string, points: number, xp: number, tickets: number, reason: string) {
   const db = requireSupabase()
   const { error } = await db.rpc('admin_adjust_wallet', {
     p_user_id: userId,
     p_points_delta: points,
     p_xp_delta: xp,
+    p_tickets_delta: tickets,
     p_reason: reason,
   })
   if (error) throw new Error(italianErrorMessage(error.message))

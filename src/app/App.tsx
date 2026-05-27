@@ -10,7 +10,7 @@ import { ProfilePage } from './components/ProfilePage'
 import { InfoPage } from './components/InfoPage'
 import { CartDrawer } from './components/CartDrawer'
 import { AdminPage } from './components/AdminPage'
-import { AccessDeniedPage, CallbackPage, LoginPage, RequireAdmin, RequireMember } from './components/AuthPages'
+import { AccessDeniedPage, BlockedPage, CallbackPage, LoginPage, RequireAdmin, RequireMember } from './components/AuthPages'
 
 import { useAuth } from './auth/AuthProvider'
 import { getBroadcasts, getCatalog, getKycStatus, getLevels, getProfileActivity, getServiceAreas, playWheel, submitTestOrder } from './lib/api'
@@ -25,6 +25,7 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/auth/callback" element={<CallbackPage />} />
       <Route path="/access-denied" element={<AccessDeniedPage />} />
+      <Route path="/blocked" element={<BlockedPage />} />
       <Route path="/*" element={<RequireMember><MemberApplication /></RequireMember>} />
     </Routes>
   )

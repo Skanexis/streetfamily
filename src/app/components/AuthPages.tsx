@@ -82,6 +82,7 @@ export function LoginPage() {
     }, 1800)
     return () => window.clearInterval(timer)
   }, [challenge])
+  if (auth.blocked) return <Navigate to="/blocked" replace />
   if (auth.profile) return <Navigate to="/" replace />
   return (
     <Centered>
@@ -109,6 +110,7 @@ export function LoginPage() {
 export function CallbackPage() {
   const auth = useAuth()
   if (auth.loading) return <Centered>Verifica accesso...</Centered>
+  if (auth.blocked) return <Navigate to="/blocked" replace />
   if (auth.denied) return <Navigate to="/access-denied" replace />
   if (auth.profile) return <Navigate to="/" replace />
   return <Navigate to="/login" replace />
@@ -128,10 +130,27 @@ export function AccessDeniedPage() {
   )
 }
 
+export function BlockedPage() {
+  const { logout } = useAuth()
+  return (
+    <Centered>
+      <div style={card}>
+        <ShieldAlert size={36} style={{ color: '#F87171', marginBottom: 15 }} />
+        <h1 style={{ fontFamily: 'Space Grotesk', fontWeight: 700 }}>Account bloccato</h1>
+        <p style={{ color: 'rgba(245,245,245,.65)', margin: '12px 0 24px' }}>
+          Il tuo account è stato bloccato. L'accesso a Street Family non è disponibile.
+        </p>
+        <button style={primaryButton} onClick={logout}>Esci</button>
+      </div>
+    </Centered>
+  )
+}
+
 export function RequireMember({ children }: { children: ReactElement }) {
   const auth = useAuth()
   if (auth.loading) return <Centered>Caricamento...</Centered>
   if (!auth.session) return <Navigate to="/login" replace />
+  if (auth.blocked) return <Navigate to="/blocked" replace />
   if (!auth.profile) return <Navigate to="/access-denied" replace />
   return children
 }

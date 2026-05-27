@@ -1,12 +1,12 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
-import { Package, Tags, Users, Gamepad2, ClipboardList, Settings, Megaphone, MessageSquare } from 'lucide-react'
+import { Package, Tags, Users, Gamepad2, ClipboardList, Settings, Megaphone, MessageSquare, Wallet } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import { adminAdjustWallet, getAdminDashboard, getAdminKycDocuments, reviewKyc } from '../lib/api'
 import { requireSupabase } from '../lib/supabase'
 import { italianErrorMessage } from '../lib/errors'
 import type { Broadcast, DashboardData, KycReviewDocument } from '../data'
 
-type Tab = 'catalog' | 'categories' | 'broadcasts' | 'users' | 'orders' | 'economy' | 'feedback' | 'settings'
+type Tab = 'catalog' | 'categories' | 'broadcasts' | 'users' | 'balance' | 'orders' | 'economy' | 'feedback' | 'settings'
 type Row = Record<string, any>
 const orderStatusLabel: Record<string, string> = { submitted: 'Inviata', processing: 'Accettata', completed: 'Completata', cancelled: 'Rifiutata' }
 const feedbackStatusLabel: Record<string, string> = { pending: 'In moderazione', published: 'Pubblicata', hidden: 'Nascosta' }
@@ -27,7 +27,6 @@ export function AdminPage() {
   const [orders, setOrders] = useState<Row[]>([])
   const [games, setGames] = useState<Row[]>([])
   const [locations, setLocations] = useState<Row[]>([])
-  const [allowlist, setAllowlist] = useState<Row[]>([])
   const [settings, setSettings] = useState<Row[]>([])
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([])
   const [feedback, setFeedback] = useState<Row[]>([])
@@ -42,7 +41,7 @@ export function AdminPage() {
   const load = async () => {
     try {
       const db = requireSupabase()
-      const [summary, productResult, categoryResult, profileResult, orderResult, gameResult, locationResult, allowlistResult, settingsResult, broadcastResult, feedbackResult, optionsResult, tiersResult] = await Promise.all([
+      const [summary, productResult, categoryResult, profileResult, orderResult, gameResult, locationResult, settingsResult, broadcastResult, feedbackResult, optionsResult, tiersResult] = await Promise.all([
         getAdminDashboard(),
         db.from('products').select('id,category_id,name,badge,published,featured,categories(name),product_variants(id,label,price,unit_amount,token_award,inventory_status(available)),product_media(id,url,storage_path,media_type,upload_status,sort_order)').order('name'),
         db.from('categories').select('*').order('sort_order'),
@@ -50,14 +49,13 @@ export function AdminPage() {
         db.from('orders').select('id,display_id,status,total,total_units,tokens_reserved,scenario_type,scenario_city,scenario_street,points_awarded,xp_awarded,created_at,profiles(username)').in('status', ['submitted', 'processing']).order('created_at', { ascending: false }),
         db.from('game_configs').select('*').order('game_type'),
         db.from('service_areas').select('*').order('sort_order'),
-        db.from('staging_allowlist').select('*').order('created_at', { ascending: false }),
         db.from('app_settings').select('*'),
         db.from('broadcasts').select('id,kind,title,message,product_id,status,published_at,created_at').order('created_at', { ascending: false }),
         db.from('feedback').select('id,rating,message,status,created_at,profiles:profiles!feedback_user_id_fkey(username),orders(display_id)').order('created_at', { ascending: false }),
         db.from('game_reward_options').select('*').eq('game_type', 'spin').order('id'),
         db.from('token_reward_tiers').select('*').order('minimum_units'),
       ])
-      for (const result of [productResult, categoryResult, profileResult, orderResult, gameResult, locationResult, allowlistResult, settingsResult, broadcastResult, feedbackResult, optionsResult, tiersResult]) {
+      for (const result of [productResult, categoryResult, profileResult, orderResult, gameResult, locationResult, settingsResult, broadcastResult, feedbackResult, optionsResult, tiersResult]) {
         if (result.error) throw new Error(italianErrorMessage(result.error.message, 'Impossibile caricare il pannello amministrazione.'))
       }
       setDashboard(summary)
@@ -67,7 +65,6 @@ export function AdminPage() {
       setOrders(orderResult.data ?? [])
       setGames(gameResult.data ?? [])
       setLocations(locationResult.data ?? [])
-      setAllowlist(allowlistResult.data ?? [])
       setSettings(settingsResult.data ?? [])
       setFeedback(feedbackResult.data ?? [])
       setRewardOptions(optionsResult.data ?? [])
@@ -110,6 +107,7 @@ export function AdminPage() {
           ['categories', Tags, 'Categorie'],
           ['broadcasts', Megaphone, 'Notizie'],
           ['users', Users, 'Utenti'],
+          ['balance', Wallet, 'Saldo'],
           ['orders', ClipboardList, 'Richieste'],
           ['economy', Gamepad2, 'Economia'],
           ['feedback', MessageSquare, 'Recensioni'],
@@ -121,7 +119,8 @@ export function AdminPage() {
       {tab === 'catalog' && <CatalogAdmin products={products} categories={categories} reload={load} />}
       {tab === 'categories' && <CategoriesAdmin products={products} categories={categories} reload={load} />}
       {tab === 'broadcasts' && <BroadcastAdmin broadcasts={broadcasts} reload={load} />}
-      {tab === 'users' && <UsersAdmin profiles={profiles} allowlist={allowlist} initialKycUserId={requestedKycUserId} reload={load} />}
+      {tab === 'users' && <UsersAdmin profiles={profiles} initialKycUserId={requestedKycUserId} reload={load} />}
+      {tab === 'balance' && <BalanceAdmin profiles={profiles} reload={load} />}
       {tab === 'orders' && <OrdersAdmin orders={orders} reload={load} />}
       {tab === 'economy' && <EconomyAdmin games={games} options={rewardOptions} reload={load} />}
       {tab === 'feedback' && <FeedbackAdmin feedback={feedback} reload={load} />}
@@ -435,33 +434,26 @@ async function xhrStorageUpload(path: string, file: File, onProgress: (value: nu
   })
 }
 
-function UsersAdmin({ profiles, allowlist, initialKycUserId, reload }: { profiles: Row[]; allowlist: Row[]; initialKycUserId: string; reload: () => Promise<void> }) {
+function UsersAdmin({ profiles, initialKycUserId, reload }: { profiles: Row[]; initialKycUserId: string; reload: () => Promise<void> }) {
   const [query, setQuery] = useState('')
-  const [selected, setSelected] = useState('')
-  const [points, setPoints] = useState(0)
-  const [xp, setXp] = useState(0)
-  const [reason, setReason] = useState('')
+  const [message, setMessage] = useState('')
   const [reviewUser, setReviewUser] = useState<Row | null>(null)
   const [documents, setDocuments] = useState<KycReviewDocument[]>([])
   const [kycError, setKycError] = useState('')
   const [openedKycUserId, setOpenedKycUserId] = useState('')
   const visibleProfiles = profiles.filter(profile => `${profile.username} ${profile.telegram_subject}`.toLowerCase().includes(query.toLowerCase()))
-  const adjust = async (event: FormEvent) => {
-    event.preventDefault()
-    await adminAdjustWallet(selected, points, xp, reason)
-    setReason('')
-    await reload()
-  }
-  const addAccess = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    const values = new FormData(event.currentTarget)
-    const { error } = await requireSupabase().from('staging_allowlist').insert({
-      telegram_subject: values.get('subject'),
-      role: values.get('role'),
-      note: 'Creato dall’interfaccia amministrazione',
+  const toggleBlocked = async (profile: Row) => {
+    setMessage('')
+    const nextBlocked = !profile.blocked
+    const { error } = await requireSupabase().rpc('admin_set_profile_blocked', {
+      p_user_id: profile.id,
+      p_blocked: nextBlocked,
     })
-    if (error) throw new Error(italianErrorMessage(error.message, 'Autorizzazione utente non riuscita.'))
-    event.currentTarget.reset()
+    if (error) {
+      setMessage(italianErrorMessage(error.message, 'Aggiornamento del blocco non riuscito.'))
+      return
+    }
+    setMessage(nextBlocked ? 'Utente bloccato.' : 'Utente sbloccato.')
     await reload()
   }
   const openKyc = async (profile: Row) => {
@@ -496,36 +488,29 @@ function UsersAdmin({ profiles, allowlist, initialKycUserId, reload }: { profile
     }
   }
   return (
-    <Section title="Utenti e saldo" note="Gestisci accessi, verifica KYC e saldo gettoni.">
-      <form onSubmit={addAccess} className="mb-5 grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-2">
-        <input className="w-full" name="subject" required placeholder="ID utente Telegram" style={input} />
-        <select className="w-full" name="role" style={input}><option value="user">utente</option><option value="admin">amministratore</option></select>
-        <button style={primary}>Autorizza</button>
-      </form>
-      {allowlist.map(entry => <div key={entry.telegram_subject} className="flex flex-col sm:flex-row sm:justify-between gap-2" style={row}><span className="break-all">{entry.telegram_subject}</span><span>{entry.role === 'admin' ? 'amministratore' : 'utente'} / {entry.enabled ? 'abilitato' : 'bloccato'}</span></div>)}
-      <h3 className="mt-5 mb-3">Profili registrati</h3>
+    <Section title="Utenti" note="I profili vengono creati al primo accesso Telegram. Gestisci KYC e blocco dell’account.">
+      {message && <p className="mb-4" style={{ color: message === 'Utente bloccato.' ? '#FCA5A5' : '#D7FE55' }}>{message}</p>}
       <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Cerca username o Telegram ID" style={{ ...input, width: '100%', marginBottom: 12 }} />
       {visibleProfiles.map(profile => (
         <div key={profile.id} className="flex flex-col lg:flex-row lg:items-center gap-3" style={row}>
           <div className="flex-1 min-w-0">
             <strong>@{profile.username}</strong>
-            <div className="break-all" style={muted}>{profile.role === 'admin' ? 'amministratore' : 'utente'} / {profile.telegram_subject}</div>
+            <div className="break-all" style={muted}>Telegram ID: {profile.telegram_subject} / {profile.role === 'admin' ? 'amministratore' : 'utente'}</div>
             <div style={muted}>
               {(profile.orders ?? []).filter((order: Row) => order.status === 'completed').length} completate / {(profile.feedback ?? []).length} recensioni
               {profile.kyc_cases?.retain_until ? ` / documenti fino a ${new Date(profile.kyc_cases.retain_until).toLocaleDateString('it-IT')}` : ''}
             </div>
           </div>
+          {profile.blocked && <span style={{ color: '#FCA5A5' }}>BLOCCATO</span>}
           <span style={{ color: profile.kyc_cases?.status === 'approved' ? '#D7FE55' : '#F59E0B' }}>KYC: {kycStatusLabel[profile.kyc_cases?.status ?? 'not_started']}</span>
-          {profile.kyc_cases?.status && profile.kyc_cases.status !== 'not_started' && <button style={smallButton} onClick={() => openKyc(profile)}>Documenti</button>}
-          <span>{profile.wallet_balances?.points ?? 0} gettoni / {profile.wallet_balances?.xp ?? 0} XP / {profile.wallet_balances?.spin_tickets ?? 0} biglietti</span>
+          <button style={smallButton} onClick={() => openKyc(profile)}>Documenti</button>
+          {profile.role !== 'admin' && (
+            <button style={profile.blocked ? smallButton : dangerButton} onClick={() => toggleBlocked(profile)}>
+              {profile.blocked ? 'Sblocca' : 'Blocca'}
+            </button>
+          )}
         </div>
       ))}
-      <form onSubmit={adjust} className="mt-5 grid grid-cols-1 md:grid-cols-4 gap-2">
-        <select className="w-full" required value={selected} onChange={e => setSelected(e.target.value)} style={input}><option value="">Utente</option>{profiles.map(p => <option key={p.id} value={p.id}>@{p.username}</option>)}</select>
-        <input className="w-full" type="number" value={points} onChange={e => setPoints(Number(e.target.value))} placeholder="Gettoni +/-" style={input} />
-        <input className="w-full" required value={reason} onChange={e => setReason(e.target.value)} placeholder="Motivo" style={input} />
-        <button style={primary}>Registra</button>
-      </form>
       {reviewUser && (
         <div className="fixed inset-0 z-50 p-3 sm:p-5 flex items-center justify-center" style={{ background: 'rgba(0,0,0,.85)' }}>
           <div className="p-5 rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto" style={panel}>
@@ -538,6 +523,7 @@ function UsersAdmin({ profiles, allowlist, initialKycUserId, reload }: { profile
             </div>
             {kycError && <p style={{ color: '#EF4444' }}>{kycError}</p>}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
+              {documents.length === 0 && !kycError && <p style={muted}>Nessun documento caricato.</p>}
               {documents.map(document => (
                 <div key={document.id}>
                   <div style={{ ...muted, marginBottom: 6 }}>{documentLabel[document.documentType]}</div>
@@ -554,6 +540,59 @@ function UsersAdmin({ profiles, allowlist, initialKycUserId, reload }: { profile
           </div>
         </div>
       )}
+    </Section>
+  )
+}
+
+function BalanceAdmin({ profiles, reload }: { profiles: Row[]; reload: () => Promise<void> }) {
+  const [query, setQuery] = useState('')
+  const [selected, setSelected] = useState('')
+  const [points, setPoints] = useState(0)
+  const [xp, setXp] = useState(0)
+  const [tickets, setTickets] = useState(0)
+  const [reason, setReason] = useState('')
+  const [message, setMessage] = useState('')
+  const visibleProfiles = profiles.filter(profile => `${profile.username} ${profile.telegram_subject}`.toLowerCase().includes(query.toLowerCase()))
+  const adjust = async (event: FormEvent) => {
+    event.preventDefault()
+    setMessage('')
+    try {
+      await adminAdjustWallet(selected, points, xp, tickets, reason)
+      setPoints(0)
+      setXp(0)
+      setTickets(0)
+      setReason('')
+      setMessage('Saldo aggiornato.')
+      await reload()
+    } catch (caught) {
+      setMessage(italianErrorMessage(caught, 'Aggiornamento del saldo non riuscito.'))
+    }
+  }
+  return (
+    <Section title="Saldo" note="Consulta tutti i partecipanti e registra modifiche a gettoni, XP o biglietti.">
+      {message && <p className="mb-4" style={{ color: message.includes('aggiornato') ? '#D7FE55' : '#EF4444' }}>{message}</p>}
+      <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Cerca username o Telegram ID" style={{ ...input, width: '100%', marginBottom: 12 }} />
+      {visibleProfiles.map(profile => (
+        <div key={profile.id} className="flex flex-col sm:flex-row sm:items-center gap-3" style={row}>
+          <div className="flex-1 min-w-0">
+            <strong>@{profile.username}</strong>
+            <div className="break-all" style={muted}>Telegram ID: {profile.telegram_subject}{profile.blocked ? ' / bloccato' : ''}</div>
+          </div>
+          <span>{profile.wallet_balances?.points ?? 0} gettoni / {profile.wallet_balances?.xp ?? 0} XP / {profile.wallet_balances?.spin_tickets ?? 0} biglietti</span>
+          <button type="button" style={smallButton} onClick={() => setSelected(profile.id)}>Seleziona</button>
+        </div>
+      ))}
+      <form onSubmit={adjust} className="mt-5 grid grid-cols-1 md:grid-cols-6 gap-2">
+        <select className="w-full" required value={selected} onChange={event => setSelected(event.target.value)} style={input}>
+          <option value="">Partecipante</option>
+          {profiles.map(profile => <option key={profile.id} value={profile.id}>@{profile.username}</option>)}
+        </select>
+        <input className="w-full" type="number" value={points} onChange={event => setPoints(Number(event.target.value))} placeholder="Gettoni +/-" style={input} />
+        <input className="w-full" type="number" value={xp} onChange={event => setXp(Number(event.target.value))} placeholder="XP +/-" style={input} />
+        <input className="w-full" type="number" value={tickets} onChange={event => setTickets(Number(event.target.value))} placeholder="Biglietti +/-" style={input} />
+        <input className="w-full" required minLength={4} value={reason} onChange={event => setReason(event.target.value)} placeholder="Motivo" style={input} />
+        <button style={primary}>Registra</button>
+      </form>
     </Section>
   )
 }
@@ -596,31 +635,126 @@ function OrdersAdmin({ orders, reload }: { orders: Row[]; reload: () => Promise<
 }
 
 function EconomyAdmin({ games, options, reload }: { games: Row[]; options: Row[]; reload: () => Promise<void> }) {
-  const update = async (game: Row, changes: Row) => {
+  const [drafts, setDrafts] = useState<Row[]>(options)
+  const [exampleSpins, setExampleSpins] = useState(100)
+  const [message, setMessage] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => { setDrafts(options) }, [options])
+
+  const activeOptions = drafts.filter(option => option.active)
+  const totalWeight = activeOptions.reduce((total, option) => total + Math.max(0, Number(option.weight) || 0), 0)
+  const expectedTokens = totalWeight > 0
+    ? activeOptions.reduce((total, option) => total + Number(option.points_awarded || 0) * Number(option.weight || 0), 0) / totalWeight
+    : 0
+
+  const updateGame = async (game: Row, changes: Row) => {
+    setMessage('')
     const { error } = await requireSupabase().from('game_configs').update(changes).eq('game_type', game.game_type)
-    if (error) throw new Error(italianErrorMessage(error.message, 'Aggiornamento del gioco non riuscito.'))
+    if (error) {
+      setMessage(italianErrorMessage(error.message, 'Aggiornamento del gioco non riuscito.'))
+      return
+    }
     await reload()
   }
-  const updateOption = async (id: string, changes: Row) => {
-    const { error } = await requireSupabase().from('game_reward_options').update(changes).eq('id', id)
-    if (error) throw new Error(italianErrorMessage(error.message, 'Aggiornamento del premio non riuscito.'))
-    await reload()
+  const updateDraft = (id: string, changes: Row) => {
+    setDrafts(current => current.map(option => option.id === id ? { ...option, ...changes } : option))
+  }
+  const saveOptions = async () => {
+    setMessage('')
+    if (!activeOptions.length) {
+      setMessage('Attiva almeno un premio.')
+      return
+    }
+    if (drafts.some(option => !String(option.label ?? '').trim() || !Number.isInteger(Number(option.weight)) || Number(option.weight) < 1 || !Number.isInteger(Number(option.points_awarded)) || Number(option.points_awarded) < 0)) {
+      setMessage('Inserisci nomi, pesi interi maggiori di zero e gettoni validi.')
+      return
+    }
+    setSaving(true)
+    try {
+      const db = requireSupabase()
+      const results = await Promise.all(drafts.map(option => db.from('game_reward_options').update({
+        label: String(option.label).trim(),
+        points_awarded: Number(option.points_awarded),
+        weight: Number(option.weight),
+        active: Boolean(option.active),
+      }).eq('id', option.id)))
+      const error = results.find(result => result.error)?.error
+      if (error) {
+        setMessage(italianErrorMessage(error.message, 'Aggiornamento del premio non riuscito.'))
+        return
+      }
+      setMessage('Configurazione premi salvata.')
+      await reload()
+    } finally {
+      setSaving(false)
+    }
   }
   return (
-    <Section title="Ruota dei premi" note="Configura attivazione, gettoni e probabilità dei premi.">
+    <Section title="Ruota dei premi" note="Imposta i pesi dei premi e controlla subito quante volte potrebbero uscire.">
       {games.filter(game => game.game_type === 'spin').map(game => (
         <div key={game.game_type} className="flex flex-col sm:flex-row sm:items-center gap-3" style={row}>
           <div className="flex-1 min-w-0"><strong>{game.title}</strong></div>
-          <Toggle label="Attivo" active={game.active} onClick={() => update(game, { active: !game.active })} />
+          <Toggle label="Attivo" active={game.active} onClick={() => updateGame(game, { active: !game.active })} />
         </div>
       ))}
-      <h3 className="my-4">Caselle configurabili</h3>
-      {options.map(option => <div key={option.id} className="grid grid-cols-2 md:grid-cols-[1fr_auto_auto_auto] gap-3 items-end" style={row}>
-        <input className="col-span-2 md:col-span-1 w-full" defaultValue={option.label} onBlur={event => updateOption(option.id, { label: event.target.value })} style={input} />
-        <label style={muted}>Gettoni <input type="number" min={0} defaultValue={option.points_awarded} onBlur={event => updateOption(option.id, { points_awarded: Number(event.target.value) })} style={{ ...input, width: 80, display: 'block' }} /></label>
-        <label style={muted}>Peso <input type="number" min={1} defaultValue={option.weight} onBlur={event => updateOption(option.id, { weight: Number(event.target.value) })} style={{ ...input, width: 80, display: 'block' }} /></label>
-        <div className="col-span-2 md:col-span-1"><Toggle label="Attiva" active={option.active} onClick={() => updateOption(option.id, { active: !option.active })} /></div>
-      </div>)}
+      <div className="p-3 sm:p-4 my-5 rounded-xl" style={{ background: 'rgba(215,254,85,.06)', border: '1px solid rgba(215,254,85,.18)' }}>
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-4">
+          <div>
+            <strong>Anteprima probabilità</strong>
+            <div style={muted}>Il peso è proporzionale: peso 20 su totale 100 equivale al 20%.</div>
+          </div>
+          <label style={muted}>
+            Esempio su
+            <select value={exampleSpins} onChange={event => setExampleSpins(Number(event.target.value))} style={{ ...input, marginLeft: 8 }}>
+              {[10, 100, 1000].map(value => <option key={value} value={value}>{value} giri</option>)}
+            </select>
+          </label>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <Metric label="Premi attivi" value={activeOptions.length} />
+          <Metric label="Peso totale" value={totalWeight} />
+          <div className="p-4 rounded-xl" style={panel}>
+            <div style={muted}>Gettoni medi / giro</div>
+            <div style={{ fontFamily: 'Orbitron', fontSize: 22, color: '#D7FE55' }}>{formatItalianNumber(expectedTokens, 2)}</div>
+          </div>
+        </div>
+        <div className="mt-3" style={muted}>
+          In {exampleSpins} giri: circa {formatItalianNumber(expectedTokens * exampleSpins, 0)} gettoni complessivi.
+        </div>
+      </div>
+      <h3 className="my-4">Premi configurabili</h3>
+      {drafts.map(option => {
+        const weight = Math.max(0, Number(option.weight) || 0)
+        const probability = option.active && totalWeight > 0 ? weight / totalWeight : 0
+        const expected = probability * exampleSpins
+        const onceEvery = probability > 0 ? Math.round(1 / probability) : 0
+        return (
+          <div key={option.id} className="p-3 mb-3 rounded-xl" style={{ background: 'rgba(245,245,245,.035)' }}>
+            <div className="grid grid-cols-2 md:grid-cols-[minmax(160px,1fr)_94px_94px_auto] gap-3 items-end">
+              <label className="col-span-2 md:col-span-1" style={muted}>Nome premio
+                <input className="w-full" value={option.label} onChange={event => updateDraft(option.id, { label: event.target.value })} style={{ ...input, display: 'block', marginTop: 5 }} />
+              </label>
+              <label style={muted}>Gettoni
+                <input type="number" min={0} step={1} value={option.points_awarded} onChange={event => updateDraft(option.id, { points_awarded: Number(event.target.value) })} style={{ ...input, width: '100%', display: 'block', marginTop: 5 }} />
+              </label>
+              <label style={muted}>Peso
+                <input type="number" min={1} step={1} value={option.weight} onChange={event => updateDraft(option.id, { weight: Number(event.target.value) })} style={{ ...input, width: '100%', display: 'block', marginTop: 5 }} />
+              </label>
+              <div className="col-span-2 md:col-span-1"><Toggle label="Attiva" active={option.active} onClick={() => updateDraft(option.id, { active: !option.active })} /></div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3">
+              <div style={muted}>Probabilità: <strong style={{ color: option.active ? '#D7FE55' : 'rgba(245,245,245,.45)' }}>{formatItalianNumber(probability * 100, 2)}%</strong></div>
+              <div style={muted}>Su {exampleSpins} giri: <strong style={{ color: '#F5F5F5' }}>{formatItalianNumber(expected, expected < 10 ? 1 : 0)} volte</strong></div>
+              <div style={muted}>{onceEvery ? `Circa 1 ogni ${onceEvery} giri` : 'Premio disattivato'}</div>
+            </div>
+          </div>
+        )
+      })}
+      {message && <p className="mb-4" style={{ color: message.includes('salvata') ? '#D7FE55' : '#EF4444' }}>{message}</p>}
+      <button type="button" disabled={saving} onClick={saveOptions} style={{ ...primary, width: '100%', opacity: saving ? 0.65 : 1 }}>
+        {saving ? 'Salvataggio...' : 'Salva configurazione premi'}
+      </button>
     </Section>
   )
 }
@@ -761,6 +895,9 @@ function Toggle({ label, active, onClick }: { label: string; active: boolean; on
 }
 function roundPrice(price: number) {
   return Math.round(price / 5) * 5
+}
+function formatItalianNumber(value: number, digits: number) {
+  return value.toLocaleString('it-IT', { minimumFractionDigits: 0, maximumFractionDigits: digits })
 }
 const panel = { background: '#11181B', border: '1px solid rgba(126,156,168,.18)' }
 const row = { padding: 12, marginBottom: 8, background: 'rgba(245,245,245,.035)', borderRadius: 10, minWidth: 0 }

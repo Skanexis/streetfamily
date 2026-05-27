@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
-import { getAccessProfile } from '../lib/api'
+import { getAccessProfile, getAccountBlocked } from '../lib/api'
 import { isSupabaseConfigured, requireSupabase, supabase } from '../lib/supabase'
 import { italianErrorMessage } from '../lib/errors'
 import type { Profile } from '../data'
@@ -11,6 +11,7 @@ interface AuthValue {
   session: Session | null
   profile: Profile | null
   denied: boolean
+  blocked: boolean
   beginTelegramBotLogin: () => Promise<{ token: string; botUrl: string }>
   checkTelegramBotLogin: (token: string) => Promise<'pending' | 'confirmed' | 'denied' | 'expired'>
   loginFromTelegramMiniApp: (initData: string) => Promise<void>
@@ -37,12 +38,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [denied, setDenied] = useState(false)
+  const [blocked, setBlocked] = useState(false)
   const [loading, setLoading] = useState(isSupabaseConfigured)
 
   const refreshProfile = async () => {
     if (!supabase) return
+    const accountBlocked = await getAccountBlocked()
+    if (accountBlocked) {
+      setProfile(null)
+      setBlocked(true)
+      setDenied(false)
+      return
+    }
     const current = await getAccessProfile()
     setProfile(current)
+    setBlocked(false)
     setDenied(!current)
   }
 
@@ -58,6 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!nextSession) {
         setProfile(null)
         setDenied(false)
+        setBlocked(false)
         setLoading(false)
         return
       }
@@ -68,12 +79,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => listener.subscription.unsubscribe()
   }, [])
 
+  useEffect(() => {
+    if (!session) return
+    const checkAccess = () => { void refreshProfile().catch(() => undefined) }
+    const timer = window.setInterval(checkAccess, 30000)
+    window.addEventListener('focus', checkAccess)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener('focus', checkAccess)
+    }
+  }, [session])
+
   const value = useMemo<AuthValue>(() => ({
     configured: isSupabaseConfigured,
     loading,
     session,
     profile,
     denied,
+    blocked,
     beginTelegramBotLogin: async () => {
       const db = requireSupabase()
       const { data, error } = await db.functions.invoke('telegram-auth-start', { body: {} })
@@ -93,7 +116,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loginFromTelegramMiniApp: async (initData: string) => {
       const db = requireSupabase()
       const { data, error } = await db.functions.invoke('telegram-miniapp-auth', { body: { initData } })
-      if (error) throw new Error(await edgeFunctionError(error, 'Accesso alla mini applicazione non riuscito.'))
+      if (error) {
+        const message = await edgeFunctionError(error, 'Accesso alla mini applicazione non riuscito.')
+        if (message === 'Il tuo account è bloccato.') {
+          setBlocked(true)
+          return
+        }
+        throw new Error(message)
+      }
       const verified = await db.auth.verifyOtp({ token_hash: data.tokenHash, type: 'magiclink' })
       if (verified.error) throw new Error(italianErrorMessage(verified.error.message, 'Accesso Telegram non riuscito.'))
     },
@@ -102,7 +132,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await db.auth.signOut()
     },
     refreshProfile,
-  }), [loading, session, profile, denied])
+  }), [loading, session, profile, denied, blocked])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

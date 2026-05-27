@@ -17,6 +17,8 @@ const exactMessages: Record<string, string> = {
   GRAM_AMOUNT_INVALID: 'Inserisci almeno 25 g, in multipli di 25 g.',
   ORDER_MUST_BE_ACCEPTED: 'Accetta prima l’ordine.',
   INVALID_ORDER_TRANSITION: 'Transizione ordine non valida.',
+  'Account bloccato.': 'Il tuo account è bloccato.',
+  'Username Telegram richiesto.': 'Imposta un username @ nelle impostazioni Telegram prima di accedere.',
 }
 
 export function italianErrorMessage(error: unknown, fallback = 'Operazione non riuscita. Riprova.') {
@@ -36,6 +38,6 @@ export function italianErrorMessage(error: unknown, fallback = 'Operazione non r
   if (/row-level security|permission denied|not authorized|unauthorized|jwt|allowlist|access denied/i.test(message)) return 'Non sei autorizzato a eseguire questa operazione.'
   if (/failed to fetch|fetch failed|network|load failed/i.test(message)) return 'Connessione non disponibile. Controlla la rete e riprova.'
   if (/invalid login credentials|email not confirmed|otp|token.*expired/i.test(message)) return 'Accesso non valido o scaduto. Riprova.'
-  if (/^Errore|^Impossibile|^Non |^Accesso |^Operazione |^La |^Il |^Inserisci |^Acquisisci |^KYC |^Fotocamera |^Foto |^Nessun |^Prodotto |^Categoria |^Configurazione |^Caricamento |^Invio |^Lettura |^Decisione |^Verifica |^Autorizzazione |^Dati |^Richiesta |^Codice |^Metodo |^Sono |^Puoi |^Completa |^Questo |^Seleziona |^Conservazione /i.test(message)) return message
+  if (/^Errore|^Impossibile|^Non |^Accesso |^Operazione |^La |^Il |^Inserisci |^Acquisisci |^KYC |^Fotocamera |^Foto |^Nessun |^Prodotto |^Categoria |^Configurazione |^Caricamento |^Invio |^Lettura |^Decisione |^Verifica |^Autorizzazione |^Dati |^Richiesta |^Codice |^Metodo |^Motivo |^Saldo |^Sono |^Puoi |^Completa |^Questo |^Seleziona |^Conservazione /i.test(message)) return message
   return fallback
 }

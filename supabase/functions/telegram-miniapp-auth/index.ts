@@ -58,6 +58,7 @@ Deno.serve(async req => {
     const telegramUser = await validateInitData(initData)
     const telegramId = String(telegramUser.id)
     const isAdmin = envAdminIds().has(telegramId)
+    if (!isAdmin && !telegramUser.username?.trim()) return json({ error: 'Username Telegram richiesto.' }, 403)
     const db = adminClient()
     const { data: access, error: accessError } = await db.from('staging_allowlist')
       .select('enabled,role')
@@ -81,8 +82,9 @@ Deno.serve(async req => {
       first_name: telegramUser.first_name,
       avatar_url: telegramUser.photo_url,
     }
-    const { data: profile, error: profileError } = await db.from('profiles').select('id').eq('telegram_subject', telegramId).maybeSingle()
+    const { data: profile, error: profileError } = await db.from('profiles').select('id,blocked').eq('telegram_subject', telegramId).maybeSingle()
     if (profileError) return json({ error: publicErrorMessage(profileError.message, 'Accesso Telegram non riuscito.') }, 500)
+    if (profile?.blocked && !isAdmin) return json({ error: 'Account bloccato.' }, 403)
     if (!profile) {
       const created = await db.auth.admin.createUser({ email, email_confirm: true, user_metadata: metadata })
       if (created.error && !/already registered|already exists/i.test(created.error.message)) {
@@ -109,6 +111,12 @@ Deno.serve(async req => {
         points: 0,
       }, { onConflict: 'user_id', ignoreDuplicates: true })
       if (walletError) return json({ error: publicErrorMessage(walletError.message, 'Creazione account non riuscita.') }, 500)
+    } else {
+      const { error: updateProfileError } = await db.from('profiles').update({
+        username: metadata.username,
+        avatar_url: metadata.avatar_url,
+      }).eq('id', profile.id)
+      if (updateProfileError) return json({ error: publicErrorMessage(updateProfileError.message, 'Accesso Telegram non riuscito.') }, 500)
     }
     return json({ tokenHash: generated.data.properties.hashed_token, isAdmin })
   } catch (caught) {
