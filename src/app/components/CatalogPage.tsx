@@ -89,7 +89,7 @@ function Detail({ product, feedback, onClose, addToCart }: { product?: Product; 
       <label className="block mb-3" style={{ color: 'rgba(245,245,245,.65)', fontSize: 13 }}>
         Scegli i grammi (minimo {minimumGrams} g, multipli di {gramStep} g)
         <div className="flex items-center gap-3 mt-2">
-          <input type="number" min={minimumGrams} max={maximumGrams} step={gramStep} value={customGrams} onChange={event => setCustomGrams(event.target.value)} style={weightInput} />
+          <input inputMode="numeric" pattern="[0-9]*" value={customGrams} onChange={event => setCustomGrams(event.target.value.replace(/\D/g, ''))} placeholder="0" style={weightInput} />
           <strong style={{ color: validWeight ? '#D7FE55' : '#EF4444' }}>{validWeight && price !== null ? `EUR ${formatPrice(price)}` : 'Peso non valido'}</strong>
         </div>
       </label>

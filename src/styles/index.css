@@ -2,8 +2,46 @@
 @import './tailwind.css';
 @import './theme.css';
 
+.sf-app-shell {
+  min-height: var(--sf-app-height, 100dvh);
+}
+
 .sf-mobile-nav-space {
-  padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  min-height: calc(var(--sf-app-height, 100dvh) - 28px);
+  padding-bottom: calc(78px + env(safe-area-inset-bottom, 0px));
+}
+
+html.sf-telegram-app,
+html.sf-telegram-app body,
+html.sf-telegram-app #root {
+  height: var(--sf-app-height, 100dvh);
+  overscroll-behavior: none;
+}
+
+html.sf-telegram-app body {
+  background-attachment: scroll;
+}
+
+html.sf-telegram-app .sf-app-shell {
+  height: var(--sf-app-height, 100dvh);
+  min-height: var(--sf-app-height, 100dvh);
+  overflow-y: auto;
+  overscroll-behavior-y: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+html.sf-game-modal-open .sf-app-shell {
+  overflow: hidden;
+}
+
+html.sf-scratching,
+html.sf-scratching body {
+  overscroll-behavior: none;
+  touch-action: none;
+}
+
+html.sf-scratching .sf-game-overlay {
+  overflow: hidden;
 }
 
 .sf-arcade {
@@ -86,6 +124,31 @@
   margin: 0 0 1.1rem;
   font: 900 clamp(3.1rem, 9vw, 5.5rem)/.88 'Orbitron', sans-serif;
   letter-spacing: -.065em;
+}
+
+.sf-casino-lights {
+  display: flex;
+  gap: .62rem;
+  width: fit-content;
+  margin: 0 0 1.15rem;
+}
+
+.sf-casino-lights span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #8b5cf6;
+  box-shadow: 0 0 13px rgba(139, 92, 246, .9);
+  animation: sf-lights 1.35s ease-in-out infinite alternate;
+}
+
+.sf-casino-lights span:nth-child(3n) {
+  background: #22c55e;
+  box-shadow: 0 0 13px rgba(34, 197, 94, .9);
+}
+
+.sf-casino-lights span:nth-child(2n) {
+  animation-delay: -.65s;
 }
 
 .sf-arcade-title span {
@@ -447,6 +510,12 @@
 }
 
 .sf-game-overlay {
+  z-index: 140;
+  height: var(--sf-app-height, 100dvh);
+  min-height: 100dvh;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
   background:
     radial-gradient(circle at 50% 20%, rgba(139, 92, 246, .16), transparent 27rem),
     #09090b;
@@ -460,8 +529,32 @@
 }
 
 .sf-overlay-header {
-  padding: .25rem 0 1rem;
+  margin-left: -.2rem;
+  margin-right: -.2rem;
+  padding: max(1rem, env(safe-area-inset-top, 0px)) .2rem 1rem;
   border-bottom: 1px solid rgba(255, 255, 255, .06);
+  background: linear-gradient(#09090b 70%, rgba(9, 9, 11, 0));
+}
+
+.sf-game-overlay-frame {
+  min-height: var(--sf-app-height, 100dvh);
+  padding-bottom: max(1.25rem, env(safe-area-inset-bottom, 0px));
+}
+
+.sf-overlay-close {
+  flex-shrink: 0;
+  min-width: 46px;
+  min-height: 46px;
+  display: grid;
+  place-items: center;
+  transition: border-color .18s ease, background .18s ease;
+}
+
+.sf-overlay-close:hover,
+.sf-overlay-close:focus-visible {
+  border-color: rgba(139, 92, 246, .45) !important;
+  background: rgba(139, 92, 246, .13) !important;
+  outline: none;
 }
 
 .sf-overlay-label {
@@ -577,11 +670,26 @@
   background:
     radial-gradient(circle at center, rgba(34, 197, 94, .16), transparent 70%),
     #0a0a0b;
+  contain: layout paint;
+  touch-action: none;
 }
 
 .sf-scratch-ticket.is-revealed {
   border-color: rgba(34, 197, 94, .38);
   box-shadow: 0 0 54px rgba(34, 197, 94, .22);
+}
+
+.sf-scratch-canvas {
+  display: block;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  cursor: crosshair;
+}
+
+.sf-scratch-stage {
+  overflow: hidden;
 }
 
 .sf-progress {
@@ -613,6 +721,10 @@
   border-radius: inherit;
   background: linear-gradient(90deg, #8b5cf6, #22c55e);
   transition: width .18s ease;
+}
+
+.sf-progress.is-complete .sf-progress-label strong {
+  color: #4ade80;
 }
 
 .sf-box-viewport {
@@ -704,6 +816,52 @@
   background: rgba(239, 68, 68, .09);
 }
 
+.sf-unavailable {
+  max-width: 420px;
+  padding-top: 2.4rem;
+  padding-bottom: 2.1rem;
+}
+
+.sf-locked-mark {
+  display: grid;
+  place-items: center;
+  width: 68px;
+  height: 68px;
+  margin: 0 auto 1.25rem;
+  border: 1px solid rgba(139, 92, 246, .25);
+  border-radius: 1.1rem;
+  color: #a78bfa;
+  background: rgba(139, 92, 246, .11);
+  box-shadow: 0 0 35px rgba(139, 92, 246, .14);
+}
+
+.sf-unavailable h3 {
+  margin: .65rem 0 .6rem;
+  color: #f5f5f5;
+  font: 700 1.6rem 'Space Grotesk', sans-serif;
+}
+
+.sf-unavailable p {
+  margin: 0 auto 1.55rem;
+  max-width: 300px;
+  color: rgba(245,245,245,.55);
+  font-size: .88rem;
+  line-height: 1.6;
+}
+
+.sf-return-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .5rem;
+  width: 100%;
+  padding: .9rem 1rem;
+  border: 1px solid rgba(139, 92, 246, .3);
+  border-radius: .8rem;
+  color: #f5f5f5;
+  background: linear-gradient(100deg, rgba(124,58,237,.62), rgba(139,92,246,.35));
+}
+
 .sf-admin-wallet-row {
   border: 1px solid rgba(126, 156, 168, .08);
 }
@@ -726,6 +884,92 @@
 .sf-admin-wallet-pills span:nth-child(n+3) {
   border-color: rgba(139, 92, 246, .2);
   background: rgba(139, 92, 246, .08);
+}
+
+.sf-balance-editor {
+  padding: clamp(.85rem, 2.5vw, 1.1rem);
+  border: 1px solid rgba(139, 92, 246, .18);
+  border-radius: 1rem;
+  background:
+    radial-gradient(circle at 100% 0, rgba(139, 92, 246, .13), transparent 15rem),
+    rgba(8, 12, 14, .44);
+}
+
+.sf-balance-target {
+  display: grid;
+  grid-template-columns: minmax(200px, 300px) 1fr;
+  align-items: center;
+  gap: .8rem;
+  margin-bottom: 1rem;
+  color: rgba(245, 245, 245, .68);
+  font-size: .84rem;
+}
+
+.sf-balance-fields {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(120px, 1fr));
+  gap: .7rem;
+}
+
+.sf-balance-field > span {
+  display: block;
+  margin-bottom: .4rem;
+  color: rgba(245, 245, 245, .58);
+  font-size: .76rem;
+}
+
+.sf-balance-input {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 36px;
+  height: 44px;
+  overflow: hidden;
+  border: 1px solid rgba(139, 92, 246, .22);
+  border-radius: .7rem;
+  background: rgba(10, 10, 11, .8);
+}
+
+.sf-balance-input:focus-within {
+  border-color: rgba(139, 92, 246, .62);
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, .12);
+}
+
+.sf-balance-input button {
+  display: grid;
+  place-items: center;
+  color: #c4b5fd;
+  background: rgba(139, 92, 246, .08);
+}
+
+.sf-balance-input input {
+  min-width: 0;
+  width: 100%;
+  padding: 0 .25rem;
+  color: #f5f5f5;
+  background: transparent;
+  text-align: center;
+}
+
+.sf-balance-quick {
+  display: flex;
+  justify-content: flex-end;
+  gap: .3rem;
+  margin-top: .34rem;
+}
+
+.sf-balance-quick button {
+  padding: .22rem .5rem;
+  border-radius: 999px;
+  color: rgba(245,245,245,.62);
+  background: rgba(245,245,245,.045);
+  font-size: .7rem;
+}
+
+.sf-balance-submit {
+  display: grid;
+  grid-template-columns: minmax(190px, 1fr) auto;
+  align-items: center;
+  gap: .65rem;
+  margin-top: 1rem;
 }
 
 .sf-admin-game-config {
@@ -877,6 +1121,10 @@
   50% { opacity: .48; transform: scale(.72); }
 }
 
+@keyframes sf-lights {
+  to { opacity: .28; transform: scale(.76); }
+}
+
 .sf-top-nav-arcade {
   background: rgba(10, 10, 11, .8) !important;
   border-bottom-color: rgba(139, 92, 246, .18) !important;
@@ -898,6 +1146,18 @@
   border-top-color: rgba(139, 92, 246, .18) !important;
 }
 
+.sf-bottom-nav {
+  transform: translate3d(0, 0, 0);
+  will-change: transform;
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+html.sf-telegram-app .sf-bottom-nav {
+  height: calc(62px + env(safe-area-inset-bottom, 0px)) !important;
+  contain: layout paint;
+}
+
 .sf-bottom-nav-arcade button:nth-child(3) {
   color: #a78bfa !important;
 }
@@ -914,6 +1174,10 @@
 }
 
 @media (max-width: 767px) {
+  .sf-arcade {
+    padding-top: calc(76px + env(safe-area-inset-top, 0px)) !important;
+  }
+
   .sf-arcade-hero {
     display: block;
     margin-top: 1.25rem;
@@ -952,13 +1216,54 @@
     display: block;
   }
 
+  .sf-balance-target,
+  .sf-balance-submit {
+    grid-template-columns: 1fr;
+  }
+
+  .sf-balance-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .sf-admin-ring {
     margin: 0 auto 1rem;
+  }
+
+  .sf-game-overlay-frame {
+    padding-left: .9rem;
+    padding-right: .9rem;
+  }
+
+  .sf-overlay-content {
+    align-items: flex-start !important;
+  }
+
+  .sf-overlay-header {
+    margin-bottom: 1.25rem;
+  }
+
+  .sf-scratch-stage {
+    padding: .9rem !important;
+  }
+
+  .sf-scratch-stage .sf-scratch-ticket {
+    height: clamp(176px, 30vh, 200px) !important;
+    margin: 1.1rem 0 !important;
+  }
+}
+
+@media (max-width: 420px) {
+  .sf-balance-fields {
+    grid-template-columns: 1fr;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .sf-live-dot {
+    animation: none;
+  }
+
+  .sf-casino-lights span {
     animation: none;
   }
 

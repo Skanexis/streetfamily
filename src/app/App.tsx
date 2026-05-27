@@ -51,6 +51,43 @@ function MemberApplication() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
+  useEffect(() => {
+    type TelegramViewport = {
+      initData?: string
+      viewportHeight?: number
+      viewportStableHeight?: number
+      expand?: () => void
+      ready?: () => void
+      disableVerticalSwipes?: () => void
+      onEvent?: (event: string, callback: () => void) => void
+      offEvent?: (event: string, callback: () => void) => void
+    }
+    const telegram = (window as Window & { Telegram?: { WebApp?: TelegramViewport } }).Telegram?.WebApp
+    const root = document.documentElement
+    const isMiniApp = Boolean(telegram?.initData)
+    const setViewportHeight = () => {
+      const height = telegram?.viewportStableHeight || telegram?.viewportHeight || window.visualViewport?.height || window.innerHeight
+      root.style.setProperty('--sf-app-height', `${Math.round(height)}px`)
+    }
+    root.classList.toggle('sf-telegram-app', isMiniApp)
+    setViewportHeight()
+    if (isMiniApp) {
+      telegram?.ready?.()
+      telegram?.expand?.()
+      telegram?.disableVerticalSwipes?.()
+    }
+    window.visualViewport?.addEventListener('resize', setViewportHeight)
+    window.addEventListener('orientationchange', setViewportHeight)
+    telegram?.onEvent?.('viewportChanged', setViewportHeight)
+    return () => {
+      root.classList.remove('sf-telegram-app')
+      root.style.removeProperty('--sf-app-height')
+      window.visualViewport?.removeEventListener('resize', setViewportHeight)
+      window.removeEventListener('orientationchange', setViewportHeight)
+      telegram?.offEvent?.('viewportChanged', setViewportHeight)
+    }
+  }, [])
+
   const loadData = useCallback(async () => {
     try {
       const [catalog, availableLevels, activity, currentKyc, publishedBroadcasts, areas] = await Promise.all([
@@ -106,7 +143,7 @@ function MemberApplication() {
     setCartOpen(true)
   }
   return (
-    <div style={{ minHeight: '100vh', background: '#080C0E', color: '#F5F5F5', fontFamily: 'Inter, sans-serif' }}>
+    <div className="sf-app-shell" style={{ background: '#080C0E', color: '#F5F5F5', fontFamily: 'Inter, sans-serif' }}>
       <TopNav
         page={page}
         navigate={navigate}

@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
-import { Package, Tags, Users, Gamepad2, ClipboardList, Settings, Megaphone, MessageSquare, Wallet } from 'lucide-react'
+import { Package, Tags, Users, Gamepad2, ClipboardList, Settings, Megaphone, MessageSquare, Minus, Plus, Wallet } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import { adminAdjustWallet, adminDeleteGameOption, adminSaveGameOptions, adminSetGameActive, adminSimulateGame, getAdminDashboard, getAdminKycDocuments, reviewKyc } from '../lib/api'
 import { requireSupabase } from '../lib/supabase'
@@ -8,6 +8,7 @@ import type { Broadcast, DashboardData, GameType, KycReviewDocument } from '../d
 
 type Tab = 'catalog' | 'categories' | 'broadcasts' | 'users' | 'balance' | 'orders' | 'economy' | 'feedback' | 'settings'
 type Row = Record<string, any>
+type NumericDraft = string | number
 const orderStatusLabel: Record<string, string> = { submitted: 'Inviata', processing: 'Accettata', completed: 'Completata', cancelled: 'Rifiutata' }
 const feedbackStatusLabel: Record<string, string> = { pending: 'In moderazione', published: 'Pubblicata', hidden: 'Nascosta' }
 const kycStatusLabel: Record<string, string> = { not_started: 'Non iniziata', collecting: 'In raccolta', submitted: 'Inviata', approved: 'Approvata', rejected: 'Rifiutata' }
@@ -141,10 +142,15 @@ function CatalogAdmin({ products, categories, reload }: { products: Row[]; categ
     const values = new FormData(event.currentTarget)
     const db = requireSupabase()
     const name = String(values.get('name'))
+    const prices = Object.fromEntries([25, 50, 100, 300, 500, 1000].map(grams => [grams, parseOptionalInteger(String(values.get(`price${grams}`))) ?? -1]))
+    if (Object.values(prices).some(price => price < 0)) {
+      setMessage('Inserisci prezzi validi.')
+      return
+    }
     const { error } = await db.rpc('admin_create_demo_product', {
       p_name: name,
       p_category_id: values.get('category'),
-      p_prices: Object.fromEntries([25, 50, 100, 300, 500, 1000].map(grams => [grams, roundPrice(Number(values.get(`price${grams}`)))])),
+      p_prices: Object.fromEntries(Object.entries(prices).map(([grams, price]) => [grams, roundPrice(price)])),
       p_announce: values.get('announce') === 'on',
     })
     if (error) throw new Error(italianErrorMessage(error.message, 'Creazione del prodotto non riuscita.'))
@@ -185,7 +191,7 @@ function CatalogAdmin({ products, categories, reload }: { products: Row[]; categ
       <form onSubmit={addProduct} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 mb-6">
         <input className="w-full" name="name" required placeholder="Nome prodotto" style={input} />
         <select className="w-full" name="category" required style={input}><option value="">Categoria</option>{categories.map(category => <option value={category.id} key={category.id}>{category.name}</option>)}</select>
-        {[25, 50, 100, 300, 500, 1000].map(grams => <input className="w-full" key={grams} name={`price${grams}`} type="number" min="0" step="5" required placeholder={`EUR ${grams} g`} style={input} />)}
+        {[25, 50, 100, 300, 500, 1000].map(grams => <input className="w-full" key={grams} name={`price${grams}`} inputMode="numeric" pattern="[0-9]*" required placeholder={`EUR ${grams} g`} style={input} />)}
         <button style={primary}>Crea non pubblicato</button>
         <label className="sm:col-span-2 lg:col-span-4 flex items-start gap-2" style={muted}>
           <input type="checkbox" name="announce" />
@@ -205,7 +211,14 @@ function CatalogAdmin({ products, categories, reload }: { products: Row[]; categ
             {(product.product_variants ?? []).filter((variant: Row) => variant.unit_amount).map((variant: Row) => (
               <div key={variant.id} className="grid grid-cols-[1fr_82px] sm:grid-cols-[1fr_82px_auto] gap-2 items-center p-2 rounded-lg" style={{ background: '#080C0E' }}>
                 <span>{variant.unit_amount} g / +{variant.token_award}</span>
-                <input type="number" min="0" step="5" defaultValue={roundPrice(Number(variant.price))} onBlur={event => setPrice(variant.id, Number(event.target.value))} style={{ ...input, width: 78 }} />
+                <input inputMode="numeric" pattern="[0-9]*" defaultValue={roundPrice(Number(variant.price))} onBlur={event => {
+                  const price = parseOptionalInteger(event.currentTarget.value)
+                  if (price === null || price < 0) {
+                    event.currentTarget.value = String(roundPrice(Number(variant.price)))
+                    return
+                  }
+                  void setPrice(variant.id, price)
+                }} style={{ ...input, width: 78 }} />
                 <div className="col-span-2 sm:col-span-1"><Toggle label="Disponibile" active={variant.inventory_status?.available ?? false} onClick={() => setAvailability(variant)} /></div>
               </div>
             ))}
@@ -547,24 +560,31 @@ function UsersAdmin({ profiles, initialKycUserId, reload }: { profiles: Row[]; i
 function BalanceAdmin({ profiles, reload }: { profiles: Row[]; reload: () => Promise<void> }) {
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState('')
-  const [points, setPoints] = useState(0)
-  const [xp, setXp] = useState(0)
-  const [spinTickets, setSpinTickets] = useState(0)
-  const [scratchTickets, setScratchTickets] = useState(0)
-  const [boxTickets, setBoxTickets] = useState(0)
+  const [points, setPoints] = useState('')
+  const [xp, setXp] = useState('')
+  const [spinTickets, setSpinTickets] = useState('')
+  const [scratchTickets, setScratchTickets] = useState('')
+  const [boxTickets, setBoxTickets] = useState('')
   const [reason, setReason] = useState('')
   const [message, setMessage] = useState('')
   const visibleProfiles = profiles.filter(profile => `${profile.username} ${profile.telegram_subject}`.toLowerCase().includes(query.toLowerCase()))
+  const selectedProfile = profiles.find(profile => profile.id === selected)
+  const adjustDraft = (value: string, setter: (next: string) => void, delta: number) => setter(String((parseOptionalInteger(value) ?? 0) + delta))
   const adjust = async (event: FormEvent) => {
     event.preventDefault()
     setMessage('')
     try {
-      await adminAdjustWallet(selected, points, xp, spinTickets, scratchTickets, boxTickets, reason)
-      setPoints(0)
-      setXp(0)
-      setSpinTickets(0)
-      setScratchTickets(0)
-      setBoxTickets(0)
+      const deltas = [points, xp, spinTickets, scratchTickets, boxTickets].map(value => parseOptionalInteger(value) ?? 0)
+      if (deltas.every(value => value === 0)) {
+        setMessage('Inserisci almeno una variazione.')
+        return
+      }
+      await adminAdjustWallet(selected, deltas[0], deltas[1], deltas[2], deltas[3], deltas[4], reason)
+      setPoints('')
+      setXp('')
+      setSpinTickets('')
+      setScratchTickets('')
+      setBoxTickets('')
       setReason('')
       setMessage('Saldo aggiornato.')
       await reload()
@@ -589,21 +609,28 @@ function BalanceAdmin({ profiles, reload }: { profiles: Row[]; reload: () => Pro
             <span>Scratch {profile.wallet_balances?.scratch_tickets ?? 0}</span>
             <span>Box {profile.wallet_balances?.box_tickets ?? 0}</span>
           </div>
-          <button type="button" style={smallButton} onClick={() => setSelected(profile.id)}>Seleziona</button>
+          <button type="button" style={smallButton} onClick={() => setSelected(profile.id)}>{selected === profile.id ? 'Selezionato' : 'Seleziona'}</button>
         </div>
       ))}
-      <form onSubmit={adjust} className="mt-5 grid grid-cols-1 md:grid-cols-4 gap-2">
-        <select className="w-full" required value={selected} onChange={event => setSelected(event.target.value)} style={input}>
-          <option value="">Partecipante</option>
-          {profiles.map(profile => <option key={profile.id} value={profile.id}>@{profile.username}</option>)}
-        </select>
-        <input className="w-full" type="number" value={points} onChange={event => setPoints(Number(event.target.value))} placeholder="Gettoni +/-" style={input} />
-        <input className="w-full" type="number" value={xp} onChange={event => setXp(Number(event.target.value))} placeholder="XP +/-" style={input} />
-        <input className="w-full" type="number" value={spinTickets} onChange={event => setSpinTickets(Number(event.target.value))} placeholder="Biglietti ruota +/-" style={input} />
-        <input className="w-full" type="number" value={scratchTickets} onChange={event => setScratchTickets(Number(event.target.value))} placeholder="Biglietti scratch +/-" style={input} />
-        <input className="w-full" type="number" value={boxTickets} onChange={event => setBoxTickets(Number(event.target.value))} placeholder="Biglietti box +/-" style={input} />
-        <input className="w-full" required minLength={4} value={reason} onChange={event => setReason(event.target.value)} placeholder="Motivo" style={input} />
-        <button style={primary}>Registra</button>
+      <form onSubmit={adjust} className="sf-balance-editor mt-5">
+        <div className="sf-balance-target">
+          <select className="w-full" required value={selected} onChange={event => setSelected(event.target.value)} style={input}>
+            <option value="">Seleziona partecipante</option>
+            {profiles.map(profile => <option key={profile.id} value={profile.id}>@{profile.username}</option>)}
+          </select>
+          {selectedProfile && <span>Modifica saldo di <strong>@{selectedProfile.username}</strong></span>}
+        </div>
+        <div className="sf-balance-fields">
+          <BalanceField label="Gettoni" value={points} setValue={setPoints} onDelta={delta => adjustDraft(points, setPoints, delta)} />
+          <BalanceField label="XP" value={xp} setValue={setXp} onDelta={delta => adjustDraft(xp, setXp, delta)} />
+          <BalanceField label="Ruota" value={spinTickets} setValue={setSpinTickets} onDelta={delta => adjustDraft(spinTickets, setSpinTickets, delta)} />
+          <BalanceField label="Scratch" value={scratchTickets} setValue={setScratchTickets} onDelta={delta => adjustDraft(scratchTickets, setScratchTickets, delta)} />
+          <BalanceField label="Mystery Box" value={boxTickets} setValue={setBoxTickets} onDelta={delta => adjustDraft(boxTickets, setBoxTickets, delta)} />
+        </div>
+        <div className="sf-balance-submit">
+          <input className="w-full" required minLength={4} value={reason} onChange={event => setReason(event.target.value)} placeholder="Motivo della modifica" style={input} />
+          <button style={primary}>Registra movimento</button>
+        </div>
       </form>
     </Section>
   )
@@ -661,9 +688,9 @@ function EconomyAdmin({ games, options, reload }: { games: Row[]; options: Row[]
   }, [options, selectedGame])
 
   const activeOptions = drafts.filter(option => option.active)
-  const totalWeight = activeOptions.reduce((total, option) => total + Math.max(0, Number(option.weight) || 0), 0)
+  const totalWeight = activeOptions.reduce((total, option) => total + Math.max(0, parseOptionalInteger(option.weight) ?? 0), 0)
   const expectedTokens = totalWeight > 0
-    ? activeOptions.reduce((total, option) => total + Number(option.points_awarded || 0) * Number(option.weight || 0), 0) / totalWeight
+    ? activeOptions.reduce((total, option) => total + (parseOptionalInteger(option.points_awarded) ?? 0) * (parseOptionalInteger(option.weight) ?? 0), 0) / totalWeight
     : 0
   const game = games.find(item => item.game_type === selectedGame)
 
@@ -682,8 +709,8 @@ function EconomyAdmin({ games, options, reload }: { games: Row[]; options: Row[]
   const addPrize = () => {
     const draftKey = `new-${Date.now()}`
     setDrafts(current => [...current, {
-      draftKey, game_type: selectedGame, code: '', label: '', points_awarded: 0, xp_awarded: 0,
-      weight: 1, color: '#8B5CF6', active: true, reward_definition_id: null,
+      draftKey, game_type: selectedGame, code: makeRewardCode(selectedGame), label: '', points_awarded: '', xp_awarded: '',
+      weight: '', color: '#8B5CF6', active: true, reward_definition_id: null,
     }])
   }
   const removePrize = async (option: Row) => {
@@ -709,14 +736,14 @@ function EconomyAdmin({ games, options, reload }: { games: Row[]; options: Row[]
       setMessage('Disattiva il gioco prima di rimuovere tutti i premi.')
       return
     }
-    if (drafts.some(option => !String(option.code ?? '').trim() || !String(option.label ?? '').trim() || !Number.isInteger(Number(option.weight)) || Number(option.weight) < 1 || !Number.isInteger(Number(option.points_awarded)) || Number(option.points_awarded) < 0 || !Number.isInteger(Number(option.xp_awarded)) || Number(option.xp_awarded) < 0)) {
-      setMessage('Inserisci codice, nome, probabilità, gettoni e XP validi.')
+    if (drafts.some(option => !String(option.label ?? '').trim() || !isIntegerAtLeast(option.weight, option.active ? 1 : 0) || !isIntegerAtLeast(option.points_awarded, 0) || !isIntegerAtLeast(option.xp_awarded, 0))) {
+      setMessage('Inserisci nome, probabilità, gettoni e XP validi.')
       return
     }
     setSaving(true)
     try {
       await adminSaveGameOptions(selectedGame, drafts.map(option => ({
-        code: String(option.code).trim(),
+        code: String(option.code || makeRewardCode(selectedGame)).trim(),
         label: String(option.label).trim(),
         points_awarded: Number(option.points_awarded),
         xp_awarded: Number(option.xp_awarded),
@@ -793,28 +820,25 @@ function EconomyAdmin({ games, options, reload }: { games: Row[]; options: Row[]
       <div className="sf-admin-reward-title flex items-center justify-between my-4"><h3>Premi configurabili</h3><button type="button" style={smallButton} onClick={addPrize}>+ Aggiungi premio</button></div>
       {!drafts.length && <p className="mb-4" style={muted}>Aggiungi il primo premio; potrai attivare il gioco dopo aver raggiunto il 100%.</p>}
       {drafts.map(option => {
-        const weight = Math.max(0, Number(option.weight) || 0)
+        const weight = Math.max(0, parseOptionalInteger(option.weight) ?? 0)
         const probability = option.active ? weight / 100 : 0
         const expected = probability * exampleSpins
         const onceEvery = probability > 0 ? Math.round(1 / probability) : 0
         const key = option.id ?? option.draftKey
         return (
           <div key={key} className="sf-admin-reward-card p-3 mb-3 rounded-xl">
-            <div className="grid grid-cols-2 md:grid-cols-6 gap-3 items-end">
-              <label style={muted}>Codice
-                <input className="w-full" value={option.code} onChange={event => updateDraft(key, { code: event.target.value })} style={{ ...input, display: 'block', marginTop: 5 }} />
-              </label>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 items-end">
               <label className="col-span-2 md:col-span-1" style={muted}>Nome premio
                 <input className="w-full" value={option.label} onChange={event => updateDraft(key, { label: event.target.value })} style={{ ...input, display: 'block', marginTop: 5 }} />
               </label>
               <label style={muted}>Gettoni
-                <input type="number" min={0} step={1} value={option.points_awarded} onChange={event => updateDraft(key, { points_awarded: Number(event.target.value) })} style={{ ...input, width: '100%', display: 'block', marginTop: 5 }} />
+                <input inputMode="numeric" value={String(option.points_awarded)} onChange={event => updateDraft(key, { points_awarded: integerDraft(event.target.value) })} placeholder="0" style={{ ...input, width: '100%', display: 'block', marginTop: 5 }} />
               </label>
               <label style={muted}>XP
-                <input type="number" min={0} step={1} value={option.xp_awarded} onChange={event => updateDraft(key, { xp_awarded: Number(event.target.value) })} style={{ ...input, width: '100%', display: 'block', marginTop: 5 }} />
+                <input inputMode="numeric" value={String(option.xp_awarded)} onChange={event => updateDraft(key, { xp_awarded: integerDraft(event.target.value) })} placeholder="0" style={{ ...input, width: '100%', display: 'block', marginTop: 5 }} />
               </label>
               <label style={muted}>Probabilità %
-                <input type="number" min={1} max={100} step={1} value={option.weight} onChange={event => updateDraft(key, { weight: Number(event.target.value) })} style={{ ...input, width: '100%', display: 'block', marginTop: 5 }} />
+                <input inputMode="numeric" value={String(option.weight)} onChange={event => updateDraft(key, { weight: integerDraft(event.target.value) })} placeholder="%" style={{ ...input, width: '100%', display: 'block', marginTop: 5 }} />
               </label>
               <label style={muted}>Colore
                 <input type="color" value={option.color} onChange={event => updateDraft(key, { color: event.target.value })} style={{ ...input, width: '100%', height: 42, display: 'block', marginTop: 5 }} />
@@ -866,10 +890,12 @@ function SettingsAdmin({ locations, settings, tokenTiers, reload }: { locations:
     event.preventDefault()
     const values = new FormData(event.currentTarget)
     const scenario = String(values.get('scenario'))
+    const minimumUnits = parseOptionalInteger(String(values.get('minimum')))
+    if (minimumUnits === null || minimumUnits < 1) throw new Error('Minimo non valido')
     const { error } = await requireSupabase().from('service_areas').insert({
       scenario_type: scenario,
       city: values.get('city'),
-      minimum_units: Number(values.get('minimum')),
+      minimum_units: minimumUnits,
       requires_street: scenario !== 'meetup',
     })
     if (error) throw new Error(italianErrorMessage(error.message, 'Aggiunta dell’area non riuscita.'))
@@ -879,8 +905,9 @@ function SettingsAdmin({ locations, settings, tokenTiers, reload }: { locations:
   const updateRetention = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const values = new FormData(event.currentTarget)
-    const value = { approved_days: Number(values.get('days')) }
-    if (value.approved_days < 1) throw new Error('Conservazione non valida')
+    const approvedDays = parseOptionalInteger(String(values.get('days')))
+    if (approvedDays === null || approvedDays < 1) throw new Error('Conservazione non valida')
+    const value = { approved_days: approvedDays }
     const { error } = await requireSupabase().from('app_settings').upsert({ key: 'kyc_retention', value })
     if (error) throw new Error(italianErrorMessage(error.message, 'Salvataggio della conservazione non riuscito.'))
     await reload()
@@ -917,13 +944,20 @@ function SettingsAdmin({ locations, settings, tokenTiers, reload }: { locations:
         <button style={primary}>Salva link</button>
       </form>
       <form onSubmit={updateRetention} className="flex flex-col sm:flex-row gap-2 mb-5 sm:items-end">
-        <label style={muted}>Conservazione documenti KYC (giorni)<input name="days" type="number" min="1" defaultValue={retention.approved_days} style={{ ...input, width: 150, display: 'block', marginTop: 5 }} /></label>
+        <label style={muted}>Conservazione documenti KYC (giorni)<input name="days" required inputMode="numeric" pattern="[0-9]*" defaultValue={retention.approved_days} style={{ ...input, width: 150, display: 'block', marginTop: 5 }} /></label>
         <button style={primary}>Salva conservazione</button>
       </form>
       <h3 className="mb-3">Gettoni per ordine completato</h3>
       <div className="flex flex-wrap gap-3 mb-6">
         {tokenTiers.map(tier => <label key={tier.minimum_units} style={muted}>{tier.minimum_units}+ g
-          <input type="number" min={0} max={100} defaultValue={tier.tokens_awarded} onBlur={event => updateTier(tier.minimum_units, Number(event.target.value))} style={{ ...input, width: 70, display: 'block' }} />
+          <input inputMode="numeric" pattern="[0-9]*" defaultValue={tier.tokens_awarded} onBlur={event => {
+            const tokens = parseOptionalInteger(event.currentTarget.value)
+            if (tokens === null || tokens < 0 || tokens > 100) {
+              event.currentTarget.value = String(tier.tokens_awarded)
+              return
+            }
+            void updateTier(tier.minimum_units, tokens)
+          }} style={{ ...input, width: 70, display: 'block' }} />
         </label>)}
       </div>
       <h3 className="mb-3 mt-6">MEETUP</h3>
@@ -933,7 +967,7 @@ function SettingsAdmin({ locations, settings, tokenTiers, reload }: { locations:
       <form onSubmit={addLocation} className="grid grid-cols-1 sm:grid-cols-[1fr_150px_auto] gap-2 mb-6">
         <input type="hidden" name="scenario" value="meetup" />
         <input className="w-full" name="city" required placeholder="Città" style={input} />
-        <input className="w-full" name="minimum" type="number" min="1" required placeholder="Minimo g" style={input} />
+        <input className="w-full" name="minimum" inputMode="numeric" pattern="[0-9]*" required placeholder="Minimo g" style={input} />
         <button style={primary}>Aggiungi</button>
       </form>
       <h3 className="mb-3">DELIVERY LOCALE</h3>
@@ -943,7 +977,7 @@ function SettingsAdmin({ locations, settings, tokenTiers, reload }: { locations:
       <form onSubmit={addLocation} className="grid grid-cols-1 sm:grid-cols-[1fr_150px_auto] gap-2 mb-6">
         <input type="hidden" name="scenario" value="delivery_zone" />
         <input className="w-full" name="city" required placeholder="Città" style={input} />
-        <input className="w-full" name="minimum" type="number" min="1" required placeholder="Minimo g" style={input} />
+        <input className="w-full" name="minimum" inputMode="numeric" pattern="[0-9]*" required placeholder="Minimo g" style={input} />
         <button style={primary}>Aggiungi</button>
       </form>
       <h3 className="mb-3">DELIVERY TUTTA ITALIA</h3>
@@ -953,7 +987,7 @@ function SettingsAdmin({ locations, settings, tokenTiers, reload }: { locations:
       <form onSubmit={addLocation} className="grid grid-cols-1 sm:grid-cols-[1fr_150px_auto] gap-2">
         <input type="hidden" name="scenario" value="delivery_italia" />
         <input className="w-full" name="city" required placeholder="Città" style={input} />
-        <input className="w-full" name="minimum" type="number" min="1" required placeholder="Minimo g" style={input} />
+        <input className="w-full" name="minimum" inputMode="numeric" pattern="[0-9]*" required placeholder="Minimo g" style={input} />
         <button style={primary}>Aggiungi</button>
       </form>
     </Section>
@@ -971,6 +1005,40 @@ function Metric({ label, value }: { label: string; value: number }) {
 }
 function Toggle({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return <button onClick={onClick} style={{ ...smallButton, color: active ? '#D7FE55' : 'rgba(245,245,245,.55)' }}>{label}: {active ? 'SÌ' : 'NO'}</button>
+}
+function BalanceField({ label, value, setValue, onDelta }: { label: string; value: string; setValue: (next: string) => void; onDelta: (delta: number) => void }) {
+  return <label className="sf-balance-field">
+    <span>{label}</span>
+    <div className="sf-balance-input">
+      <button type="button" onClick={() => onDelta(-1)} aria-label={`Riduci ${label}`}><Minus size={15} /></button>
+      <input inputMode="numeric" value={value} onChange={event => setValue(signedIntegerDraft(event.target.value))} placeholder="0" aria-label={label} />
+      <button type="button" onClick={() => onDelta(1)} aria-label={`Aumenta ${label}`}><Plus size={15} /></button>
+    </div>
+    <div className="sf-balance-quick">
+      <button type="button" onClick={() => onDelta(-5)}>-5</button>
+      <button type="button" onClick={() => onDelta(5)}>+5</button>
+    </div>
+  </label>
+}
+function integerDraft(value: string) {
+  return value.replace(/\D/g, '')
+}
+function signedIntegerDraft(value: string) {
+  const cleaned = value.replace(/[^\d-]/g, '')
+  return cleaned.startsWith('-') ? `-${cleaned.slice(1).replace(/-/g, '')}` : cleaned.replace(/-/g, '')
+}
+function parseOptionalInteger(value: NumericDraft) {
+  const text = String(value ?? '').trim()
+  if (!text || text === '-') return null
+  const parsed = Number(text)
+  return Number.isInteger(parsed) ? parsed : null
+}
+function isIntegerAtLeast(value: NumericDraft, minimum: number) {
+  const parsed = parseOptionalInteger(value)
+  return parsed !== null && parsed >= minimum
+}
+function makeRewardCode(type: GameType) {
+  return `${type}_${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`
 }
 function roundPrice(price: number) {
   return Math.round(price / 5) * 5

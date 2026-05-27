@@ -32,7 +32,7 @@ export function CartDrawer({ open, onClose, cart, removeFromCart, tokens, servic
   const [scenarioType, setScenarioType] = useState<ScenarioType>('meetup')
   const [city, setCity] = useState('')
   const [street, setStreet] = useState('')
-  const [tokensToReserve, setTokensToReserve] = useState(0)
+  const [tokensToReserve, setTokensToReserve] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState<OrderSubmitResult | null>(null)
@@ -42,11 +42,12 @@ export function CartDrawer({ open, onClose, cart, removeFromCart, tokens, servic
   const tokenReward = totalUnits >= 1000 ? 50 : totalUnits >= 500 ? 30 : totalUnits >= 300 ? 20 : totalUnits >= 100 ? 10 : 5
   const surcharge = scenarioType === 'delivery_zone' ? Math.floor(totalUnits / 100) * 10 : 0
   const maximumReserve = Math.min(tokens, Math.floor(subtotal + surcharge))
+  const reservedTokens = tokensToReserve === '' ? 0 : Number(tokensToReserve)
   const selectedAreas = useMemo(() => serviceAreas.filter(area => area.scenarioType === scenarioType), [serviceAreas, scenarioType])
   const requiresKyc = !isAdmin && firstOrder && kycStatus.status !== 'approved'
 
   const reset = () => {
-    setStep('cart'); setScenarioType('meetup'); setCity(''); setStreet(''); setTokensToReserve(0); setError(''); setResult(null); setKycOpen(false)
+    setStep('cart'); setScenarioType('meetup'); setCity(''); setStreet(''); setTokensToReserve(''); setError(''); setResult(null); setKycOpen(false)
   }
   const close = () => { onClose(); window.setTimeout(reset, 250) }
   const chooseScenario = (value: ScenarioType) => {
@@ -61,9 +62,13 @@ export function CartDrawer({ open, onClose, cart, removeFromCart, tokens, servic
     setError(''); setStep('summary')
   }
   const confirm = async () => {
+    if (!Number.isInteger(reservedTokens) || reservedTokens < (tokens >= 100 ? 1 : 0) || reservedTokens > maximumReserve) {
+      setError(tokens >= 100 ? 'Usa almeno 1 gettone e non superare il saldo disponibile.' : 'Inserisci un numero di gettoni valido.')
+      return
+    }
     setSaving(true); setError('')
     try {
-      const submitted = await onSubmit({ scenarioType, city, street, tokensToReserve })
+      const submitted = await onSubmit({ scenarioType, city, street, tokensToReserve: reservedTokens })
       setResult(submitted); setStep('success'); await onComplete()
     } catch (caught) {
       setError(italianErrorMessage(caught, 'Impossibile inviare la richiesta.'))
@@ -132,9 +137,9 @@ export function CartDrawer({ open, onClose, cart, removeFromCart, tokens, servic
               <Line label="Subtotale" value={subtotal} />
               {surcharge > 0 && <Line label="Sovrapprezzo" value={surcharge} />}
               <label style={muted}>Usa gettoni (saldo: {tokens})</label>
-              <input type="number" min={tokens >= 100 ? 1 : 0} max={maximumReserve} value={tokensToReserve} onChange={event => setTokensToReserve(Number(event.target.value))} style={input} />
+              <input inputMode="numeric" value={tokensToReserve} onChange={event => setTokensToReserve(event.target.value.replace(/\D/g, ''))} placeholder="0" style={input} />
               {tokens >= 100 && <p style={accent}>Saldo massimo raggiunto: usa almeno 1 gettone per inviare un nuovo ordine.</p>}
-              <Line label="Totale" value={Math.max(subtotal + surcharge - tokensToReserve, 0)} strong />
+              <Line label="Totale" value={Math.max(subtotal + surcharge - reservedTokens, 0)} strong />
               {error && <p style={{ color: '#EF4444' }}>{error}</p>}
             </div>}
             {step === 'success' && result && <div className="text-center py-12"><Check size={50} style={{ color: '#D7FE55', margin: '0 auto 16px' }} /><h2 style={{ color: '#D7FE55', fontFamily: 'Orbitron' }}>ORDINE INVIATO</h2><p>{result.displayId}</p>{result.disclaimer && <p style={muted}>{result.disclaimer}</p>}<div className="p-4 mt-6" style={panel}>EUR {result.simulatedTotal} / {result.totalUnits} g<br />+{result.tokensOnComplete} gettoni dopo il completamento</div></div>}

@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, useReducedMotion } from 'motion/react'
 import confetti from 'canvas-confetti'
-import { ArrowRight, Fingerprint, Gift, LockKeyhole, RotateCw, ShieldCheck, Smartphone, Sparkles, Ticket, Trophy, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Fingerprint, Gift, LockKeyhole, RotateCw, ShieldCheck, Smartphone, Sparkles, Ticket, Trophy, X } from 'lucide-react'
 import type { GamePlayResult, GameType, PlayableGame, User } from '../data'
 import { getPlayableGames } from '../lib/api'
 import { italianErrorMessage } from '../lib/errors'
@@ -23,6 +24,7 @@ export function GamesPage({ user, onPlay, onComplete }: Props) {
   const [selected, setSelected] = useState<GameType | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const closeGame = useCallback(() => setSelected(null), [])
 
   const load = async () => {
     try {
@@ -53,6 +55,7 @@ export function GamesPage({ user, onPlay, onComplete }: Props) {
         <section className="sf-arcade-hero">
           <div className="max-w-2xl">
             <div className="sf-arcade-eyebrow"><span className="sf-live-dot" /> Arcade room online</div>
+            <div className="sf-casino-lights" aria-hidden="true">{Array.from({ length: 12 }, (_, index) => <span key={index} />)}</div>
             <h1 className="sf-arcade-title">SCEGLI IL TUO<br /><span>GIOCO</span></h1>
             <p className="sf-arcade-copy">Tre esperienze, un sistema protetto. Ogni premio viene estratto sul server prima che inizi lo spettacolo.</p>
             <div className="sf-arcade-trust">
@@ -102,10 +105,10 @@ export function GamesPage({ user, onPlay, onComplete }: Props) {
           </div>
         )}
       </div>
-      {selected && (
-        <GameOverlay title={gameCards.find(game => game.type === selected)!.title} onClose={() => setSelected(null)}>
+      {selected && createPortal(
+        <GameOverlay title={gameCards.find(game => game.type === selected)!.title} onClose={closeGame}>
           {!current ? (
-            <StateMessage text="Questo gioco non ha ancora premi configurati." />
+            <UnavailableGame onClose={closeGame} />
           ) : selected === 'spin' ? (
             <WheelGame user={user} game={current} onPlay={onPlay} onComplete={refresh} />
           ) : selected === 'scratch' ? (
@@ -114,23 +117,73 @@ export function GamesPage({ user, onPlay, onComplete }: Props) {
             <BoxGame user={user} game={current} onPlay={onPlay} onComplete={refresh} />
           )}
         </GameOverlay>
-      )}
+      , document.body)}
     </div>
   )
 }
 
 function GameOverlay({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  useEffect(() => {
+    const scrollY = window.scrollY
+    const appRoot = document.getElementById('root')
+    const previousAriaHidden = appRoot?.getAttribute('aria-hidden')
+    const previous = {
+      overflow: document.body.style.overflow,
+      position: document.body.style.position,
+      top: document.body.style.top,
+      width: document.body.style.width,
+    }
+    document.body.style.overflow = 'hidden'
+    document.body.style.position = 'fixed'
+    document.body.style.top = `-${scrollY}px`
+    document.body.style.width = '100%'
+    document.documentElement.classList.add('sf-game-modal-open')
+    appRoot?.setAttribute('inert', '')
+    appRoot?.setAttribute('aria-hidden', 'true')
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }
+    window.addEventListener('keydown', escape)
+    const telegram = (window as Window & { Telegram?: { WebApp?: { BackButton?: { show?: () => void; hide?: () => void; onClick?: (callback: () => void) => void; offClick?: (callback: () => void) => void } } } }).Telegram?.WebApp
+    telegram?.BackButton?.show?.()
+    telegram?.BackButton?.onClick?.(onClose)
+    return () => {
+      window.removeEventListener('keydown', escape)
+      telegram?.BackButton?.offClick?.(onClose)
+      telegram?.BackButton?.hide?.()
+      document.body.style.overflow = previous.overflow
+      document.body.style.position = previous.position
+      document.body.style.top = previous.top
+      document.body.style.width = previous.width
+      document.documentElement.classList.remove('sf-game-modal-open')
+      appRoot?.removeAttribute('inert')
+      if (previousAriaHidden == null) appRoot?.removeAttribute('aria-hidden')
+      else appRoot?.setAttribute('aria-hidden', previousAriaHidden)
+      window.scrollTo({ top: scrollY, behavior: 'instant' })
+    }
+  }, [onClose])
+
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="sf-game-overlay fixed inset-0 z-50 overflow-y-auto">
+    <motion.div role="dialog" aria-modal="true" aria-label={title} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="sf-game-overlay fixed inset-0 overflow-y-auto">
       <div className="sf-overlay-glow" />
-      <div className="max-w-xl mx-auto px-4 py-5 min-h-screen flex flex-col relative">
-        <header className="sf-overlay-header flex items-center justify-between mb-7">
+      <div className="sf-game-overlay-frame max-w-xl mx-auto px-4 flex flex-col relative">
+        <header className="sf-overlay-header sticky top-0 z-10 flex items-center justify-between mb-7">
           <div><div className="sf-overlay-label">Street Family Arcade</div><h2 className="sf-overlay-title">{title}</h2></div>
-          <button aria-label="Chiudi gioco" onClick={onClose} style={iconButton}><X size={20} /></button>
+          <button className="sf-overlay-close" aria-label="Chiudi gioco" onClick={onClose} style={iconButton}><X size={20} /></button>
         </header>
-        <div className="flex-1 flex items-center justify-center">{children}</div>
+        <div className="sf-overlay-content flex-1 flex items-center justify-center">{children}</div>
       </div>
     </motion.div>
+  )
+}
+
+function UnavailableGame({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="sf-game-stage sf-unavailable w-full text-center p-6 rounded-3xl">
+      <div className="sf-locked-mark"><LockKeyhole size={30} /></div>
+      <div className="sf-overlay-label">Prossimamente</div>
+      <h3>Gioco in preparazione</h3>
+      <p>Questo gioco non ha ancora premi configurati. Torna nella sala e prova un'esperienza disponibile.</p>
+      <button className="sf-return-action" onClick={onClose}><ArrowLeft size={17} /> Torna ai giochi</button>
+    </div>
   )
 }
 
@@ -181,10 +234,17 @@ function WheelGame({ user, game, onPlay, onComplete }: { user: User; game: Playa
 function ScratchGame({ user, onPlay, onComplete }: { user: User; onPlay: Props['onPlay']; onComplete: () => Promise<void> }) {
   const reducedMotion = useReducedMotion()
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const frameRef = useRef<number | null>(null)
+  const pointerRef = useRef<number | null>(null)
+  const paintFrameRef = useRef<number | null>(null)
+  const revealFrameRef = useRef<number | null>(null)
+  const pointsRef = useRef<Array<{ x: number; y: number; start: boolean }>>([])
+  const paintedPointRef = useRef<{ x: number; y: number } | null>(null)
+  const measuredAtRef = useRef(0)
+  const completingRef = useRef(false)
   const particleAtRef = useRef(0)
   const [result, setResult] = useState<GamePlayResult | null>(null)
   const [revealed, setRevealed] = useState(false)
+  const [finishing, setFinishing] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [percent, setPercent] = useState(0)
@@ -218,8 +278,24 @@ function ScratchGame({ user, onPlay, onComplete }: { user: User; onPlay: Props['
     context.fillText('GRATTA PER RIVELARE', canvas.width / 2, canvas.height / 2 + 38)
   }, [result])
 
+  useEffect(() => {
+    if (!result || revealed) return
+    document.documentElement.classList.add('sf-scratching')
+    return () => { document.documentElement.classList.remove('sf-scratching') }
+  }, [result, revealed])
+
+  useEffect(() => () => {
+    document.documentElement.classList.remove('sf-scratching')
+    if (paintFrameRef.current !== null) cancelAnimationFrame(paintFrameRef.current)
+    if (revealFrameRef.current !== null) cancelAnimationFrame(revealFrameRef.current)
+  }, [])
+
   const start = async () => {
-    setBusy(true); setError(''); setResult(null); setRevealed(false); setPercent(0)
+    completingRef.current = false
+    pointerRef.current = null
+    pointsRef.current = []
+    paintedPointRef.current = null
+    setBusy(true); setError(''); setResult(null); setRevealed(false); setFinishing(false); setPercent(0)
     try {
       setResult(await onPlay('scratch'))
       await onComplete()
@@ -229,20 +305,118 @@ function ScratchGame({ user, onPlay, onComplete }: { user: User; onPlay: Props['
       setBusy(false)
     }
   }
-  const scratch = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!result || revealed) return
+
+  const completeReveal = () => {
+    setPercent(100)
+    setFinishing(false)
+    setRevealed(true)
+    if (!reducedMotion) confetti({ particleCount: 46, colors: ['#8B5CF6', '#22C55E'] })
+    navigator.vibrate?.(45)
+  }
+
+  const autoErase = () => {
+    if (completingRef.current) return
+    completingRef.current = true
+    pointerRef.current = null
+    pointsRef.current = []
+    setFinishing(true)
+    const canvas = canvasRef.current
+    const context = canvas?.getContext('2d')
+    if (!canvas || !context || reducedMotion) {
+      context?.clearRect(0, 0, canvas?.width ?? 0, canvas?.height ?? 0)
+      completeReveal()
+      return
+    }
+    const startedAt = performance.now()
+    const finishDuration = 430
+    const erase = (now: number) => {
+      const progress = Math.min((now - startedAt) / finishDuration, 1)
+      const eased = 1 - Math.pow(1 - progress, 3)
+      const distance = canvas.height * .54 * eased
+      context.save()
+      context.globalCompositeOperation = 'destination-out'
+      context.fillRect(0, canvas.height / 2 - distance, canvas.width, distance * 2)
+      context.restore()
+      setPercent(Math.min(100, Math.round(60 + progress * 40)))
+      if (progress < 1) {
+        revealFrameRef.current = requestAnimationFrame(erase)
+        return
+      }
+      context.clearRect(0, 0, canvas.width, canvas.height)
+      revealFrameRef.current = null
+      completeReveal()
+    }
+    revealFrameRef.current = requestAnimationFrame(erase)
+  }
+
+  const measureScratch = (context: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data
+    const center = { left: canvas.width * .22, right: canvas.width * .78, top: canvas.height * .27, bottom: canvas.height * .73 }
+    let cleared = 0
+    let sampled = 0
+    let centerCleared = 0
+    let centerSampled = 0
+    for (let y = 0; y < canvas.height; y += 4) {
+      for (let x = 0; x < canvas.width; x += 4) {
+        const alpha = pixels[((y * canvas.width + x) * 4) + 3]
+        sampled += 1
+        if (alpha < 80) cleared += 1
+        if (x >= center.left && x <= center.right && y >= center.top && y <= center.bottom) {
+          centerSampled += 1
+          if (alpha < 80) centerCleared += 1
+        }
+      }
+    }
+    const value = Math.round(cleared / sampled * 100)
+    const centerValue = Math.round(centerCleared / centerSampled * 100)
+    setPercent(value)
+    if (value > 60 || centerValue >= 38) autoErase()
+  }
+
+  const paintQueuedPoints = () => {
+    const actualCanvas = canvasRef.current
+    if (!actualCanvas || completingRef.current) return
+    const context = actualCanvas.getContext('2d')
+    if (!context) return
+    const queued = pointsRef.current.splice(0)
+    context.save()
+    context.globalCompositeOperation = 'destination-out'
+    context.strokeStyle = '#000'
+    context.fillStyle = '#000'
+    context.lineWidth = 68
+    context.lineCap = 'round'
+    context.lineJoin = 'round'
+    queued.forEach(point => {
+      if (point.start) paintedPointRef.current = null
+      context.beginPath()
+      if (paintedPointRef.current) context.moveTo(paintedPointRef.current.x, paintedPointRef.current.y)
+      else context.moveTo(point.x, point.y)
+      context.lineTo(point.x, point.y)
+      context.stroke()
+      context.beginPath()
+      context.arc(point.x, point.y, 34, 0, Math.PI * 2)
+      context.fill()
+      paintedPointRef.current = point
+    })
+    context.restore()
+    const now = performance.now()
+    if (now - measuredAtRef.current >= 65) {
+      measuredAtRef.current = now
+      measureScratch(context, actualCanvas)
+    }
+    paintFrameRef.current = null
+    if (pointsRef.current.length) paintFrameRef.current = requestAnimationFrame(paintQueuedPoints)
+  }
+
+  const enqueuePoint = (event: React.PointerEvent<HTMLCanvasElement>, start = false) => {
+    if (!result || revealed || completingRef.current) return
+    event.preventDefault()
     const canvas = event.currentTarget
-    if (event.buttons === 0 && event.pointerType === 'mouse') return
-    canvas.setPointerCapture(event.pointerId)
     const rect = canvas.getBoundingClientRect()
     const x = (event.clientX - rect.left) * canvas.width / rect.width
     const y = (event.clientY - rect.top) * canvas.height / rect.height
-    const context = canvas.getContext('2d')
-    if (!context) return
-    context.globalCompositeOperation = 'destination-out'
-    context.beginPath()
-    context.arc(x, y, 32, 0, Math.PI * 2)
-    context.fill()
+    pointsRef.current.push({ x, y, start })
+    if (paintFrameRef.current === null) paintFrameRef.current = requestAnimationFrame(paintQueuedPoints)
     const now = performance.now()
     if (!reducedMotion && now - particleAtRef.current > 90) {
       particleAtRef.current = now
@@ -254,31 +428,35 @@ function ScratchGame({ user, onPlay, onComplete }: { user: User; onPlay: Props['
         origin: { x: event.clientX / window.innerWidth, y: event.clientY / window.innerHeight },
       })
     }
-    if (frameRef.current) return
-    frameRef.current = requestAnimationFrame(() => {
-      frameRef.current = null
-      const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data
-      let cleared = 0
-      for (let index = 3; index < pixels.length; index += 16) if (pixels[index] === 0) cleared += 1
-      const value = Math.round(cleared / (pixels.length / 16) * 100)
-      setPercent(value)
-      if (value > 60) {
-        setRevealed(true)
-        if (!reducedMotion) confetti({ particleCount: 46, colors: ['#8B5CF6', '#22C55E'] })
-        navigator.vibrate?.(45)
-      }
-    })
+  }
+
+  const beginScratch = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!result || revealed || completingRef.current) return
+    event.preventDefault()
+    pointerRef.current = event.pointerId
+    event.currentTarget.setPointerCapture(event.pointerId)
+    enqueuePoint(event, true)
+  }
+  const moveScratch = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (pointerRef.current !== event.pointerId) return
+    enqueuePoint(event)
+  }
+  const endScratch = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (pointerRef.current !== event.pointerId) return
+    event.preventDefault()
+    pointerRef.current = null
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
   }
   return (
-    <div className="sf-game-stage w-full text-center p-5 sm:p-7 rounded-3xl" style={gamePanel}>
+    <div className="sf-game-stage sf-scratch-stage w-full text-center p-5 sm:p-7 rounded-3xl" style={gamePanel}>
       <TicketBalance value={user.scratchTickets} />
       {!result ? <div className="sf-idle-state"><Sparkles size={34} /><strong>Carta sigillata</strong><span>Avviala e gratta per scoprire il premio.</span></div> : (
         <>
           <div className={`sf-scratch-ticket relative my-8 overflow-hidden rounded-2xl ${revealed ? 'is-revealed' : ''}`} style={{ height: 200 }}>
             <div className="absolute inset-0 flex items-center justify-center"><Reward result={result} compact /></div>
-            {!revealed && <canvas ref={canvasRef} width={640} height={380} className="absolute inset-0 w-full h-full touch-none" onPointerDown={scratch} onPointerMove={scratch} />}
+            {!revealed && <canvas ref={canvasRef} width={640} height={380} className="sf-scratch-canvas absolute inset-0 w-full h-full" onPointerDown={beginScratch} onPointerMove={moveScratch} onPointerUp={endScratch} onPointerCancel={endScratch} onContextMenu={event => event.preventDefault()} />}
           </div>
-          {!revealed && <div className="sf-progress"><div className="sf-progress-label"><span>Superficie scoperta</span><strong>{percent}%</strong></div><div className="sf-progress-track"><div style={{ width: `${Math.min(percent / 60 * 100, 100)}%` }} /></div></div>}
+          <div className={`sf-progress ${revealed ? 'is-complete' : ''}`}><div className="sf-progress-label"><span>{revealed ? 'Premio rivelato' : finishing ? 'Rivelazione premio...' : 'Superficie scoperta'}</span><strong>{percent}%</strong></div><div className="sf-progress-track"><div style={{ width: `${Math.min(percent / 60 * 100, 100)}%` }} /></div></div>
         </>
       )}
       {!result && <GameButton disabled={busy || user.scratchTickets < 1} onClick={start} label={busy ? 'Preparazione...' : user.scratchTickets ? 'Usa 1 biglietto' : 'Nessun biglietto'} />}
