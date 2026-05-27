@@ -31,5 +31,8 @@ verify_jwt = true
 [functions.admin-delete-account]
 verify_jwt = true
 
+[functions.admin-broadcast-action]
+verify_jwt = true
+
 [functions.purge-expired-kyc]
 verify_jwt = false

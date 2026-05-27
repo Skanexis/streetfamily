@@ -64,6 +64,18 @@ export async function sendTelegramMessageWithOptions(chatId: string, text: strin
     body: JSON.stringify({ chat_id: chatId, text, reply_markup: replyMarkup }),
   })
   if (!response.ok) throw new Error(`Invio messaggio Telegram non riuscito: ${response.status}`)
+  return await response.json() as { ok: boolean; result?: { message_id?: number } }
+}
+
+export async function deleteTelegramMessage(chatId: string, messageId: number) {
+  const token = Deno.env.get('TELEGRAM_BOT_TOKEN')
+  if (!token) throw new Error('Token del bot Telegram non configurato')
+  const response = await fetch(`https://api.telegram.org/bot${token}/deleteMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: chatId, message_id: messageId }),
+  })
+  if (!response.ok) throw new Error(`Eliminazione messaggio Telegram non riuscita: ${response.status}`)
 }
 
 export async function answerTelegramCallbackQuery(callbackQueryId: string, text: string) {

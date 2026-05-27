@@ -105,8 +105,9 @@ https://api.telegram.org/bot<BOT_TOKEN>/setWebhook?url=https://<project-ref>.sup
 
 ## Broadcast News
 
-- Admins create in-app broadcasts from the `Broadcast` admin tab and can publish or archive each message.
-- Published broadcasts appear in the notification bell for allowlisted staging users; drafts remain admin-only under RLS.
+- Admins create in-app broadcasts from the `Broadcast` admin tab and can publish, archive or delete each message.
+- Publishing a broadcast shows it in the notification bell and sends it through the Telegram bot to allowlisted, non-blocked users that have opened the bot.
+- Deleting a broadcast removes it from the app and makes the bot delete the Telegram messages it previously sent for that broadcast on a best-effort basis.
 - When an admin creates a product, the `Crea news nuovo prodotto` checkbox creates a linked news draft. It is deliberately not published automatically so media and catalogue visibility can be checked first.
 - Broadcast and linked-product creation operations require the admin role and are written to the admin audit log.
 

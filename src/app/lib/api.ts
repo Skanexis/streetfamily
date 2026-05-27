@@ -424,3 +424,10 @@ export async function adminDeleteAccount(userId: string) {
   const { error } = await db.functions.invoke('admin-delete-account', { body: { userId } })
   if (error) throw new Error(await edgeFunctionError(error, 'Eliminazione account non riuscita.'))
 }
+
+export async function adminBroadcastAction(broadcastId: string, action: 'publish' | 'archive' | 'delete') {
+  const db = requireSupabase()
+  const response = await db.functions.invoke('admin-broadcast-action', { body: { broadcastId, action } })
+  if (response.error) throw new Error(await edgeFunctionError(response.error, 'Azione notizia non riuscita.'))
+  return unwrap(response) as { status: string; telegramSent?: number; telegramDeleted?: number; telegramFailed?: number }
+}

@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { Package, Tags, Users, Gamepad2, ClipboardList, Settings, Megaphone, MessageSquare, Minus, Plus, Wallet } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
-import { adminAdjustWallet, adminDeleteAccount, adminDeleteGameOption, adminSaveGameOptions, adminSetGameActive, adminSimulateGame, getAdminDashboard, getAdminKycDocuments, reviewKyc } from '../lib/api'
+import { adminAdjustWallet, adminBroadcastAction, adminDeleteAccount, adminDeleteGameOption, adminSaveGameOptions, adminSetGameActive, adminSimulateGame, getAdminDashboard, getAdminKycDocuments, reviewKyc } from '../lib/api'
 import { requireSupabase } from '../lib/supabase'
 import { italianErrorMessage } from '../lib/errors'
 import type { Broadcast, DashboardData, GameType, KycReviewDocument } from '../data'
@@ -291,43 +291,63 @@ function CategoriesAdmin({ products, categories, reload }: { products: Row[]; ca
 
 function BroadcastAdmin({ broadcasts, reload }: { broadcasts: Broadcast[]; reload: () => Promise<void> }) {
   const [message, setMessage] = useState('')
+  const [busyId, setBusyId] = useState('')
   const create = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setMessage('')
     const values = new FormData(event.currentTarget)
-    const { error } = await requireSupabase().rpc('admin_create_broadcast', {
+    const { data: createdBroadcastId, error } = await requireSupabase().rpc('admin_create_broadcast', {
       p_title: values.get('title'),
       p_message: values.get('message'),
-      p_publish: values.get('publish') === 'on',
+      p_publish: false,
     })
     if (error) {
       setMessage(italianErrorMessage(error.message, 'Creazione della notizia non riuscita.'))
       return
     }
+    if (!createdBroadcastId) {
+      setMessage('Notizia creata, ma ID non ricevuto per la pubblicazione Telegram.')
+      await reload()
+      return
+    }
+    if (values.get('publish') === 'on') await runBroadcastAction(String(createdBroadcastId), 'publish')
     event.currentTarget.reset()
     await reload()
   }
-  const setStatus = async (broadcast: Broadcast, status: Broadcast['status']) => {
+  const runBroadcastAction = async (broadcastId: string, action: 'publish' | 'archive' | 'delete') => {
     setMessage('')
-    const updates = status === 'published'
-      ? { status, published_at: broadcast.publishedAt ?? new Date().toISOString() }
-      : { status }
-    const { error } = await requireSupabase().from('broadcasts').update(updates).eq('id', broadcast.id)
-    if (error) {
-      setMessage(italianErrorMessage(error.message, 'Aggiornamento della notizia non riuscito.'))
-      return
+    setBusyId(broadcastId)
+    try {
+      const result = await adminBroadcastAction(broadcastId, action)
+      if (action === 'publish') {
+        const failed = result.telegramFailed ?? 0
+        setMessage(`Notizia pubblicata. Telegram inviati: ${result.telegramSent ?? 0}${failed ? `, errori: ${failed}` : ''}.`)
+      }
+      if (action === 'archive') setMessage('Notizia archiviata.')
+      if (action === 'delete') {
+        const failed = result.telegramFailed ?? 0
+        setMessage(`Notizia eliminata. Messaggi Telegram eliminati: ${result.telegramDeleted ?? 0}${failed ? `, errori: ${failed}` : ''}.`)
+      }
+      await reload()
+    } catch (caught) {
+      setMessage(italianErrorMessage(caught, 'Aggiornamento della notizia non riuscito.'))
+    } finally {
+      setBusyId('')
     }
-    await reload()
+  }
+  const removeBroadcast = async (broadcast: Broadcast) => {
+    if (!window.confirm(`Eliminare la notizia "${broadcast.title}"? Il bot proverà a cancellare anche i messaggi Telegram inviati.`)) return
+    await runBroadcastAction(broadcast.id, 'delete')
   }
   return (
-    <Section title="Notizie" note="Pubblica comunicazioni visibili agli utenti.">
+    <Section title="Notizie" note="Pubblica comunicazioni visibili nell'app e inviate anche via Telegram agli utenti autorizzati.">
       <form onSubmit={create} className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-6">
         <input className="w-full" name="title" maxLength={120} required placeholder="Titolo" style={input} />
         <input className="w-full" name="message" maxLength={500} required placeholder="Messaggio" style={input} />
         <label className="flex items-center gap-2" style={muted}><input type="checkbox" name="publish" /> Pubblica subito</label>
         <button style={primary}>Crea notizia</button>
       </form>
-      {message && <p className="mb-4" style={{ color: '#EF4444' }}>{message}</p>}
+      {message && <p className="mb-4" style={{ color: message.includes('errori') || message.includes('non riuscit') ? '#EF4444' : '#D7FE55' }}>{message}</p>}
       {broadcasts.map(broadcast => (
         <div key={broadcast.id} className="flex flex-col sm:flex-row sm:items-center gap-3" style={row}>
           <div className="flex-1 min-w-0">
@@ -335,8 +355,9 @@ function BroadcastAdmin({ broadcasts, reload }: { broadcasts: Broadcast[]; reloa
             <div style={muted}>{broadcast.kind === 'product_new' ? 'Nuovo prodotto' : 'Annuncio'} / {broadcastStatusLabel[broadcast.status]} / {new Date(broadcast.createdAt).toLocaleDateString('it-IT')}</div>
             <div style={{ ...muted, marginTop: 4 }}>{broadcast.message}</div>
           </div>
-          {broadcast.status !== 'published' && <button style={smallButton} onClick={() => setStatus(broadcast, 'published')}>Pubblica</button>}
-          {broadcast.status !== 'archived' && <button style={smallButton} onClick={() => setStatus(broadcast, 'archived')}>Archivia</button>}
+          {broadcast.status !== 'published' && <button disabled={busyId === broadcast.id} style={smallButton} onClick={() => runBroadcastAction(broadcast.id, 'publish')}>{busyId === broadcast.id ? 'Invio...' : 'Pubblica'}</button>}
+          {broadcast.status !== 'archived' && <button disabled={busyId === broadcast.id} style={smallButton} onClick={() => runBroadcastAction(broadcast.id, 'archive')}>Archivia</button>}
+          <button disabled={busyId === broadcast.id} style={dangerButton} onClick={() => removeBroadcast(broadcast)}>Elimina</button>
         </div>
       ))}
     </Section>
