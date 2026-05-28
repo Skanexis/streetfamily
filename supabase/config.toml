@@ -34,5 +34,11 @@ verify_jwt = true
 [functions.admin-broadcast-action]
 verify_jwt = true
 
+[functions.admin-low-stock-notifications]
+verify_jwt = true
+
+[functions.admin-review-access-request]
+verify_jwt = true
+
 [functions.purge-expired-kyc]
 verify_jwt = false

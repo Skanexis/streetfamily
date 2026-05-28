@@ -34,6 +34,7 @@ export function italianErrorMessage(error: unknown, fallback = 'Operazione non r
 
   if (!message) return fallback
   if (exactMessages[message]) return exactMessages[message]
+  if (message.startsWith('STOCK_NOT_ENOUGH:')) return `Magazzino insufficiente: ${message.split(':').slice(1).join(':')}.`
   if (message.startsWith('MINIMUM_UNITS_REQUIRED:')) return `Sono necessari almeno ${message.split(':')[1]} g.`
   if (message.startsWith('MAXIMUM_UNITS_SUPPORTED:')) return `Sono supportati al massimo ${message.split(':')[1]} g.`
   if (/more than one relationship|could not embed|schema cache/i.test(message)) return 'Impossibile caricare i dati collegati. Aggiorna la pagina e riprova.'

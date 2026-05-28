@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
-import { getAccessProfile, getAccountBlocked } from '../lib/api'
+import { getAccessProfile, getAccountAccessState, type AccountAccessStatus } from '../lib/api'
 import { isSupabaseConfigured, requireSupabase, supabase } from '../lib/supabase'
 import { italianErrorMessage } from '../lib/errors'
 import type { Profile } from '../data'
@@ -12,6 +12,7 @@ interface AuthValue {
   profile: Profile | null
   denied: boolean
   blocked: boolean
+  accessStatus: AccountAccessStatus
   beginTelegramBotLogin: () => Promise<{ token: string; botUrl: string }>
   checkTelegramBotLogin: (token: string) => Promise<'pending' | 'confirmed' | 'denied' | 'expired'>
   loginFromTelegramMiniApp: (initData: string) => Promise<void>
@@ -43,6 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [denied, setDenied] = useState(false)
   const [blocked, setBlocked] = useState(false)
+  const [accessStatus, setAccessStatus] = useState<AccountAccessStatus>('pending')
   const [loading, setLoading] = useState(isSupabaseConfigured)
 
   const refreshProfile = async () => {
@@ -53,12 +55,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfile(null)
       return
     }
-    const accountBlocked = await getAccountBlocked()
+    const accessState = await getAccountAccessState()
     const { data: currentAuth } = await supabase.auth.getSession()
     if (currentAuth.session?.user.id !== expectedUserId) return
-    if (accountBlocked) {
+    setAccessStatus(accessState.accessStatus)
+    if (accessState.blocked || accessState.accessStatus === 'rejected') {
       setProfile(null)
       setBlocked(true)
+      setDenied(false)
+      return
+    }
+    if (accessState.accessStatus === 'pending') {
+      setProfile(null)
+      setBlocked(false)
       setDenied(false)
       return
     }
@@ -76,6 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(null)
     setDenied(false)
     setBlocked(false)
+    setAccessStatus('pending')
     const { data, error } = await db.functions.invoke('telegram-miniapp-auth', { body: { initData } })
     if (error) {
       const message = await edgeFunctionError(error, 'Accesso alla mini applicazione non riuscito.')
@@ -85,6 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setProfile(null)
         setDenied(false)
         setBlocked(true)
+        setAccessStatus('rejected')
         setLoading(false)
         return
       }
@@ -126,6 +137,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setProfile(null)
         setDenied(false)
         setBlocked(false)
+        setAccessStatus('pending')
         setLoading(false)
         return
       }
@@ -133,6 +145,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setProfile(null)
         setDenied(false)
         setBlocked(false)
+        setAccessStatus('pending')
         setLoading(true)
       }
       window.setTimeout(() => {
@@ -160,6 +173,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     profile,
     denied,
     blocked,
+    accessStatus,
     beginTelegramBotLogin: async () => {
       const db = requireSupabase()
       const { data, error } = await db.functions.invoke('telegram-auth-start', { body: {} })
@@ -175,6 +189,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setProfile(null)
         setDenied(false)
         setBlocked(false)
+        setAccessStatus('pending')
         const verified = await db.auth.verifyOtp({ token_hash: data.tokenHash, type: 'magiclink' })
         if (verified.error) {
           setLoading(false)
@@ -191,7 +206,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await db.auth.signOut()
     },
     refreshProfile,
-  }), [loading, session, profile, denied, blocked])
+  }), [loading, session, profile, denied, blocked, accessStatus])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

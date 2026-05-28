@@ -1,12 +1,12 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
-import { Package, Tags, Users, Gamepad2, ClipboardList, Settings, Megaphone, MessageSquare, Minus, Plus, Wallet } from 'lucide-react'
+import { Package, Tags, Users, Gamepad2, ClipboardList, Settings, Megaphone, MessageSquare, Minus, Plus, Warehouse, Wallet } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
-import { adminAdjustWallet, adminBroadcastAction, adminDeleteAccount, adminDeleteGameOption, adminSaveGameOptions, adminSetGameActive, adminSimulateGame, getAdminDashboard, getAdminKycDocuments, reviewKyc } from '../lib/api'
+import { adminAdjustWallet, adminBroadcastAction, adminDeleteAccount, adminDeleteGameOption, adminReviewAccessRequest, adminSaveGameOptions, adminSendLowStockNotifications, adminSetGameActive, adminSimulateGame, getAdminDashboard, getAdminKycDocuments, reviewKyc } from '../lib/api'
 import { requireSupabase } from '../lib/supabase'
 import { italianErrorMessage } from '../lib/errors'
 import type { Broadcast, DashboardData, GameType, KycReviewDocument } from '../data'
 
-type Tab = 'catalog' | 'categories' | 'broadcasts' | 'users' | 'balance' | 'orders' | 'economy' | 'feedback' | 'settings'
+type Tab = 'catalog' | 'categories' | 'inventory' | 'broadcasts' | 'users' | 'balance' | 'orders' | 'economy' | 'feedback' | 'settings'
 type Row = Record<string, any>
 type NumericDraft = string | number
 const orderStatusLabel: Record<string, string> = { submitted: 'Inviata', processing: 'Accettata', completed: 'Completata', cancelled: 'Rifiutata' }
@@ -23,8 +23,10 @@ export function AdminPage() {
   const [tab, setTab] = useState<Tab>(requestedTab === 'users' ? 'users' : 'catalog')
   const [dashboard, setDashboard] = useState<DashboardData | null>(null)
   const [products, setProducts] = useState<Row[]>([])
+  const [inventory, setInventory] = useState<Row[]>([])
   const [categories, setCategories] = useState<Row[]>([])
   const [profiles, setProfiles] = useState<Row[]>([])
+  const [accessRows, setAccessRows] = useState<Row[]>([])
   const [orders, setOrders] = useState<Row[]>([])
   const [games, setGames] = useState<Row[]>([])
   const [locations, setLocations] = useState<Row[]>([])
@@ -42,11 +44,13 @@ export function AdminPage() {
   const load = async () => {
     try {
       const db = requireSupabase()
-      const [summary, productResult, categoryResult, profileResult, orderResult, gameResult, locationResult, settingsResult, broadcastResult, feedbackResult, optionsResult, tiersResult] = await Promise.all([
+      const [summary, productResult, inventoryResult, categoryResult, profileResult, accessResult, orderResult, gameResult, locationResult, settingsResult, broadcastResult, feedbackResult, optionsResult, tiersResult] = await Promise.all([
         getAdminDashboard(),
         db.from('products').select('id,category_id,name,badge,published,featured,categories(name),product_variants(id,label,price,unit_amount,token_award,inventory_status(available)),product_media(id,url,storage_path,media_type,upload_status,sort_order)').order('name'),
+        db.from('product_inventory').select('product_id,stock_quantity,notify_threshold_quantity,updated_at,products(id,name,published,categories(name))').order('updated_at', { ascending: false }),
         db.from('categories').select('*').order('sort_order'),
         db.from('profiles').select('id,username,telegram_subject,role,blocked,wallet_balances(points,xp,spin_tickets,scratch_tickets,box_tickets),kyc_cases:kyc_cases!kyc_cases_user_id_fkey(status,submitted_at,rejection_reason,retain_until),orders(status),feedback:feedback!feedback_user_id_fkey(status)').order('created_at', { ascending: false }),
+        db.from('staging_allowlist').select('telegram_subject,enabled,access_status,access_username,access_requested_at,access_decided_at'),
         db.from('orders').select('id,display_id,status,total,total_units,tokens_reserved,scenario_type,scenario_city,scenario_street,points_awarded,xp_awarded,created_at,profiles(username)').in('status', ['submitted', 'processing']).order('created_at', { ascending: false }),
         db.from('game_configs').select('*').order('game_type'),
         db.from('service_areas').select('*').order('sort_order'),
@@ -56,13 +60,15 @@ export function AdminPage() {
         db.from('game_reward_options').select('*').in('game_type', ['spin', 'scratch', 'box']).order('id'),
         db.from('token_reward_tiers').select('*').order('minimum_units'),
       ])
-      for (const result of [productResult, categoryResult, profileResult, orderResult, gameResult, locationResult, settingsResult, broadcastResult, feedbackResult, optionsResult, tiersResult]) {
+      for (const result of [productResult, inventoryResult, categoryResult, profileResult, accessResult, orderResult, gameResult, locationResult, settingsResult, broadcastResult, feedbackResult, optionsResult, tiersResult]) {
         if (result.error) throw new Error(italianErrorMessage(result.error.message, 'Impossibile caricare il pannello amministrazione.'))
       }
       setDashboard(summary)
       setProducts(productResult.data ?? [])
+      setInventory(inventoryResult.data ?? [])
       setCategories(categoryResult.data ?? [])
       setProfiles(profileResult.data ?? [])
+      setAccessRows(accessResult.data ?? [])
       setOrders(orderResult.data ?? [])
       setGames(gameResult.data ?? [])
       setLocations(locationResult.data ?? [])
@@ -106,6 +112,7 @@ export function AdminPage() {
         {([
           ['catalog', Package, 'Catalogo'],
           ['categories', Tags, 'Categorie'],
+          ['inventory', Warehouse, 'Magazzino'],
           ['broadcasts', Megaphone, 'Notizie'],
           ['users', Users, 'Utenti'],
           ['balance', Wallet, 'Saldo'],
@@ -119,8 +126,9 @@ export function AdminPage() {
       </div>
       {tab === 'catalog' && <CatalogAdmin products={products} categories={categories} reload={load} />}
       {tab === 'categories' && <CategoriesAdmin products={products} categories={categories} reload={load} />}
+      {tab === 'inventory' && <InventoryAdmin products={products} inventory={inventory} reload={load} />}
       {tab === 'broadcasts' && <BroadcastAdmin broadcasts={broadcasts} reload={load} />}
-      {tab === 'users' && <UsersAdmin profiles={profiles} initialKycUserId={requestedKycUserId} reload={load} />}
+      {tab === 'users' && <UsersAdmin profiles={profiles} accessRows={accessRows} initialKycUserId={requestedKycUserId} reload={load} />}
       {tab === 'balance' && <BalanceAdmin profiles={profiles} reload={load} />}
       {tab === 'orders' && <OrdersAdmin orders={orders} reload={load} />}
       {tab === 'economy' && <EconomyAdmin games={games} options={rewardOptions} reload={load} />}
@@ -285,6 +293,86 @@ function CategoriesAdmin({ products, categories, reload }: { products: Row[]; ca
           </div>
         )
       })}
+    </Section>
+  )
+}
+
+function InventoryAdmin({ products, inventory, reload }: { products: Row[]; inventory: Row[]; reload: () => Promise<void> }) {
+  const [message, setMessage] = useState('')
+  const rows = products.map(product => ({
+    product,
+    inventory: inventory.find(item => item.product_id === product.id),
+  }))
+  const updateInventory = async (productId: string, patch: Row) => {
+    const { error } = await requireSupabase().from('product_inventory').upsert({
+      product_id: productId,
+      ...patch,
+    })
+    if (error) {
+      setMessage(italianErrorMessage(error.message, 'Aggiornamento del magazzino non riuscito.'))
+      return
+    }
+    await reload()
+  }
+  const updateStock = async (productId: string, value: string) => {
+    const stock = parseOptionalInteger(value)
+    if (value.trim() !== '' && (stock === null || stock < 0)) {
+      setMessage('Inserisci un numero valido o lascia vuoto per nessun limite.')
+      return
+    }
+    setMessage('')
+    await updateInventory(productId, { stock_quantity: value.trim() === '' ? null : stock })
+  }
+  const updateThreshold = async (productId: string, value: string) => {
+    const threshold = parseOptionalInteger(value)
+    if (threshold === null || threshold < 0) {
+      setMessage('Inserisci una soglia valida.')
+      return
+    }
+    setMessage('')
+    await updateInventory(productId, { notify_threshold_quantity: threshold })
+  }
+  return (
+    <Section title="Magazzino" note="Imposta il totale disponibile e la soglia Telegram per ogni prodotto. Il valore viene scalato quando un ordine viene accettato.">
+      {message && <p className="mb-4" style={{ color: '#EF4444' }}>{message}</p>}
+      {rows.map(({ product, inventory: item }) => {
+        const stock = item?.stock_quantity ?? null
+        const threshold = item?.notify_threshold_quantity ?? 500
+        return (
+        <div key={product.id} className="grid grid-cols-1 md:grid-cols-[1fr_145px_145px_auto] gap-3 md:items-center" style={row}>
+          <div className="min-w-0">
+            <strong>{product.name}</strong>
+            <div style={muted}>{product.categories?.name ?? 'Senza categoria'} / {product.published ? 'Pubblicato' : 'Bozza'}</div>
+          </div>
+          <label style={muted}>Rimanenza g
+            <input
+              className="w-full"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              defaultValue={stock ?? ''}
+              placeholder="Senza limite"
+              onBlur={event => updateStock(product.id, event.currentTarget.value)}
+              style={{ ...input, display: 'block', marginTop: 5 }}
+            />
+          </label>
+          <label style={muted}>Notifica a g
+            <input
+              className="w-full"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              defaultValue={threshold}
+              placeholder="500"
+              onBlur={event => updateThreshold(product.id, event.currentTarget.value)}
+              style={{ ...input, display: 'block', marginTop: 5 }}
+            />
+          </label>
+          <div style={{ ...muted, color: stock === null ? 'rgba(245,245,245,.55)' : stock <= 0 ? '#FCA5A5' : '#D7FE55' }}>
+            {stock === null ? 'Nessun limite' : `${stock} g disponibili / notifica a ${threshold} g`}
+          </div>
+        </div>
+        )
+      })}
+      {rows.length === 0 && <p style={muted}>Nessun prodotto in catalogo.</p>}
     </Section>
   )
 }
@@ -468,7 +556,7 @@ async function xhrStorageUpload(path: string, file: File, onProgress: (value: nu
   })
 }
 
-function UsersAdmin({ profiles, initialKycUserId, reload }: { profiles: Row[]; initialKycUserId: string; reload: () => Promise<void> }) {
+function UsersAdmin({ profiles, accessRows, initialKycUserId, reload }: { profiles: Row[]; accessRows: Row[]; initialKycUserId: string; reload: () => Promise<void> }) {
   const [query, setQuery] = useState('')
   const [kycGroup, setKycGroup] = useState<'approved' | 'unapproved'>('unapproved')
   const [message, setMessage] = useState('')
@@ -477,10 +565,51 @@ function UsersAdmin({ profiles, initialKycUserId, reload }: { profiles: Row[]; i
   const [documents, setDocuments] = useState<KycReviewDocument[]>([])
   const [kycError, setKycError] = useState('')
   const [openedKycUserId, setOpenedKycUserId] = useState('')
-  const visibleProfiles = profiles.filter(profile => `${profile.username} ${profile.telegram_subject}`.toLowerCase().includes(query.toLowerCase()))
-  const approvedProfiles = visibleProfiles.filter(profile => profile.kyc_cases?.status === 'approved')
-  const unapprovedProfiles = visibleProfiles.filter(profile => profile.kyc_cases?.status !== 'approved')
+  const profilesWithAccess: Row[] = profiles.map(profile => ({
+    ...profile,
+    access: accessRows.find(row => row.telegram_subject === profile.telegram_subject),
+  }))
+  const pendingAccessRows: Row[] = accessRows
+    .filter(access => access.access_status === 'pending')
+    .map(access => ({
+      ...profiles.find(profile => profile.telegram_subject === access.telegram_subject),
+      access,
+      telegram_subject: access.telegram_subject,
+      username: profiles.find(profile => profile.telegram_subject === access.telegram_subject)?.username ?? access.access_username ?? 'utente',
+      blocked: false,
+    }))
+  const rejectedAccessRows: Row[] = accessRows
+    .filter(access => access.access_status === 'rejected')
+    .map(access => ({
+      ...profiles.find(profile => profile.telegram_subject === access.telegram_subject),
+      access,
+      telegram_subject: access.telegram_subject,
+      username: profiles.find(profile => profile.telegram_subject === access.telegram_subject)?.username ?? access.access_username ?? 'utente',
+      blocked: true,
+    }))
+  const visibleApprovedProfiles = profilesWithAccess
+    .filter(profile => (profile.access?.access_status ?? 'approved') === 'approved' && !profile.blocked)
+    .filter(profile => `${profile.username} ${profile.telegram_subject}`.toLowerCase().includes(query.toLowerCase()))
+  const visiblePendingRows = pendingAccessRows.filter(entry => `${entry.username} ${entry.telegram_subject}`.toLowerCase().includes(query.toLowerCase()))
+  const visibleRejectedRows = [
+    ...profilesWithAccess.filter(profile => profile.blocked),
+    ...rejectedAccessRows.filter(entry => !profilesWithAccess.some(profile => profile.telegram_subject === entry.telegram_subject)),
+  ].filter(entry => `${entry.username} ${entry.telegram_subject}`.toLowerCase().includes(query.toLowerCase()))
+  const approvedProfiles = visibleApprovedProfiles.filter(profile => profile.kyc_cases?.status === 'approved')
+  const unapprovedProfiles = visibleApprovedProfiles.filter(profile => profile.kyc_cases?.status !== 'approved')
   const displayedProfiles = kycGroup === 'approved' ? approvedProfiles : unapprovedProfiles
+  const decideAccess = async (telegramSubject: string, decision: 'approved' | 'rejected') => {
+    setMessage('')
+    setMessageError(false)
+    try {
+      await adminReviewAccessRequest(telegramSubject, decision)
+      setMessage(decision === 'approved' ? 'Accesso approvato.' : 'Accesso rifiutato.')
+      await reload()
+    } catch (caught) {
+      setMessageError(true)
+      setMessage(italianErrorMessage(caught, 'Aggiornamento accesso non riuscito.'))
+    }
+  }
   const toggleBlocked = async (profile: Row) => {
     setMessage('')
     setMessageError(false)
@@ -549,7 +678,7 @@ function UsersAdmin({ profiles, initialKycUserId, reload }: { profiles: Row[]; i
     <div key={profile.id} className="flex flex-col lg:flex-row lg:items-center gap-3" style={row}>
       <div className="flex-1 min-w-0">
         <strong>@{profile.username}</strong>
-        <div className="break-all" style={muted}>Telegram ID: {profile.telegram_subject} / {profile.role === 'admin' ? 'amministratore' : 'utente'}</div>
+        <div className="break-all" style={muted}>Telegram ID: {profile.telegram_subject} / {profile.role === 'admin' ? 'amministratore' : 'utente'} / accesso: {profile.access?.access_status ?? 'pending'}</div>
         <div style={muted}>
           {(profile.orders ?? []).filter((order: Row) => order.status === 'completed').length} completate / {(profile.feedback ?? []).length} recensioni
           {profile.kyc_cases?.retain_until ? ` / documenti fino a ${new Date(profile.kyc_cases.retain_until).toLocaleDateString('it-IT')}` : ''}
@@ -568,10 +697,44 @@ function UsersAdmin({ profiles, initialKycUserId, reload }: { profiles: Row[]; i
       )}
     </div>
   ))
+  const pendingRows = (items: Row[]) => items.map(entry => (
+    <div key={entry.telegram_subject} className="flex flex-col sm:flex-row sm:items-center gap-3" style={row}>
+      <div className="flex-1 min-w-0">
+        <strong>@{entry.username}</strong>
+        <div className="break-all" style={muted}>Telegram ID: {entry.telegram_subject}</div>
+        {entry.access?.access_requested_at && <div style={muted}>Richiesta: {new Date(entry.access.access_requested_at).toLocaleString('it-IT')}</div>}
+      </div>
+      <div className="flex flex-col sm:flex-row gap-2">
+        <button style={{ ...primary, background: '#10B981' }} onClick={() => decideAccess(entry.telegram_subject, 'approved')}>ACCETTA</button>
+        <button style={dangerButton} onClick={() => decideAccess(entry.telegram_subject, 'rejected')}>RIFIUTA</button>
+      </div>
+    </div>
+  ))
+  const rejectedRows = (items: Row[]) => items.map(entry => (
+    <div key={entry.id ?? entry.telegram_subject} className="flex flex-col sm:flex-row sm:items-center gap-3" style={row}>
+      <div className="flex-1 min-w-0">
+        <strong>@{entry.username}</strong>
+        <div className="break-all" style={muted}>Telegram ID: {entry.telegram_subject} / {entry.access?.access_status === 'rejected' ? 'rifiutato' : 'bloccato'}</div>
+      </div>
+      <span style={{ color: '#FCA5A5' }}>{entry.access?.access_status === 'rejected' ? 'RIFIUTATO' : 'BLOCCATO'}</span>
+      {entry.id && entry.role !== 'admin' && (
+        <>
+          <button style={smallButton} onClick={() => toggleBlocked(entry)}>Sblocca</button>
+          <button style={dangerButton} onClick={() => removeAccount(entry)}>Elimina</button>
+        </>
+      )}
+    </div>
+  ))
   return (
-    <Section title="Utenti" note="I profili vengono creati al primo accesso Telegram. Gestisci KYC, blocco o eliminazione definitiva dell’account.">
+    <Section title="Utenti" note="Gestisci utenti approvati, richieste di accesso e account rifiutati o bloccati.">
       {message && <p className="mb-4" style={{ color: messageError || message === 'Utente bloccato.' ? '#FCA5A5' : '#D7FE55' }}>{message}</p>}
       <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Cerca username o Telegram ID" style={{ ...input, width: '100%', marginBottom: 12 }} />
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
+        <Metric label="Approvati" value={visibleApprovedProfiles.length} />
+        <Metric label="In attesa" value={visiblePendingRows.length} />
+        <Metric label="Bloccati / rifiutati" value={visibleRejectedRows.length} />
+      </div>
+      <h3 className="mb-3">1. Utenti approvati</h3>
       <div className="flex flex-col sm:flex-row gap-2" style={{ margin: '12px 0 16px' }}>
         <button
           style={kycGroup === 'unapproved' ? { ...smallButton, color: '#D7FE55', borderColor: 'rgba(215,254,85,.45)' } : smallButton}
@@ -588,7 +751,11 @@ function UsersAdmin({ profiles, initialKycUserId, reload }: { profiles: Row[]; i
       </div>
       {displayedProfiles.length
         ? userRows(displayedProfiles)
-        : <p style={muted}>{kycGroup === 'approved' ? 'Nessun utente con verifica KYC approvata.' : 'Nessun utente in attesa di verifica KYC.'}</p>}
+        : <p style={muted}>{kycGroup === 'approved' ? 'Nessun utente approvato con verifica KYC approvata.' : 'Nessun utente approvato senza KYC approvata.'}</p>}
+      <h3 className="mb-3 mt-6">2. Richieste in attesa</h3>
+      {visiblePendingRows.length ? pendingRows(visiblePendingRows) : <p style={muted}>Nessuna richiesta in attesa.</p>}
+      <h3 className="mb-3 mt-6">3. Bloccati o non approvati</h3>
+      {visibleRejectedRows.length ? rejectedRows(visibleRejectedRows) : <p style={muted}>Nessun account bloccato o rifiutato.</p>}
       {reviewUser && (
         <div className="fixed inset-0 z-50 p-3 sm:p-5 flex items-center justify-center" style={{ background: 'rgba(0,0,0,.85)' }}>
           <div className="p-5 rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto" style={panel}>
@@ -713,6 +880,13 @@ function OrdersAdmin({ orders, reload }: { orders: Row[]; reload: () => Promise<
     if (error) {
       setMessage(italianErrorMessage(error.message, 'Aggiornamento dell’ordine non riuscito.'))
       return
+    }
+    if (status === 'processing') {
+      try {
+        await adminSendLowStockNotifications()
+      } catch (caught) {
+        setMessage(italianErrorMessage(caught, 'Ordine aggiornato, ma invio notifiche magazzino non riuscito.'))
+      }
     }
     await reload()
   }

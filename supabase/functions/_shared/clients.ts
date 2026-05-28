@@ -32,6 +32,7 @@ export function publicErrorMessage(error: unknown, fallback = 'Operazione non ri
       ? error
       : ''
   if (!message) return fallback
+  if (message.startsWith('STOCK_NOT_ENOUGH:')) return `Magazzino insufficiente: ${message.split(':').slice(1).join(':')}.`
   if (/more than one relationship|could not embed|schema cache/i.test(message)) return 'Impossibile caricare i dati collegati. Aggiorna la pagina e riprova.'
   if (/duplicate key|already registered|already exists|unique constraint/i.test(message)) return 'Esiste già un elemento con questi dati.'
   if (/foreign key|still referenced|violates.*constraint/i.test(message)) return 'Operazione non possibile perché esistono dati collegati.'

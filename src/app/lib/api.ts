@@ -25,14 +25,21 @@ import type {
 
 type RecordValue = Record<string, any>
 
-export async function getAccountBlocked(): Promise<boolean> {
+export type AccountAccessStatus = 'pending' | 'approved' | 'rejected'
+
+export async function getAccountAccessState(): Promise<{ blocked: boolean; accessStatus: AccountAccessStatus }> {
   const db = requireSupabase()
   const { data, error } = await db.rpc('get_my_access_state')
   if (error) {
-    if (/get_my_access_state|schema cache|could not find the function/i.test(error.message)) return false
+    if (/get_my_access_state|schema cache|could not find the function/i.test(error.message)) return { blocked: false, accessStatus: 'approved' }
     throw new Error(italianErrorMessage(error.message))
   }
-  return Boolean((data as RecordValue | null)?.blocked)
+  const row = data as RecordValue | null
+  const status = row?.access_status
+  return {
+    blocked: Boolean(row?.blocked),
+    accessStatus: status === 'approved' || status === 'rejected' ? status : 'pending',
+  }
 }
 
 function unwrap<T>(result: { data: T | null; error: { message: string } | null }): T {
@@ -430,4 +437,18 @@ export async function adminBroadcastAction(broadcastId: string, action: 'publish
   const response = await db.functions.invoke('admin-broadcast-action', { body: { broadcastId, action } })
   if (response.error) throw new Error(await edgeFunctionError(response.error, 'Azione notizia non riuscita.'))
   return unwrap(response) as { status: string; telegramSent?: number; telegramDeleted?: number; telegramFailed?: number }
+}
+
+export async function adminSendLowStockNotifications() {
+  const db = requireSupabase()
+  const response = await db.functions.invoke('admin-low-stock-notifications', { body: {} })
+  if (response.error) throw new Error(await edgeFunctionError(response.error, 'Invio notifiche magazzino non riuscito.'))
+  return unwrap(response) as { processed: number; telegramSent: number; telegramFailed: number }
+}
+
+export async function adminReviewAccessRequest(telegramSubject: string, decision: 'approved' | 'rejected') {
+  const db = requireSupabase()
+  const response = await db.functions.invoke('admin-review-access-request', { body: { telegramSubject, decision } })
+  if (response.error) throw new Error(await edgeFunctionError(response.error, 'Aggiornamento accesso non riuscito.'))
+  return unwrap(response) as { status: string; telegram_subject: string }
 }

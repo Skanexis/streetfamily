@@ -1,4 +1,5 @@
 import { adminClient, corsHeaders, envAdminIds, json, publicErrorMessage } from '../_shared/clients.ts'
+import { ensureAccessRequest } from '../_shared/access-requests.ts'
 
 type TelegramUser = {
   id: number
@@ -59,19 +60,13 @@ Deno.serve(async req => {
     const isAdmin = envAdminIds().has(telegramId)
     if (!isAdmin && !telegramUser.username?.trim()) return json({ error: 'Username Telegram richiesto.' }, 403)
     const db = adminClient()
-    const { data: access, error: accessError } = await db.from('staging_allowlist')
-      .select('enabled,role')
-      .eq('telegram_subject', telegramId)
-      .maybeSingle()
-    if (accessError) return json({ error: publicErrorMessage(accessError.message, 'Autorizzazione non riuscita.') }, 500)
-    const { error: roleSyncError } = await db.from('staging_allowlist').upsert({
-      telegram_subject: telegramId,
-      role: isAdmin ? 'admin' : 'user',
-      enabled: access?.enabled ?? true,
-      note: isAdmin ? 'TELEGRAM_ADMIN_IDS' : 'Registrazione dalla mini applicazione Telegram',
-    })
-    if (roleSyncError) return json({ error: publicErrorMessage(roleSyncError.message, 'Autorizzazione non riuscita.') }, 500)
-    if (access && !access.enabled && !isAdmin) return json({ error: 'Accesso non autorizzato' }, 403)
+    const access = await ensureAccessRequest(
+      db,
+      telegramId,
+      telegramUser.username ?? telegramUser.first_name ?? 'membro',
+      isAdmin,
+    )
+    if (access.status === 'rejected' && !isAdmin) return json({ error: 'Account bloccato.' }, 403)
     const email = `telegram_${telegramId}@street-family.invalid`
     const metadata = {
       telegram_id: telegramId,

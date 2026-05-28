@@ -83,6 +83,7 @@ export function LoginPage() {
     return () => window.clearInterval(timer)
   }, [challenge])
   if (auth.blocked) return <Navigate to="/blocked" replace />
+  if (auth.session && auth.accessStatus === 'pending') return <Navigate to="/access-pending" replace />
   if (auth.profile) return <Navigate to="/" replace />
   return (
     <Centered>
@@ -111,6 +112,7 @@ export function CallbackPage() {
   const auth = useAuth()
   if (auth.loading) return <Centered>Verifica accesso...</Centered>
   if (auth.blocked) return <Navigate to="/blocked" replace />
+  if (auth.session && auth.accessStatus === 'pending') return <Navigate to="/access-pending" replace />
   if (auth.denied) return <Navigate to="/access-denied" replace />
   if (auth.profile) return <Navigate to="/" replace />
   return <Navigate to="/login" replace />
@@ -125,6 +127,34 @@ export function AccessDeniedPage() {
         <h1 style={{ fontFamily: 'Space Grotesk', fontWeight: 700 }}>Accesso non autorizzato</h1>
         <p style={{ color: 'rgba(245,245,245,.65)', margin: '12px 0 24px' }}>Il tuo account Telegram non è autorizzato.</p>
         <button style={primaryButton} onClick={logout}>Esci</button>
+      </div>
+    </Centered>
+  )
+}
+
+export function AccessPendingPage() {
+  const { logout, refreshProfile } = useAuth()
+  const [checking, setChecking] = useState(false)
+  const check = async () => {
+    setChecking(true)
+    try {
+      await refreshProfile()
+    } finally {
+      setChecking(false)
+    }
+  }
+  return (
+    <Centered>
+      <div style={card}>
+        <ShieldAlert size={36} style={{ color: '#F59E0B', marginBottom: 15 }} />
+        <h1 style={{ fontFamily: 'Space Grotesk', fontWeight: 700 }}>Account in attesa</h1>
+        <p style={{ color: 'rgba(245,245,245,.65)', margin: '12px 0 24px' }}>
+          Il tuo account è in attesa di conferma amministratore. Fino all'approvazione non puoi visualizzare il sito.
+        </p>
+        <div className="grid gap-2">
+          <button style={primaryButton} onClick={check} disabled={checking}>{checking ? 'Verifica...' : 'Verifica stato'}</button>
+          <button style={{ ...primaryButton, background: '#11181B', border: '1px solid rgba(126,156,168,.25)' }} onClick={logout}>Esci</button>
+        </div>
       </div>
     </Centered>
   )
@@ -151,6 +181,7 @@ export function RequireMember({ children }: { children: ReactElement }) {
   if (auth.loading) return <Centered>Caricamento...</Centered>
   if (!auth.session) return <Navigate to="/login" replace />
   if (auth.blocked) return <Navigate to="/blocked" replace />
+  if (auth.accessStatus === 'pending') return <Navigate to="/access-pending" replace />
   if (!auth.profile) return <Navigate to="/access-denied" replace />
   return children
 }

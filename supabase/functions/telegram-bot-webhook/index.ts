@@ -1,4 +1,6 @@
 import { adminClient, answerTelegramCallbackQuery, editTelegramMessage, envAdminIds, json, publicErrorMessage, sendTelegramMessage, sendTelegramMessageWithOptions, setTelegramMiniAppMenu, sha256 } from '../_shared/clients.ts'
+import { ensureAccessRequest } from '../_shared/access-requests.ts'
+import { sendPendingLowStockNotifications } from '../_shared/low-stock.ts'
 
 interface TelegramUpdate {
   message?: {
@@ -31,8 +33,9 @@ Deno.serve(async req => {
       await answerTelegramCallbackQuery(callback.id, 'Azione non autorizzata.')
       return json({ ok: true })
     }
-    const match = callback.data.match(/^ord:([ar]):([0-9a-f-]{36})$/i)
-    if (!match) {
+    const orderMatch = callback.data.match(/^ord:([ar]):([0-9a-f-]{36})$/i)
+    const accessMatch = callback.data.match(/^acc:([ar]):([0-9]+)$/i)
+    if (!orderMatch && !accessMatch) {
       await answerTelegramCallbackQuery(callback.id, 'Azione non valida.')
       return json({ ok: true })
     }
@@ -46,6 +49,31 @@ Deno.serve(async req => {
       await answerTelegramCallbackQuery(callback.id, 'Apri prima la mini applicazione come amministratore.')
       return json({ ok: true })
     }
+    if (accessMatch) {
+      const decision = accessMatch[1] === 'a' ? 'approved' : 'rejected'
+      const result = await db.rpc('admin_review_access_request', {
+        p_actor_id: actor.id,
+        p_telegram_subject: accessMatch[2],
+        p_decision: decision,
+      })
+      if (result.error) {
+        await answerTelegramCallbackQuery(callback.id, publicErrorMessage(result.error.message, 'Aggiornamento accesso non riuscito.'))
+        return json({ ok: true })
+      }
+      const statusText = decision === 'approved' ? 'ACCESSO ACCETTATO' : 'ACCESSO RIFIUTATO'
+      if (callback.message) {
+        const currentText = callback.message.text ?? 'Richiesta accesso Street Family'
+        await editTelegramMessage(
+          String(callback.message.chat.id),
+          callback.message.message_id,
+          `${currentText}\n\n${statusText}`,
+        )
+      }
+      await answerTelegramCallbackQuery(callback.id, decision === 'approved' ? 'Accesso accettato.' : 'Accesso rifiutato.')
+      return json({ ok: true })
+    }
+
+    const match = orderMatch!
     const action = match[1] === 'a' ? 'accept' : 'reject'
     const result = await db.rpc('telegram_admin_order_action', {
       p_actor_id: actor.id,
@@ -64,6 +92,9 @@ Deno.serve(async req => {
         callback.message.message_id,
         `${currentText}\n\n${statusText}`,
       )
+    }
+    if (action === 'accept') {
+      await Promise.allSettled([sendPendingLowStockNotifications(db)])
     }
     await answerTelegramCallbackQuery(callback.id, action === 'accept' ? 'Ordine accettato.' : 'Ordine rifiutato.')
     return json({ ok: true })
@@ -85,15 +116,9 @@ Deno.serve(async req => {
       await sendTelegramMessage(String(message.chat.id), 'Mini applicazione non configurata. Contatta un amministratore.')
       return json({ ok: true })
     }
-    const { data: existing } = await db.from('staging_allowlist').select('enabled,role').eq('telegram_subject', telegramId).maybeSingle()
-    await db.from('staging_allowlist').upsert({
-      telegram_subject: telegramId,
-      role: isAdmin ? 'admin' : 'user',
-      enabled: isAdmin ? true : existing?.enabled ?? true,
-      note: isAdmin ? 'TELEGRAM_ADMIN_IDS' : 'Avvio bot Telegram',
-    })
-    if (existing?.enabled === false && !isAdmin) {
-      await sendTelegramMessage(String(message.chat.id), 'Il tuo account non è autorizzato.')
+    const access = await ensureAccessRequest(db, telegramId, message.from.username ?? message.from.first_name ?? 'membro', isAdmin)
+    if (access.status === 'rejected' && !isAdmin) {
+      await sendTelegramMessage(String(message.chat.id), 'La tua richiesta di accesso è stata rifiutata.')
       return json({ ok: true })
     }
     const { data: existingProfile } = await db.from('profiles').select('blocked').eq('telegram_subject', telegramId).maybeSingle()
@@ -111,7 +136,11 @@ Deno.serve(async req => {
     ])
     await sendTelegramMessageWithOptions(
       String(message.chat.id),
-      isAdmin ? 'Accesso amministratore disponibile.' : 'Benvenuto. Apri Street Family per accedere.',
+      isAdmin
+        ? 'Accesso amministratore disponibile.'
+        : access.status === 'approved'
+          ? 'Benvenuto. Apri Street Family per accedere.'
+          : 'Richiesta inviata. Attendi approvazione amministratore.',
       isAdmin
         ? { inline_keyboard: [[{ text: 'Pannello amministrazione', web_app: { url: adminUrl } }], [{ text: 'Apri Street Family', web_app: { url: appUrl } }]] }
         : { inline_keyboard: [[{ text: 'Apri Street Family', web_app: { url: appUrl } }]] },
@@ -136,26 +165,18 @@ Deno.serve(async req => {
     return json({ ok: true })
   }
 
-  const { data: existing } = await db.from('staging_allowlist').select('enabled').eq('telegram_subject', telegramId).maybeSingle()
-  await db.from('staging_allowlist').upsert({
-    telegram_subject: telegramId,
-    role: isAdmin ? 'admin' : 'user',
-    enabled: isAdmin ? true : existing?.enabled ?? true,
-    note: isAdmin ? 'TELEGRAM_ADMIN_IDS' : 'Registrazione accesso Telegram',
-  })
+  const access = await ensureAccessRequest(db, telegramId, message.from.username ?? message.from.first_name ?? 'membro', isAdmin)
+  if (access.status === 'rejected' && !isAdmin) {
+    await db.from('telegram_login_challenges').update({ state: 'denied', telegram_id: telegramId }).eq('id', challenge.id)
+    await sendTelegramMessage(String(message.chat.id), 'La tua richiesta di accesso è stata rifiutata.')
+    return json({ ok: true })
+  }
   const { data: loginProfile } = await db.from('profiles').select('id,blocked').eq('telegram_subject', telegramId).maybeSingle()
   if (loginProfile?.blocked && !isAdmin) {
     await db.from('telegram_login_challenges').update({ state: 'denied', telegram_id: telegramId }).eq('id', challenge.id)
     await sendTelegramMessage(String(message.chat.id), "Il tuo account è bloccato. L'accesso non è disponibile.")
     return json({ ok: true })
   }
-  const { data: allowed } = await db.from('staging_allowlist').select('role,enabled').eq('telegram_subject', telegramId).eq('enabled', true).maybeSingle()
-  if (!allowed) {
-    await db.from('telegram_login_challenges').update({ state: 'denied', telegram_id: telegramId }).eq('id', challenge.id)
-    await sendTelegramMessage(String(message.chat.id), 'Il tuo account non è autorizzato.')
-    return json({ ok: true })
-  }
-
   const email = `telegram_${telegramId}@street-family.invalid`
   const metadata = { telegram_id: telegramId, username: message.from.username ?? message.from.first_name ?? 'membro', first_name: message.from.first_name }
   const { data: profile } = await db.from('profiles').select('id').eq('telegram_subject', telegramId).maybeSingle()
@@ -174,7 +195,7 @@ Deno.serve(async req => {
       id: userId,
       telegram_subject: telegramId,
       username: metadata.username,
-      role: isAdmin ? 'admin' : allowed.role,
+      role: isAdmin ? 'admin' : 'user',
     }, { onConflict: 'id' })
     if (repaired.error) return json({ error: publicErrorMessage(repaired.error.message, 'Creazione account non riuscita.') }, 500)
     const wallet = await db.from('wallet_balances').upsert({ user_id: userId, points: 0 }, { onConflict: 'user_id', ignoreDuplicates: true })
@@ -199,7 +220,7 @@ Deno.serve(async req => {
       adminUrl ? { inline_keyboard: [[{ text: 'Pannello amministrazione', web_app: { url: adminUrl } }]] } : undefined,
     )
   } else {
-    await sendTelegramMessage(String(message.chat.id), 'Accesso confermato. Torna al sito.')
+    await sendTelegramMessage(String(message.chat.id), access.status === 'approved' ? 'Accesso confermato. Torna al sito.' : 'Account creato. Attendi approvazione amministratore.')
   }
   return json({ ok: true })
 })
