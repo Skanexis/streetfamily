@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { Package, Tags, Users, Gamepad2, ClipboardList, Settings, Megaphone, MessageSquare, Minus, Plus, Warehouse, Wallet } from 'lucide-react'
-import { useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { adminAdjustWallet, adminBroadcastAction, adminDeleteAccount, adminDeleteGameOption, adminReviewAccessRequest, adminSaveGameOptions, adminSendLowStockNotifications, adminSetGameActive, adminSimulateGame, getAdminDashboard, getAdminKycDocuments, reviewKyc } from '../lib/api'
 import { requireSupabase } from '../lib/supabase'
 import { italianErrorMessage } from '../lib/errors'
@@ -20,6 +20,9 @@ export function AdminPage() {
   const [searchParams] = useSearchParams()
   const requestedTab = searchParams.get('tab') as Tab | null
   const requestedKycUserId = searchParams.get('kyc') ?? ''
+  const requestedUsersGroup = searchParams.get('usersGroup')
+  const requestedOrdersGroup = searchParams.get('ordersGroup')
+  const requestedKycGroup = searchParams.get('kycGroup')
   const [tab, setTab] = useState<Tab>(isTab(requestedTab) ? requestedTab : (requestedKycUserId ? 'kyc' : 'catalog'))
   const [dashboard, setDashboard] = useState<DashboardData | null>(null)
   const [products, setProducts] = useState<Row[]>([])
@@ -131,10 +134,10 @@ export function AdminPage() {
       {tab === 'categories' && <CategoriesAdmin products={products} categories={categories} reload={load} />}
       {tab === 'inventory' && <InventoryAdmin products={products} inventory={inventory} reload={load} />}
       {tab === 'broadcasts' && <BroadcastAdmin broadcasts={broadcasts} reload={load} />}
-      {tab === 'users' && <UsersAdmin profiles={profiles} accessRows={accessRows} reload={load} />}
+      {tab === 'users' && <UsersAdmin profiles={profiles} accessRows={accessRows} initialGroup={requestedUsersGroup} reload={load} />}
       {tab === 'balance' && <BalanceAdmin profiles={profiles} reload={load} />}
-      {tab === 'orders' && <OrdersAdmin orders={orders} reload={load} />}
-      {tab === 'kyc' && <KycRequestsAdmin profiles={profiles} initialKycUserId={requestedKycUserId} reload={load} />}
+      {tab === 'orders' && <OrdersAdmin orders={orders} initialGroup={requestedOrdersGroup} reload={load} />}
+      {tab === 'kyc' && <KycRequestsAdmin profiles={profiles} initialKycUserId={requestedKycUserId} initialGroup={requestedKycGroup} reload={load} />}
       {tab === 'economy' && <EconomyAdmin games={games} options={rewardOptions} reload={load} />}
       {tab === 'feedback' && <FeedbackAdmin feedback={feedback} reload={load} />}
       {tab === 'settings' && <SettingsAdmin locations={locations} settings={settings} tokenTiers={tokenTiers} reload={load} />}
@@ -560,12 +563,27 @@ async function xhrStorageUpload(path: string, file: File, onProgress: (value: nu
   })
 }
 
-function UsersAdmin({ profiles, accessRows, reload }: { profiles: Row[]; accessRows: Row[]; reload: () => Promise<void> }) {
+type UsersGroup = 'approved' | 'pending' | 'rejected'
+
+function UsersAdmin({ profiles, accessRows, initialGroup, reload }: { profiles: Row[]; accessRows: Row[]; initialGroup: string | null; reload: () => Promise<void> }) {
+  const navigate = useNavigate()
+  const location = useLocation()
   const [query, setQuery] = useState('')
   const [kycGroup, setKycGroup] = useState<'approved' | 'unapproved'>('unapproved')
-  const [openedGroups, setOpenedGroups] = useState({ approved: true, pending: false, rejected: false })
+  const [activeGroup, setActiveGroup] = useState<UsersGroup>(parseUsersGroup(initialGroup) ?? 'approved')
   const [message, setMessage] = useState('')
   const [messageError, setMessageError] = useState(false)
+  useEffect(() => {
+    const requested = parseUsersGroup(initialGroup)
+    if (requested) setActiveGroup(requested)
+  }, [initialGroup])
+  const openGroup = (group: UsersGroup) => {
+    setActiveGroup(group)
+    const params = new URLSearchParams(location.search)
+    params.set('tab', 'users')
+    params.set('usersGroup', group)
+    navigate({ search: `?${params.toString()}` }, { replace: true })
+  }
   const profilesWithAccess: Row[] = profiles.map(profile => ({
     ...profile,
     access: accessRows.find(row => row.telegram_subject === profile.telegram_subject),
@@ -695,73 +713,53 @@ function UsersAdmin({ profiles, accessRows, reload }: { profiles: Row[]; accessR
       {message && <p className="mb-4" style={{ color: messageError || message === 'Utente bloccato.' ? '#FCA5A5' : '#D7FE55' }}>{message}</p>}
       <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Cerca username o Telegram ID" style={{ ...input, width: '100%', marginBottom: 12 }} />
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
-        <Metric label="Approvati" value={visibleApprovedProfiles.length} />
-        <Metric label="In attesa" value={visiblePendingRows.length} />
-        <Metric label="Bloccati / rifiutati" value={visibleRejectedRows.length} />
+        <button type="button" onClick={() => openGroup('approved')} style={activeGroup === 'approved' ? activeUsersGroupButton : usersGroupButton}>
+          <span>Approvati</span>
+          <strong>{visibleApprovedProfiles.length}</strong>
+        </button>
+        <button type="button" onClick={() => openGroup('pending')} style={activeGroup === 'pending' ? activeUsersGroupButton : usersGroupButton}>
+          <span>In attesa</span>
+          <strong>{visiblePendingRows.length}</strong>
+        </button>
+        <button type="button" onClick={() => openGroup('rejected')} style={activeGroup === 'rejected' ? activeUsersGroupButton : usersGroupButton}>
+          <span>Bloccati / rifiutati</span>
+          <strong>{visibleRejectedRows.length}</strong>
+        </button>
       </div>
-      <div className="grid grid-cols-1 gap-3">
-        <div className="p-3 rounded-xl" style={panel}>
-          <button
-            type="button"
-            onClick={() => setOpenedGroups(state => ({ ...state, approved: !state.approved }))}
-            style={accordionButton}
-          >
-            <span><strong>1. Utenti approvati</strong> ({visibleApprovedProfiles.length})</span>
-            <span className="inline-flex items-center gap-1">{openedGroups.approved ? 'Nascondi' : 'Apri'} {openedGroups.approved ? <Minus size={15} /> : <Plus size={15} />}</span>
-          </button>
-          {openedGroups.approved && (
-            <div className="mt-3">
-              <div className="flex flex-col sm:flex-row gap-2" style={{ marginBottom: 14 }}>
-                <button
-                  style={kycGroup === 'unapproved' ? { ...smallButton, color: '#D7FE55', borderColor: 'rgba(215,254,85,.45)' } : smallButton}
-                  onClick={() => setKycGroup('unapproved')}
-                >
-                  KYC non approvata ({unapprovedProfiles.length})
-                </button>
-                <button
-                  style={kycGroup === 'approved' ? { ...smallButton, color: '#D7FE55', borderColor: 'rgba(215,254,85,.45)' } : smallButton}
-                  onClick={() => setKycGroup('approved')}
-                >
-                  KYC approvata ({approvedProfiles.length})
-                </button>
-              </div>
-              {displayedProfiles.length
-                ? userRows(displayedProfiles)
-                : <p style={muted}>{kycGroup === 'approved' ? 'Nessun utente approvato con verifica KYC approvata.' : 'Nessun utente approvato senza KYC approvata.'}</p>}
-            </div>
-          )}
+      {activeGroup === 'approved' && (
+        <div>
+          <h3 className="mb-3">Utenti approvati</h3>
+          <div className="flex flex-col sm:flex-row gap-2" style={{ marginBottom: 14 }}>
+            <button
+              style={kycGroup === 'unapproved' ? { ...smallButton, color: '#D7FE55', borderColor: 'rgba(215,254,85,.45)' } : smallButton}
+              onClick={() => setKycGroup('unapproved')}
+            >
+              KYC non approvata ({unapprovedProfiles.length})
+            </button>
+            <button
+              style={kycGroup === 'approved' ? { ...smallButton, color: '#D7FE55', borderColor: 'rgba(215,254,85,.45)' } : smallButton}
+              onClick={() => setKycGroup('approved')}
+            >
+              KYC approvata ({approvedProfiles.length})
+            </button>
+          </div>
+          {displayedProfiles.length
+            ? userRows(displayedProfiles)
+            : <p style={muted}>{kycGroup === 'approved' ? 'Nessun utente approvato con verifica KYC approvata.' : 'Nessun utente approvato senza KYC approvata.'}</p>}
         </div>
-        <div className="p-3 rounded-xl" style={panel}>
-          <button
-            type="button"
-            onClick={() => setOpenedGroups(state => ({ ...state, pending: !state.pending }))}
-            style={accordionButton}
-          >
-            <span><strong>2. Richieste in attesa</strong> ({visiblePendingRows.length})</span>
-            <span className="inline-flex items-center gap-1">{openedGroups.pending ? 'Nascondi' : 'Apri'} {openedGroups.pending ? <Minus size={15} /> : <Plus size={15} />}</span>
-          </button>
-          {openedGroups.pending && (
-            <div className="mt-3">
-              {visiblePendingRows.length ? pendingRows(visiblePendingRows) : <p style={muted}>Nessuna richiesta in attesa.</p>}
-            </div>
-          )}
+      )}
+      {activeGroup === 'pending' && (
+        <div>
+          <h3 className="mb-3">Richieste in attesa</h3>
+          {visiblePendingRows.length ? pendingRows(visiblePendingRows) : <p style={muted}>Nessuna richiesta in attesa.</p>}
         </div>
-        <div className="p-3 rounded-xl" style={panel}>
-          <button
-            type="button"
-            onClick={() => setOpenedGroups(state => ({ ...state, rejected: !state.rejected }))}
-            style={accordionButton}
-          >
-            <span><strong>3. Bloccati o non approvati</strong> ({visibleRejectedRows.length})</span>
-            <span className="inline-flex items-center gap-1">{openedGroups.rejected ? 'Nascondi' : 'Apri'} {openedGroups.rejected ? <Minus size={15} /> : <Plus size={15} />}</span>
-          </button>
-          {openedGroups.rejected && (
-            <div className="mt-3">
-              {visibleRejectedRows.length ? rejectedRows(visibleRejectedRows) : <p style={muted}>Nessun account bloccato o rifiutato.</p>}
-            </div>
-          )}
+      )}
+      {activeGroup === 'rejected' && (
+        <div>
+          <h3 className="mb-3">Bloccati o non approvati</h3>
+          {visibleRejectedRows.length ? rejectedRows(visibleRejectedRows) : <p style={muted}>Nessun account bloccato o rifiutato.</p>}
         </div>
-      </div>
+      )}
     </Section>
   )
 }
@@ -845,8 +843,27 @@ function BalanceAdmin({ profiles, reload }: { profiles: Row[]; reload: () => Pro
   )
 }
 
-function OrdersAdmin({ orders, reload }: { orders: Row[]; reload: () => Promise<void> }) {
+type OrdersGroup = 'submitted' | 'processing'
+
+function OrdersAdmin({ orders, initialGroup, reload }: { orders: Row[]; initialGroup: string | null; reload: () => Promise<void> }) {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const [activeGroup, setActiveGroup] = useState<OrdersGroup>(parseOrdersGroup(initialGroup) ?? 'submitted')
   const [message, setMessage] = useState('')
+  useEffect(() => {
+    const requested = parseOrdersGroup(initialGroup)
+    if (requested) setActiveGroup(requested)
+  }, [initialGroup])
+  const openGroup = (group: OrdersGroup) => {
+    setActiveGroup(group)
+    const params = new URLSearchParams(location.search)
+    params.set('tab', 'orders')
+    params.set('ordersGroup', group)
+    navigate({ search: `?${params.toString()}` }, { replace: true })
+  }
+  const submittedOrders = orders.filter(order => order.status === 'submitted')
+  const processingOrders = orders.filter(order => order.status === 'processing')
+  const visibleOrders = activeGroup === 'submitted' ? submittedOrders : processingOrders
   const updateStatus = async (orderId: string, status: 'processing' | 'completed' | 'cancelled') => {
     setMessage('')
     const { error } = await requireSupabase().rpc('admin_update_order_status', {
@@ -870,8 +887,18 @@ function OrdersAdmin({ orders, reload }: { orders: Row[]; reload: () => Promise<
   return (
     <Section title="Ordini attivi" note="Accetta o rifiuta gli ordini. I premi vengono accreditati solo con la spunta su un ordine accettato.">
       {message && <p className="mb-4" style={{ color: '#EF4444' }}>{message}</p>}
-      {orders.length === 0 && <p style={muted}>Nessun ordine attivo.</p>}
-      {orders.map(order => (
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
+        <button type="button" onClick={() => openGroup('submitted')} style={activeGroup === 'submitted' ? activeUsersGroupButton : usersGroupButton}>
+          <span>Inviate</span>
+          <strong>{submittedOrders.length}</strong>
+        </button>
+        <button type="button" onClick={() => openGroup('processing')} style={activeGroup === 'processing' ? activeUsersGroupButton : usersGroupButton}>
+          <span>Accettate</span>
+          <strong>{processingOrders.length}</strong>
+        </button>
+      </div>
+      {visibleOrders.length === 0 && <p style={muted}>{activeGroup === 'submitted' ? 'Nessun ordine inviato.' : 'Nessun ordine accettato in lavorazione.'}</p>}
+      {visibleOrders.map(order => (
         <div key={order.id} className="flex flex-col sm:flex-row sm:items-center gap-3" style={row}>
           <div className="flex-1 min-w-0">
             <strong>{order.display_id} / {orderStatusLabel[order.status]}</strong>
@@ -889,14 +916,37 @@ function OrdersAdmin({ orders, reload }: { orders: Row[]; reload: () => Promise<
   )
 }
 
-function KycRequestsAdmin({ profiles, initialKycUserId, reload }: { profiles: Row[]; initialKycUserId: string; reload: () => Promise<void> }) {
+type KycGroup = 'submitted' | 'approved' | 'rejected'
+
+function KycRequestsAdmin({ profiles, initialKycUserId, initialGroup, reload }: { profiles: Row[]; initialKycUserId: string; initialGroup: string | null; reload: () => Promise<void> }) {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const [activeGroup, setActiveGroup] = useState<KycGroup>(parseKycGroup(initialGroup) ?? 'submitted')
   const [message, setMessage] = useState('')
   const [messageError, setMessageError] = useState(false)
   const [reviewUser, setReviewUser] = useState<Row | null>(null)
   const [documents, setDocuments] = useState<KycReviewDocument[]>([])
   const [kycError, setKycError] = useState('')
   const [openedKycUserId, setOpenedKycUserId] = useState('')
-  const requests = profiles.filter(profile => profile.kyc_cases?.status === 'submitted')
+  useEffect(() => {
+    const requested = parseKycGroup(initialGroup)
+    if (requested) setActiveGroup(requested)
+  }, [initialGroup])
+  const openGroup = (group: KycGroup) => {
+    setActiveGroup(group)
+    const params = new URLSearchParams(location.search)
+    params.set('tab', 'kyc')
+    params.set('kycGroup', group)
+    navigate({ search: `?${params.toString()}` }, { replace: true })
+  }
+  const submittedRequests = profiles.filter(profile => profile.kyc_cases?.status === 'submitted')
+  const approvedRequests = profiles.filter(profile => profile.kyc_cases?.status === 'approved')
+  const rejectedRequests = profiles.filter(profile => profile.kyc_cases?.status === 'rejected')
+  const visibleRequests = activeGroup === 'submitted'
+    ? submittedRequests
+    : activeGroup === 'approved'
+      ? approvedRequests
+      : rejectedRequests
 
   const openKyc = async (profile: Row) => {
     setKycError('')
@@ -909,9 +959,10 @@ function KycRequestsAdmin({ profiles, initialKycUserId, reload }: { profiles: Ro
   }
   useEffect(() => {
     if (!initialKycUserId || openedKycUserId === initialKycUserId) return
-    const profile = profiles.find(entry => entry.id === initialKycUserId && entry.kyc_cases?.status === 'submitted')
+    const profile = profiles.find(entry => entry.id === initialKycUserId && parseKycGroup(entry.kyc_cases?.status ?? null))
     if (!profile) return
     setOpenedKycUserId(initialKycUserId)
+    setActiveGroup(profile.kyc_cases.status as KycGroup)
     void openKyc(profile)
   }, [initialKycUserId, openedKycUserId, profiles])
   const decideKyc = async (decision: 'approved' | 'rejected', targetProfile?: Row) => {
@@ -938,18 +989,36 @@ function KycRequestsAdmin({ profiles, initialKycUserId, reload }: { profiles: Ro
   return (
     <Section title="Richieste KYC" note="Apri documenti e approva o rifiuta le verifiche KYC inviate dagli utenti.">
       {message && <p className="mb-4" style={{ color: messageError ? '#EF4444' : '#D7FE55' }}>{message}</p>}
-      {requests.length === 0 && <p style={muted}>Nessuna richiesta KYC in attesa.</p>}
-      {requests.map(profile => (
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
+        <button type="button" onClick={() => openGroup('submitted')} style={activeGroup === 'submitted' ? activeUsersGroupButton : usersGroupButton}>
+          <span>Da revisionare</span>
+          <strong>{submittedRequests.length}</strong>
+        </button>
+        <button type="button" onClick={() => openGroup('approved')} style={activeGroup === 'approved' ? activeUsersGroupButton : usersGroupButton}>
+          <span>Approvate</span>
+          <strong>{approvedRequests.length}</strong>
+        </button>
+        <button type="button" onClick={() => openGroup('rejected')} style={activeGroup === 'rejected' ? activeUsersGroupButton : usersGroupButton}>
+          <span>Rifiutate</span>
+          <strong>{rejectedRequests.length}</strong>
+        </button>
+      </div>
+      {visibleRequests.length === 0 && <p style={muted}>Nessuna richiesta KYC in questa sezione.</p>}
+      {visibleRequests.map(profile => (
         <div key={profile.id} className="flex flex-col sm:flex-row sm:items-center gap-3" style={row}>
           <div className="flex-1 min-w-0">
             <strong>@{profile.username}</strong>
-            <div className="break-all" style={muted}>Telegram ID: {profile.telegram_subject}</div>
+            <div className="break-all" style={muted}>Telegram ID: {profile.telegram_subject} / KYC: {kycStatusLabel[profile.kyc_cases?.status ?? 'not_started']}</div>
             {profile.kyc_cases?.submitted_at && <div style={muted}>Inviata: {new Date(profile.kyc_cases.submitted_at).toLocaleString('it-IT')}</div>}
           </div>
           <div className="flex flex-col sm:flex-row gap-2">
             <button style={smallButton} onClick={() => openKyc(profile)}>Documenti</button>
-            <button style={{ ...primary, background: '#10B981' }} onClick={() => decideKyc('approved', profile)}>Approva KYC</button>
-            <button style={dangerButton} onClick={() => decideKyc('rejected', profile)}>Rifiuta KYC</button>
+            {profile.kyc_cases?.status === 'submitted' && (
+              <>
+                <button style={{ ...primary, background: '#10B981' }} onClick={() => decideKyc('approved', profile)}>Approva KYC</button>
+                <button style={dangerButton} onClick={() => decideKyc('rejected', profile)}>Rifiuta KYC</button>
+              </>
+            )}
           </div>
         </div>
       ))}
@@ -973,10 +1042,12 @@ function KycRequestsAdmin({ profiles, initialKycUserId, reload }: { profiles: Ro
                 </div>
               ))}
             </div>
-            <div className="flex flex-col sm:flex-row gap-2">
-              <button style={{ ...primary, background: '#10B981' }} onClick={() => decideKyc('approved')}>Approva KYC</button>
-              <button style={{ ...primary, background: '#EF4444' }} onClick={() => decideKyc('rejected')}>Rifiuta KYC</button>
-            </div>
+            {reviewUser.kyc_cases?.status === 'submitted' && (
+              <div className="flex flex-col sm:flex-row gap-2">
+                <button style={{ ...primary, background: '#10B981' }} onClick={() => decideKyc('approved')}>Approva KYC</button>
+                <button style={{ ...primary, background: '#EF4444' }} onClick={() => decideKyc('rejected')}>Rifiuta KYC</button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1462,6 +1533,15 @@ function isTab(value: string | null): value is Tab {
     || value === 'feedback'
     || value === 'settings'
 }
+function parseOrdersGroup(value: string | null): OrdersGroup | null {
+  return value === 'submitted' || value === 'processing' ? value : null
+}
+function parseKycGroup(value: string | null): KycGroup | null {
+  return value === 'submitted' || value === 'approved' || value === 'rejected' ? value : null
+}
+function parseUsersGroup(value: string | null): UsersGroup | null {
+  return value === 'approved' || value === 'pending' || value === 'rejected' ? value : null
+}
 function countApprovedProfiles(profiles: Row[], accessRows: Row[]) {
   return profiles.filter(profile => {
     const access = accessRows.find(row => row.telegram_subject === profile.telegram_subject)
@@ -1475,5 +1555,6 @@ const muted = { color: 'rgba(245,245,245,.55)', fontSize: 13 }
 const input = { minWidth: 0, maxWidth: '100%', boxSizing: 'border-box' as const, padding: '9px 12px', background: '#080C0E', border: '1px solid rgba(245,245,245,.18)', color: '#F5F5F5', borderRadius: 8 }
 const primary = { ...input, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#7E9CA8', fontWeight: 700 }
 const smallButton = { display: 'inline-flex', alignItems: 'center', gap: 5, padding: '9px 12px', borderRadius: 8, border: '1px solid rgba(126,156,168,.25)', background: '#11181B', color: '#F5F5F5' }
-const accordionButton = { ...smallButton, width: '100%', justifyContent: 'space-between', background: '#0D1417', border: '1px solid rgba(126,156,168,.35)' }
+const usersGroupButton = { ...panel, textAlign: 'left' as const, width: '100%', padding: '14px 16px', borderRadius: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, color: '#F5F5F5' }
+const activeUsersGroupButton = { ...usersGroupButton, border: '1px solid rgba(215,254,85,.45)', boxShadow: '0 0 0 1px rgba(215,254,85,.2) inset', color: '#D7FE55' }
 const dangerButton = { ...smallButton, border: '1px solid rgba(239,68,68,.38)', color: '#FCA5A5' }
