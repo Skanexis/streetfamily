@@ -6,7 +6,7 @@ import { requireSupabase } from '../lib/supabase'
 import { italianErrorMessage } from '../lib/errors'
 import type { Broadcast, DashboardData, GameType, KycReviewDocument } from '../data'
 
-type Tab = 'catalog' | 'categories' | 'inventory' | 'broadcasts' | 'users' | 'balance' | 'orders' | 'economy' | 'feedback' | 'settings'
+type Tab = 'catalog' | 'categories' | 'inventory' | 'broadcasts' | 'users' | 'balance' | 'orders' | 'kyc' | 'economy' | 'feedback' | 'settings'
 type Row = Record<string, any>
 type NumericDraft = string | number
 const orderStatusLabel: Record<string, string> = { submitted: 'Inviata', processing: 'Accettata', completed: 'Completata', cancelled: 'Rifiutata' }
@@ -20,7 +20,7 @@ export function AdminPage() {
   const [searchParams] = useSearchParams()
   const requestedTab = searchParams.get('tab') as Tab | null
   const requestedKycUserId = searchParams.get('kyc') ?? ''
-  const [tab, setTab] = useState<Tab>(isTab(requestedTab) ? requestedTab : (requestedKycUserId ? 'orders' : 'catalog'))
+  const [tab, setTab] = useState<Tab>(isTab(requestedTab) ? requestedTab : (requestedKycUserId ? 'kyc' : 'catalog'))
   const [dashboard, setDashboard] = useState<DashboardData | null>(null)
   const [products, setProducts] = useState<Row[]>([])
   const [inventory, setInventory] = useState<Row[]>([])
@@ -39,7 +39,7 @@ export function AdminPage() {
 
   useEffect(() => {
     if (isTab(requestedTab)) setTab(requestedTab)
-    else if (requestedKycUserId) setTab('orders')
+    else if (requestedKycUserId) setTab('kyc')
   }, [requestedTab, requestedKycUserId])
 
   const load = async () => {
@@ -118,7 +118,8 @@ export function AdminPage() {
           ['broadcasts', Megaphone, 'Notizie'],
           ['users', Users, 'Utenti'],
           ['balance', Wallet, 'Saldo'],
-          ['orders', ClipboardList, 'Richieste'],
+          ['orders', ClipboardList, 'Ordini'],
+          ['kyc', Users, 'KYC'],
           ['economy', Gamepad2, 'Economia'],
           ['feedback', MessageSquare, 'Recensioni'],
           ['settings', Settings, 'Impostazioni'],
@@ -132,7 +133,8 @@ export function AdminPage() {
       {tab === 'broadcasts' && <BroadcastAdmin broadcasts={broadcasts} reload={load} />}
       {tab === 'users' && <UsersAdmin profiles={profiles} accessRows={accessRows} reload={load} />}
       {tab === 'balance' && <BalanceAdmin profiles={profiles} reload={load} />}
-      {tab === 'orders' && <OrdersAdmin orders={orders} profiles={profiles} initialKycUserId={requestedKycUserId} reload={load} />}
+      {tab === 'orders' && <OrdersAdmin orders={orders} reload={load} />}
+      {tab === 'kyc' && <KycRequestsAdmin profiles={profiles} initialKycUserId={requestedKycUserId} reload={load} />}
       {tab === 'economy' && <EconomyAdmin games={games} options={rewardOptions} reload={load} />}
       {tab === 'feedback' && <FeedbackAdmin feedback={feedback} reload={load} />}
       {tab === 'settings' && <SettingsAdmin locations={locations} settings={settings} tokenTiers={tokenTiers} reload={load} />}
@@ -843,17 +845,8 @@ function BalanceAdmin({ profiles, reload }: { profiles: Row[]; reload: () => Pro
   )
 }
 
-function OrdersAdmin({ orders, profiles, initialKycUserId, reload }: { orders: Row[]; profiles: Row[]; initialKycUserId: string; reload: () => Promise<void> }) {
-  const [query, setQuery] = useState('')
-  const [openedGroups, setOpenedGroups] = useState({ orders: true, kyc: true })
+function OrdersAdmin({ orders, reload }: { orders: Row[]; reload: () => Promise<void> }) {
   const [message, setMessage] = useState('')
-  const [reviewUser, setReviewUser] = useState<Row | null>(null)
-  const [documents, setDocuments] = useState<KycReviewDocument[]>([])
-  const [kycError, setKycError] = useState('')
-  const [openedKycUserId, setOpenedKycUserId] = useState('')
-  const visibleKycRequests = profiles
-    .filter(profile => profile.kyc_cases?.status === 'submitted')
-    .filter(profile => `${profile.username} ${profile.telegram_subject}`.toLowerCase().includes(query.toLowerCase()))
   const updateStatus = async (orderId: string, status: 'processing' | 'completed' | 'cancelled') => {
     setMessage('')
     const { error } = await requireSupabase().rpc('admin_update_order_status', {
@@ -874,6 +867,37 @@ function OrdersAdmin({ orders, profiles, initialKycUserId, reload }: { orders: R
     }
     await reload()
   }
+  return (
+    <Section title="Ordini attivi" note="Accetta o rifiuta gli ordini. I premi vengono accreditati solo con la spunta su un ordine accettato.">
+      {message && <p className="mb-4" style={{ color: '#EF4444' }}>{message}</p>}
+      {orders.length === 0 && <p style={muted}>Nessun ordine attivo.</p>}
+      {orders.map(order => (
+        <div key={order.id} className="flex flex-col sm:flex-row sm:items-center gap-3" style={row}>
+          <div className="flex-1 min-w-0">
+            <strong>{order.display_id} / {orderStatusLabel[order.status]}</strong>
+            <div style={muted}>@{order.profiles?.username} / {order.total_units} g / EUR {order.total} / {scenarioLabel[order.scenario_type] ?? order.scenario_type} {order.scenario_city}{order.scenario_street ? `, ${order.scenario_street}` : ''}</div>
+            <div style={muted}>Gettoni usati: {order.tokens_reserved} / premio dopo completamento: +{order.points_awarded}</div>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2">
+            {order.status === 'submitted' && <button style={{ ...primary, background: '#10B981' }} onClick={() => updateStatus(order.id, 'processing')}>Accetta</button>}
+            {order.status === 'processing' && <button style={{ ...primary, background: '#10B981' }} onClick={() => updateStatus(order.id, 'completed')}>✓ Completa e accredita</button>}
+            <button style={dangerButton} onClick={() => updateStatus(order.id, 'cancelled')}>Rifiuta</button>
+          </div>
+        </div>
+      ))}
+    </Section>
+  )
+}
+
+function KycRequestsAdmin({ profiles, initialKycUserId, reload }: { profiles: Row[]; initialKycUserId: string; reload: () => Promise<void> }) {
+  const [message, setMessage] = useState('')
+  const [messageError, setMessageError] = useState(false)
+  const [reviewUser, setReviewUser] = useState<Row | null>(null)
+  const [documents, setDocuments] = useState<KycReviewDocument[]>([])
+  const [kycError, setKycError] = useState('')
+  const [openedKycUserId, setOpenedKycUserId] = useState('')
+  const requests = profiles.filter(profile => profile.kyc_cases?.status === 'submitted')
+
   const openKyc = async (profile: Row) => {
     setKycError('')
     setReviewUser(profile)
@@ -897,6 +921,8 @@ function OrdersAdmin({ orders, profiles, initialKycUserId, reload }: { orders: R
       ? window.prompt('Motivo del rifiuto (obbligatorio):', '') ?? ''
       : ''
     if (decision === 'rejected' && rejectionReason.trim().length < 4) return
+    setMessage('')
+    setMessageError(false)
     try {
       await reviewKyc(target.id, decision, rejectionReason)
       setMessage(decision === 'approved' ? 'KYC approvata.' : 'KYC rifiutata.')
@@ -904,77 +930,29 @@ function OrdersAdmin({ orders, profiles, initialKycUserId, reload }: { orders: R
       setDocuments([])
       await reload()
     } catch (caught) {
-      setKycError(italianErrorMessage(caught, 'Decisione non salvata.'))
+      setMessageError(true)
+      setMessage(italianErrorMessage(caught, 'Decisione non salvata.'))
     }
   }
+
   return (
-    <Section title="Richieste" note="Gestisci ordini attivi e richieste KYC dallo stesso pannello.">
-      {message && <p className="mb-4" style={{ color: message.includes('KYC approvata') ? '#D7FE55' : '#EF4444' }}>{message}</p>}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
-        <Metric label="Ordini attivi" value={orders.length} />
-        <Metric label="KYC da revisionare" value={visibleKycRequests.length} />
-      </div>
-      <div className="grid grid-cols-1 gap-3">
-        <div className="p-3 rounded-xl" style={panel}>
-          <button
-            type="button"
-            onClick={() => setOpenedGroups(state => ({ ...state, orders: !state.orders }))}
-            style={accordionButton}
-          >
-            <span><strong>1. Ordini attivi</strong> ({orders.length})</span>
-            <span className="inline-flex items-center gap-1">{openedGroups.orders ? 'Nascondi' : 'Apri'} {openedGroups.orders ? <Minus size={15} /> : <Plus size={15} />}</span>
-          </button>
-          {openedGroups.orders && (
-            <div className="mt-3">
-              {orders.length === 0 && <p style={muted}>Nessun ordine attivo.</p>}
-              {orders.map(order => (
-                <div key={order.id} className="flex flex-col sm:flex-row sm:items-center gap-3" style={row}>
-                  <div className="flex-1 min-w-0">
-                    <strong>{order.display_id} / {orderStatusLabel[order.status]}</strong>
-                    <div style={muted}>@{order.profiles?.username} / {order.total_units} g / EUR {order.total} / {scenarioLabel[order.scenario_type] ?? order.scenario_type} {order.scenario_city}{order.scenario_street ? `, ${order.scenario_street}` : ''}</div>
-                    <div style={muted}>Gettoni usati: {order.tokens_reserved} / premio dopo completamento: +{order.points_awarded}</div>
-                  </div>
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    {order.status === 'submitted' && <button style={{ ...primary, background: '#10B981' }} onClick={() => updateStatus(order.id, 'processing')}>Accetta</button>}
-                    {order.status === 'processing' && <button style={{ ...primary, background: '#10B981' }} onClick={() => updateStatus(order.id, 'completed')}>✓ Completa e accredita</button>}
-                    <button style={dangerButton} onClick={() => updateStatus(order.id, 'cancelled')}>Rifiuta</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+    <Section title="Richieste KYC" note="Apri documenti e approva o rifiuta le verifiche KYC inviate dagli utenti.">
+      {message && <p className="mb-4" style={{ color: messageError ? '#EF4444' : '#D7FE55' }}>{message}</p>}
+      {requests.length === 0 && <p style={muted}>Nessuna richiesta KYC in attesa.</p>}
+      {requests.map(profile => (
+        <div key={profile.id} className="flex flex-col sm:flex-row sm:items-center gap-3" style={row}>
+          <div className="flex-1 min-w-0">
+            <strong>@{profile.username}</strong>
+            <div className="break-all" style={muted}>Telegram ID: {profile.telegram_subject}</div>
+            {profile.kyc_cases?.submitted_at && <div style={muted}>Inviata: {new Date(profile.kyc_cases.submitted_at).toLocaleString('it-IT')}</div>}
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <button style={smallButton} onClick={() => openKyc(profile)}>Documenti</button>
+            <button style={{ ...primary, background: '#10B981' }} onClick={() => decideKyc('approved', profile)}>Approva KYC</button>
+            <button style={dangerButton} onClick={() => decideKyc('rejected', profile)}>Rifiuta KYC</button>
+          </div>
         </div>
-        <div className="p-3 rounded-xl" style={panel}>
-          <button
-            type="button"
-            onClick={() => setOpenedGroups(state => ({ ...state, kyc: !state.kyc }))}
-            style={accordionButton}
-          >
-            <span><strong>2. Richieste KYC</strong> ({visibleKycRequests.length})</span>
-            <span className="inline-flex items-center gap-1">{openedGroups.kyc ? 'Nascondi' : 'Apri'} {openedGroups.kyc ? <Minus size={15} /> : <Plus size={15} />}</span>
-          </button>
-          {openedGroups.kyc && (
-            <div className="mt-3">
-              <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Cerca username o Telegram ID" style={{ ...input, width: '100%', marginBottom: 12 }} />
-              {visibleKycRequests.length === 0 && <p style={muted}>Nessuna richiesta KYC in attesa.</p>}
-              {visibleKycRequests.map(profile => (
-                <div key={profile.id} className="flex flex-col sm:flex-row sm:items-center gap-3" style={row}>
-                  <div className="flex-1 min-w-0">
-                    <strong>@{profile.username}</strong>
-                    <div className="break-all" style={muted}>Telegram ID: {profile.telegram_subject} / KYC: {kycStatusLabel[profile.kyc_cases?.status ?? 'not_started']}</div>
-                    {profile.kyc_cases?.submitted_at && <div style={muted}>Inviata: {new Date(profile.kyc_cases.submitted_at).toLocaleString('it-IT')}</div>}
-                  </div>
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <button style={smallButton} onClick={() => openKyc(profile)}>Documenti</button>
-                    <button style={{ ...primary, background: '#10B981' }} onClick={() => decideKyc('approved', profile)}>Approva KYC</button>
-                    <button style={dangerButton} onClick={() => decideKyc('rejected', profile)}>Rifiuta KYC</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
+      ))}
       {reviewUser && (
         <div className="fixed inset-0 z-50 p-3 sm:p-5 flex items-center justify-center" style={{ background: 'rgba(0,0,0,.85)' }}>
           <div className="p-5 rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto" style={panel}>
@@ -1479,6 +1457,7 @@ function isTab(value: string | null): value is Tab {
     || value === 'users'
     || value === 'balance'
     || value === 'orders'
+    || value === 'kyc'
     || value === 'economy'
     || value === 'feedback'
     || value === 'settings'
