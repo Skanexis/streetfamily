@@ -582,7 +582,7 @@ function UsersAdmin({ profiles, accessRows, initialGroup, reload }: { profiles: 
     const params = new URLSearchParams(location.search)
     params.set('tab', 'users')
     params.set('usersGroup', group)
-    navigate({ search: `?${params.toString()}` }, { replace: true })
+    navigate({ search: `?${params.toString()}` })
   }
   const profilesWithAccess: Row[] = profiles.map(profile => ({
     ...profile,
@@ -713,18 +713,9 @@ function UsersAdmin({ profiles, accessRows, initialGroup, reload }: { profiles: 
       {message && <p className="mb-4" style={{ color: messageError || message === 'Utente bloccato.' ? '#FCA5A5' : '#D7FE55' }}>{message}</p>}
       <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Cerca username o Telegram ID" style={{ ...input, width: '100%', marginBottom: 12 }} />
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
-        <button type="button" onClick={() => openGroup('approved')} style={activeGroup === 'approved' ? activeUsersGroupButton : usersGroupButton}>
-          <span>Approvati</span>
-          <strong>{visibleApprovedProfiles.length}</strong>
-        </button>
-        <button type="button" onClick={() => openGroup('pending')} style={activeGroup === 'pending' ? activeUsersGroupButton : usersGroupButton}>
-          <span>In attesa</span>
-          <strong>{visiblePendingRows.length}</strong>
-        </button>
-        <button type="button" onClick={() => openGroup('rejected')} style={activeGroup === 'rejected' ? activeUsersGroupButton : usersGroupButton}>
-          <span>Bloccati / rifiutati</span>
-          <strong>{visibleRejectedRows.length}</strong>
-        </button>
+        <MetricNavCard label="Approvati" value={visibleApprovedProfiles.length} active={activeGroup === 'approved'} onClick={() => openGroup('approved')} />
+        <MetricNavCard label="In attesa" value={visiblePendingRows.length} active={activeGroup === 'pending'} onClick={() => openGroup('pending')} />
+        <MetricNavCard label="Bloccati / rifiutati" value={visibleRejectedRows.length} active={activeGroup === 'rejected'} onClick={() => openGroup('rejected')} />
       </div>
       {activeGroup === 'approved' && (
         <div>
@@ -859,7 +850,7 @@ function OrdersAdmin({ orders, initialGroup, reload }: { orders: Row[]; initialG
     const params = new URLSearchParams(location.search)
     params.set('tab', 'orders')
     params.set('ordersGroup', group)
-    navigate({ search: `?${params.toString()}` }, { replace: true })
+    navigate({ search: `?${params.toString()}` })
   }
   const submittedOrders = orders.filter(order => order.status === 'submitted')
   const processingOrders = orders.filter(order => order.status === 'processing')
@@ -888,14 +879,8 @@ function OrdersAdmin({ orders, initialGroup, reload }: { orders: Row[]; initialG
     <Section title="Ordini attivi" note="Accetta o rifiuta gli ordini. I premi vengono accreditati solo con la spunta su un ordine accettato.">
       {message && <p className="mb-4" style={{ color: '#EF4444' }}>{message}</p>}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
-        <button type="button" onClick={() => openGroup('submitted')} style={activeGroup === 'submitted' ? activeUsersGroupButton : usersGroupButton}>
-          <span>Inviate</span>
-          <strong>{submittedOrders.length}</strong>
-        </button>
-        <button type="button" onClick={() => openGroup('processing')} style={activeGroup === 'processing' ? activeUsersGroupButton : usersGroupButton}>
-          <span>Accettate</span>
-          <strong>{processingOrders.length}</strong>
-        </button>
+        <MetricNavCard label="Inviate" value={submittedOrders.length} active={activeGroup === 'submitted'} onClick={() => openGroup('submitted')} />
+        <MetricNavCard label="Accettate" value={processingOrders.length} active={activeGroup === 'processing'} onClick={() => openGroup('processing')} />
       </div>
       {visibleOrders.length === 0 && <p style={muted}>{activeGroup === 'submitted' ? 'Nessun ordine inviato.' : 'Nessun ordine accettato in lavorazione.'}</p>}
       {visibleOrders.map(order => (
@@ -937,7 +922,7 @@ function KycRequestsAdmin({ profiles, initialKycUserId, initialGroup, reload }: 
     const params = new URLSearchParams(location.search)
     params.set('tab', 'kyc')
     params.set('kycGroup', group)
-    navigate({ search: `?${params.toString()}` }, { replace: true })
+    navigate({ search: `?${params.toString()}` })
   }
   const submittedRequests = profiles.filter(profile => profile.kyc_cases?.status === 'submitted')
   const approvedRequests = profiles.filter(profile => profile.kyc_cases?.status === 'approved')
@@ -990,18 +975,9 @@ function KycRequestsAdmin({ profiles, initialKycUserId, initialGroup, reload }: 
     <Section title="Richieste KYC" note="Apri documenti e approva o rifiuta le verifiche KYC inviate dagli utenti.">
       {message && <p className="mb-4" style={{ color: messageError ? '#EF4444' : '#D7FE55' }}>{message}</p>}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
-        <button type="button" onClick={() => openGroup('submitted')} style={activeGroup === 'submitted' ? activeUsersGroupButton : usersGroupButton}>
-          <span>Da revisionare</span>
-          <strong>{submittedRequests.length}</strong>
-        </button>
-        <button type="button" onClick={() => openGroup('approved')} style={activeGroup === 'approved' ? activeUsersGroupButton : usersGroupButton}>
-          <span>Approvate</span>
-          <strong>{approvedRequests.length}</strong>
-        </button>
-        <button type="button" onClick={() => openGroup('rejected')} style={activeGroup === 'rejected' ? activeUsersGroupButton : usersGroupButton}>
-          <span>Rifiutate</span>
-          <strong>{rejectedRequests.length}</strong>
-        </button>
+        <MetricNavCard label="Da revisionare" value={submittedRequests.length} active={activeGroup === 'submitted'} onClick={() => openGroup('submitted')} />
+        <MetricNavCard label="Approvate" value={approvedRequests.length} active={activeGroup === 'approved'} onClick={() => openGroup('approved')} />
+        <MetricNavCard label="Rifiutate" value={rejectedRequests.length} active={activeGroup === 'rejected'} onClick={() => openGroup('rejected')} />
       </div>
       {visibleRequests.length === 0 && <p style={muted}>Nessuna richiesta KYC in questa sezione.</p>}
       {visibleRequests.map(profile => (
@@ -1477,6 +1453,19 @@ function Section({ title, note, children }: { title: string; note: string; child
 function Metric({ label, value }: { label: string; value: number }) {
   return <div className="p-4 rounded-xl" style={panel}><div style={muted}>{label}</div><div style={{ fontFamily: 'Orbitron', fontSize: 25, color: '#D7FE55' }}>{value}</div></div>
 }
+function MetricNavCard({ label, value, active, onClick }: { label: string; value: number; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="p-4 rounded-xl text-left w-full"
+      style={active ? activeMetricCard : metricCard}
+    >
+      <div style={muted}>{label}</div>
+      <div style={{ fontFamily: 'Orbitron', fontSize: 25, color: active ? '#D7FE55' : '#F5F5F5' }}>{value}</div>
+    </button>
+  )
+}
 function Toggle({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return <button onClick={onClick} style={{ ...smallButton, color: active ? '#D7FE55' : 'rgba(245,245,245,.55)' }}>{label}: {active ? 'SÌ' : 'NO'}</button>
 }
@@ -1555,6 +1544,6 @@ const muted = { color: 'rgba(245,245,245,.55)', fontSize: 13 }
 const input = { minWidth: 0, maxWidth: '100%', boxSizing: 'border-box' as const, padding: '9px 12px', background: '#080C0E', border: '1px solid rgba(245,245,245,.18)', color: '#F5F5F5', borderRadius: 8 }
 const primary = { ...input, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#7E9CA8', fontWeight: 700 }
 const smallButton = { display: 'inline-flex', alignItems: 'center', gap: 5, padding: '9px 12px', borderRadius: 8, border: '1px solid rgba(126,156,168,.25)', background: '#11181B', color: '#F5F5F5' }
-const usersGroupButton = { ...panel, textAlign: 'left' as const, width: '100%', padding: '14px 16px', borderRadius: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, color: '#F5F5F5' }
-const activeUsersGroupButton = { ...usersGroupButton, border: '1px solid rgba(215,254,85,.45)', boxShadow: '0 0 0 1px rgba(215,254,85,.2) inset', color: '#D7FE55' }
+const metricCard = { ...panel, transition: 'border-color .18s ease, box-shadow .18s ease' }
+const activeMetricCard = { ...metricCard, border: '1px solid rgba(215,254,85,.45)', boxShadow: '0 0 0 1px rgba(215,254,85,.2) inset' }
 const dangerButton = { ...smallButton, border: '1px solid rgba(239,68,68,.38)', color: '#FCA5A5' }
