@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
-import { Package, Tags, Users, Gamepad2, ClipboardList, Settings, Megaphone, MessageSquare, Minus, Plus, Warehouse, Wallet } from 'lucide-react'
+import { Package, Tags, Users, Gamepad2, ClipboardList, Settings, Megaphone, MessageSquare, Minus, Plus, Trash2, Warehouse, Wallet } from 'lucide-react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { adminAdjustWallet, adminBroadcastAction, adminDeleteAccount, adminDeleteGameOption, adminReviewAccessRequest, adminSaveGameOptions, adminSendLowStockNotifications, adminSetGameActive, adminSimulateGame, getAdminDashboard, getAdminKycDocuments, reviewKyc } from '../lib/api'
 import { requireSupabase } from '../lib/supabase'
@@ -569,7 +569,6 @@ function UsersAdmin({ profiles, accessRows, initialGroup, reload }: { profiles: 
   const navigate = useNavigate()
   const location = useLocation()
   const [query, setQuery] = useState('')
-  const [kycGroup, setKycGroup] = useState<'approved' | 'unapproved'>('unapproved')
   const [activeGroup, setActiveGroup] = useState<UsersGroup>(parseUsersGroup(initialGroup) ?? 'approved')
   const [message, setMessage] = useState('')
   const [messageError, setMessageError] = useState(false)
@@ -614,9 +613,6 @@ function UsersAdmin({ profiles, accessRows, initialGroup, reload }: { profiles: 
     ...profilesWithAccess.filter(profile => profile.blocked),
     ...rejectedAccessRows.filter(entry => !profilesWithAccess.some(profile => profile.telegram_subject === entry.telegram_subject)),
   ].filter(entry => `${entry.username} ${entry.telegram_subject}`.toLowerCase().includes(query.toLowerCase()))
-  const approvedProfiles = visibleApprovedProfiles.filter(profile => profile.kyc_cases?.status === 'approved')
-  const unapprovedProfiles = visibleApprovedProfiles.filter(profile => profile.kyc_cases?.status !== 'approved')
-  const displayedProfiles = kycGroup === 'approved' ? approvedProfiles : unapprovedProfiles
   const decideAccess = async (telegramSubject: string, decision: 'approved' | 'rejected') => {
     setMessage('')
     setMessageError(false)
@@ -720,23 +716,7 @@ function UsersAdmin({ profiles, accessRows, initialGroup, reload }: { profiles: 
       {activeGroup === 'approved' && (
         <div>
           <h3 className="mb-3">Utenti approvati</h3>
-          <div className="flex flex-col sm:flex-row gap-2" style={{ marginBottom: 14 }}>
-            <button
-              style={kycGroup === 'unapproved' ? { ...smallButton, color: '#D7FE55', borderColor: 'rgba(215,254,85,.45)' } : smallButton}
-              onClick={() => setKycGroup('unapproved')}
-            >
-              KYC non approvata ({unapprovedProfiles.length})
-            </button>
-            <button
-              style={kycGroup === 'approved' ? { ...smallButton, color: '#D7FE55', borderColor: 'rgba(215,254,85,.45)' } : smallButton}
-              onClick={() => setKycGroup('approved')}
-            >
-              KYC approvata ({approvedProfiles.length})
-            </button>
-          </div>
-          {displayedProfiles.length
-            ? userRows(displayedProfiles)
-            : <p style={muted}>{kycGroup === 'approved' ? 'Nessun utente approvato con verifica KYC approvata.' : 'Nessun utente approvato senza KYC approvata.'}</p>}
+          {visibleApprovedProfiles.length ? userRows(visibleApprovedProfiles) : <p style={muted}>Nessun utente approvato.</p>}
         </div>
       )}
       {activeGroup === 'pending' && (
@@ -1247,6 +1227,7 @@ function SettingsAdmin({ locations, settings, tokenTiers, reload }: { locations:
   const [areaMessage, setAreaMessage] = useState('')
   const [areaMessageError, setAreaMessageError] = useState(false)
   const [locationMinimumDrafts, setLocationMinimumDrafts] = useState<Record<string, string>>({})
+  const [deletingLocationId, setDeletingLocationId] = useState('')
   useEffect(() => {
     setLocationMinimumDrafts(Object.fromEntries(locations.map(location => [location.id, String(location.minimum_units ?? '')])))
   }, [locations])
@@ -1298,6 +1279,23 @@ function SettingsAdmin({ locations, settings, tokenTiers, reload }: { locations:
       resetLocationDraft(location)
       setAreaMessageError(true)
       setAreaMessage(italianErrorMessage(caught, 'Aggiornamento area non riuscito.'))
+    }
+  }
+  const deleteLocation = async (location: Row) => {
+    if (!window.confirm(`Eliminare l'area di servizio "${location.city}"?`)) return
+    setAreaMessage('')
+    setAreaMessageError(false)
+    setDeletingLocationId(location.id)
+    try {
+      const { error } = await requireSupabase().from('service_areas').delete().eq('id', location.id)
+      if (error) throw new Error(italianErrorMessage(error.message, 'Eliminazione area non riuscita.'))
+      setAreaMessage('Area di servizio eliminata.')
+      await reload()
+    } catch (caught) {
+      setAreaMessageError(true)
+      setAreaMessage(italianErrorMessage(caught, 'Eliminazione area non riuscita.'))
+    } finally {
+      setDeletingLocationId('')
     }
   }
   const updateRetention = async (event: FormEvent<HTMLFormElement>) => {
@@ -1363,21 +1361,26 @@ function SettingsAdmin({ locations, settings, tokenTiers, reload }: { locations:
       <div className="mb-4">
         {locations.filter(l => l.scenario_type === 'meetup').map(location => <div key={location.id} className="flex flex-wrap justify-between items-end gap-2" style={row}>
           <strong>{location.city}</strong>
-          <label style={muted}>minimo g
-            <input
-              inputMode="numeric"
-              pattern="[0-9]*"
-              value={locationMinimumDrafts[location.id] ?? ''}
-              onChange={event => setLocationDraft(location.id, event.currentTarget.value)}
-              onBlur={() => { void updateLocationMinimum(location) }}
-              onKeyDown={event => {
-                if (event.key !== 'Enter') return
-                event.preventDefault()
-                event.currentTarget.blur()
-              }}
-              style={{ ...input, width: 110, display: 'block', marginTop: 5 }}
-            />
-          </label>
+          <div className="flex flex-wrap items-end gap-2">
+            <label style={muted}>minimo g
+              <input
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={locationMinimumDrafts[location.id] ?? ''}
+                onChange={event => setLocationDraft(location.id, event.currentTarget.value)}
+                onBlur={() => { void updateLocationMinimum(location) }}
+                onKeyDown={event => {
+                  if (event.key !== 'Enter') return
+                  event.preventDefault()
+                  event.currentTarget.blur()
+                }}
+                style={{ ...input, width: 110, display: 'block', marginTop: 5 }}
+              />
+            </label>
+            <button type="button" disabled={deletingLocationId === location.id} style={{ ...dangerButton, opacity: deletingLocationId === location.id ? 0.65 : 1 }} onClick={() => { void deleteLocation(location) }}>
+              <Trash2 size={15} /> Elimina
+            </button>
+          </div>
         </div>)}
       </div>
       <form onSubmit={addLocation} className="grid grid-cols-1 sm:grid-cols-[1fr_150px_auto] gap-2 mb-6">
@@ -1390,21 +1393,26 @@ function SettingsAdmin({ locations, settings, tokenTiers, reload }: { locations:
       <div className="mb-4">
         {locations.filter(l => l.scenario_type === 'delivery_zone').map(location => <div key={location.id} className="flex flex-wrap justify-between items-end gap-2" style={row}>
           <strong>{location.city}</strong>
-          <label style={muted}>minimo g
-            <input
-              inputMode="numeric"
-              pattern="[0-9]*"
-              value={locationMinimumDrafts[location.id] ?? ''}
-              onChange={event => setLocationDraft(location.id, event.currentTarget.value)}
-              onBlur={() => { void updateLocationMinimum(location) }}
-              onKeyDown={event => {
-                if (event.key !== 'Enter') return
-                event.preventDefault()
-                event.currentTarget.blur()
-              }}
-              style={{ ...input, width: 110, display: 'block', marginTop: 5 }}
-            />
-          </label>
+          <div className="flex flex-wrap items-end gap-2">
+            <label style={muted}>minimo g
+              <input
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={locationMinimumDrafts[location.id] ?? ''}
+                onChange={event => setLocationDraft(location.id, event.currentTarget.value)}
+                onBlur={() => { void updateLocationMinimum(location) }}
+                onKeyDown={event => {
+                  if (event.key !== 'Enter') return
+                  event.preventDefault()
+                  event.currentTarget.blur()
+                }}
+                style={{ ...input, width: 110, display: 'block', marginTop: 5 }}
+              />
+            </label>
+            <button type="button" disabled={deletingLocationId === location.id} style={{ ...dangerButton, opacity: deletingLocationId === location.id ? 0.65 : 1 }} onClick={() => { void deleteLocation(location) }}>
+              <Trash2 size={15} /> Elimina
+            </button>
+          </div>
         </div>)}
       </div>
       <form onSubmit={addLocation} className="grid grid-cols-1 sm:grid-cols-[1fr_150px_auto] gap-2 mb-6">
@@ -1417,21 +1425,26 @@ function SettingsAdmin({ locations, settings, tokenTiers, reload }: { locations:
       <div className="mb-4">
         {locations.filter(l => l.scenario_type === 'delivery_italia').map(location => <div key={location.id} className="flex flex-wrap justify-between items-end gap-2" style={row}>
           <strong>{location.city}</strong>
-          <label style={muted}>minimo g
-            <input
-              inputMode="numeric"
-              pattern="[0-9]*"
-              value={locationMinimumDrafts[location.id] ?? ''}
-              onChange={event => setLocationDraft(location.id, event.currentTarget.value)}
-              onBlur={() => { void updateLocationMinimum(location) }}
-              onKeyDown={event => {
-                if (event.key !== 'Enter') return
-                event.preventDefault()
-                event.currentTarget.blur()
-              }}
-              style={{ ...input, width: 110, display: 'block', marginTop: 5 }}
-            />
-          </label>
+          <div className="flex flex-wrap items-end gap-2">
+            <label style={muted}>minimo g
+              <input
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={locationMinimumDrafts[location.id] ?? ''}
+                onChange={event => setLocationDraft(location.id, event.currentTarget.value)}
+                onBlur={() => { void updateLocationMinimum(location) }}
+                onKeyDown={event => {
+                  if (event.key !== 'Enter') return
+                  event.preventDefault()
+                  event.currentTarget.blur()
+                }}
+                style={{ ...input, width: 110, display: 'block', marginTop: 5 }}
+              />
+            </label>
+            <button type="button" disabled={deletingLocationId === location.id} style={{ ...dangerButton, opacity: deletingLocationId === location.id ? 0.65 : 1 }} onClick={() => { void deleteLocation(location) }}>
+              <Trash2 size={15} /> Elimina
+            </button>
+          </div>
         </div>)}
       </div>
       <form onSubmit={addLocation} className="grid grid-cols-1 sm:grid-cols-[1fr_150px_auto] gap-2">
