@@ -20,7 +20,7 @@ export function AdminPage() {
   const [searchParams] = useSearchParams()
   const requestedTab = searchParams.get('tab') as Tab | null
   const requestedKycUserId = searchParams.get('kyc') ?? ''
-  const [tab, setTab] = useState<Tab>(requestedTab === 'users' ? 'users' : 'catalog')
+  const [tab, setTab] = useState<Tab>(isTab(requestedTab) ? requestedTab : (requestedKycUserId ? 'orders' : 'catalog'))
   const [dashboard, setDashboard] = useState<DashboardData | null>(null)
   const [products, setProducts] = useState<Row[]>([])
   const [inventory, setInventory] = useState<Row[]>([])
@@ -38,8 +38,9 @@ export function AdminPage() {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    if (requestedTab === 'users') setTab('users')
-  }, [requestedTab])
+    if (isTab(requestedTab)) setTab(requestedTab)
+    else if (requestedKycUserId) setTab('orders')
+  }, [requestedTab, requestedKycUserId])
 
   const load = async () => {
     try {
@@ -92,6 +93,7 @@ export function AdminPage() {
   }
 
   useEffect(() => { load() }, [])
+  const allowlistedUsers = countApprovedProfiles(profiles, accessRows)
 
   return (
     <AdminFrame>
@@ -102,7 +104,7 @@ export function AdminPage() {
       {error && <div className="p-3 mb-5 rounded-xl" style={{ color: '#EF4444', background: 'rgba(239,68,68,.12)' }}>{error}</div>}
       {dashboard && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-7">
-          <Metric label="Utenti autorizzati" value={dashboard.allowlistedUsers} />
+          <Metric label="Utenti autorizzati" value={allowlistedUsers} />
           <Metric label="Richieste inviate" value={dashboard.submittedOrders} />
           <Metric label="Partite" value={dashboard.gamePlays} />
           <Metric label="Gettoni emessi" value={dashboard.issuedPoints} />
@@ -128,9 +130,9 @@ export function AdminPage() {
       {tab === 'categories' && <CategoriesAdmin products={products} categories={categories} reload={load} />}
       {tab === 'inventory' && <InventoryAdmin products={products} inventory={inventory} reload={load} />}
       {tab === 'broadcasts' && <BroadcastAdmin broadcasts={broadcasts} reload={load} />}
-      {tab === 'users' && <UsersAdmin profiles={profiles} accessRows={accessRows} initialKycUserId={requestedKycUserId} reload={load} />}
+      {tab === 'users' && <UsersAdmin profiles={profiles} accessRows={accessRows} reload={load} />}
       {tab === 'balance' && <BalanceAdmin profiles={profiles} reload={load} />}
-      {tab === 'orders' && <OrdersAdmin orders={orders} reload={load} />}
+      {tab === 'orders' && <OrdersAdmin orders={orders} profiles={profiles} initialKycUserId={requestedKycUserId} reload={load} />}
       {tab === 'economy' && <EconomyAdmin games={games} options={rewardOptions} reload={load} />}
       {tab === 'feedback' && <FeedbackAdmin feedback={feedback} reload={load} />}
       {tab === 'settings' && <SettingsAdmin locations={locations} settings={settings} tokenTiers={tokenTiers} reload={load} />}
@@ -556,15 +558,12 @@ async function xhrStorageUpload(path: string, file: File, onProgress: (value: nu
   })
 }
 
-function UsersAdmin({ profiles, accessRows, initialKycUserId, reload }: { profiles: Row[]; accessRows: Row[]; initialKycUserId: string; reload: () => Promise<void> }) {
+function UsersAdmin({ profiles, accessRows, reload }: { profiles: Row[]; accessRows: Row[]; reload: () => Promise<void> }) {
   const [query, setQuery] = useState('')
   const [kycGroup, setKycGroup] = useState<'approved' | 'unapproved'>('unapproved')
+  const [openedGroups, setOpenedGroups] = useState({ approved: true, pending: false, rejected: false })
   const [message, setMessage] = useState('')
   const [messageError, setMessageError] = useState(false)
-  const [reviewUser, setReviewUser] = useState<Row | null>(null)
-  const [documents, setDocuments] = useState<KycReviewDocument[]>([])
-  const [kycError, setKycError] = useState('')
-  const [openedKycUserId, setOpenedKycUserId] = useState('')
   const profilesWithAccess: Row[] = profiles.map(profile => ({
     ...profile,
     access: accessRows.find(row => row.telegram_subject === profile.telegram_subject),
@@ -632,46 +631,11 @@ function UsersAdmin({ profiles, accessRows, initialKycUserId, reload }: { profil
     setMessageError(false)
     try {
       await adminDeleteAccount(profile.id)
-      if (reviewUser?.id === profile.id) {
-        setReviewUser(null)
-        setDocuments([])
-      }
       setMessage('Account eliminato definitivamente.')
       await reload()
     } catch (caught) {
       setMessageError(true)
       setMessage(italianErrorMessage(caught, 'Eliminazione account non riuscita.'))
-    }
-  }
-  const openKyc = async (profile: Row) => {
-    setKycError('')
-    setReviewUser(profile)
-    try {
-      setDocuments(await getAdminKycDocuments(profile.id))
-    } catch (caught) {
-      setKycError(italianErrorMessage(caught, 'Accesso documenti negato.'))
-    }
-  }
-  useEffect(() => {
-    if (!initialKycUserId || openedKycUserId === initialKycUserId) return
-    const profile = profiles.find(entry => entry.id === initialKycUserId)
-    if (!profile) return
-    setOpenedKycUserId(initialKycUserId)
-    void openKyc(profile)
-  }, [initialKycUserId, openedKycUserId, profiles])
-  const decide = async (decision: 'approved' | 'rejected') => {
-    if (!reviewUser) return
-    const rejectionReason = decision === 'rejected'
-      ? window.prompt('Motivo del rifiuto (obbligatorio):', '') ?? ''
-      : ''
-    if (decision === 'rejected' && rejectionReason.trim().length < 4) return
-    try {
-      await reviewKyc(reviewUser.id, decision, rejectionReason)
-      setReviewUser(null)
-      setDocuments([])
-      await reload()
-    } catch (caught) {
-      setKycError(italianErrorMessage(caught, 'Decisione non salvata.'))
     }
   }
   const userRows = (items: Row[]) => items.map(profile => (
@@ -686,7 +650,6 @@ function UsersAdmin({ profiles, accessRows, initialKycUserId, reload }: { profil
       </div>
       {profile.blocked && <span style={{ color: '#FCA5A5' }}>BLOCCATO</span>}
       <span style={{ color: profile.kyc_cases?.status === 'approved' ? '#D7FE55' : '#F59E0B' }}>KYC: {kycStatusLabel[profile.kyc_cases?.status ?? 'not_started']}</span>
-      <button style={smallButton} onClick={() => openKyc(profile)}>Documenti</button>
       {profile.role !== 'admin' && (
         <>
           <button style={profile.blocked ? smallButton : dangerButton} onClick={() => toggleBlocked(profile)}>
@@ -734,57 +697,69 @@ function UsersAdmin({ profiles, accessRows, initialKycUserId, reload }: { profil
         <Metric label="In attesa" value={visiblePendingRows.length} />
         <Metric label="Bloccati / rifiutati" value={visibleRejectedRows.length} />
       </div>
-      <h3 className="mb-3">1. Utenti approvati</h3>
-      <div className="flex flex-col sm:flex-row gap-2" style={{ margin: '12px 0 16px' }}>
-        <button
-          style={kycGroup === 'unapproved' ? { ...smallButton, color: '#D7FE55', borderColor: 'rgba(215,254,85,.45)' } : smallButton}
-          onClick={() => setKycGroup('unapproved')}
-        >
-          KYC non approvata ({unapprovedProfiles.length})
-        </button>
-        <button
-          style={kycGroup === 'approved' ? { ...smallButton, color: '#D7FE55', borderColor: 'rgba(215,254,85,.45)' } : smallButton}
-          onClick={() => setKycGroup('approved')}
-        >
-          KYC approvata ({approvedProfiles.length})
-        </button>
-      </div>
-      {displayedProfiles.length
-        ? userRows(displayedProfiles)
-        : <p style={muted}>{kycGroup === 'approved' ? 'Nessun utente approvato con verifica KYC approvata.' : 'Nessun utente approvato senza KYC approvata.'}</p>}
-      <h3 className="mb-3 mt-6">2. Richieste in attesa</h3>
-      {visiblePendingRows.length ? pendingRows(visiblePendingRows) : <p style={muted}>Nessuna richiesta in attesa.</p>}
-      <h3 className="mb-3 mt-6">3. Bloccati o non approvati</h3>
-      {visibleRejectedRows.length ? rejectedRows(visibleRejectedRows) : <p style={muted}>Nessun account bloccato o rifiutato.</p>}
-      {reviewUser && (
-        <div className="fixed inset-0 z-50 p-3 sm:p-5 flex items-center justify-center" style={{ background: 'rgba(0,0,0,.85)' }}>
-          <div className="p-5 rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto" style={panel}>
-            <div className="flex flex-col sm:flex-row justify-between gap-3 mb-4">
-              <div className="min-w-0">
-                <h2 style={{ ...heading, fontSize: 22 }}>KYC @{reviewUser.username}</h2>
-                <p style={muted}>Link temporanei validi 60 secondi. Visualizzazione registrata nel registro di controllo.</p>
+      <div className="grid grid-cols-1 gap-3">
+        <div className="p-3 rounded-xl" style={panel}>
+          <button
+            type="button"
+            onClick={() => setOpenedGroups(state => ({ ...state, approved: !state.approved }))}
+            style={accordionButton}
+          >
+            <span><strong>1. Utenti approvati</strong> ({visibleApprovedProfiles.length})</span>
+            <span className="inline-flex items-center gap-1">{openedGroups.approved ? 'Nascondi' : 'Apri'} {openedGroups.approved ? <Minus size={15} /> : <Plus size={15} />}</span>
+          </button>
+          {openedGroups.approved && (
+            <div className="mt-3">
+              <div className="flex flex-col sm:flex-row gap-2" style={{ marginBottom: 14 }}>
+                <button
+                  style={kycGroup === 'unapproved' ? { ...smallButton, color: '#D7FE55', borderColor: 'rgba(215,254,85,.45)' } : smallButton}
+                  onClick={() => setKycGroup('unapproved')}
+                >
+                  KYC non approvata ({unapprovedProfiles.length})
+                </button>
+                <button
+                  style={kycGroup === 'approved' ? { ...smallButton, color: '#D7FE55', borderColor: 'rgba(215,254,85,.45)' } : smallButton}
+                  onClick={() => setKycGroup('approved')}
+                >
+                  KYC approvata ({approvedProfiles.length})
+                </button>
               </div>
-              <button style={smallButton} onClick={() => { setReviewUser(null); setDocuments([]) }}>Chiudi</button>
+              {displayedProfiles.length
+                ? userRows(displayedProfiles)
+                : <p style={muted}>{kycGroup === 'approved' ? 'Nessun utente approvato con verifica KYC approvata.' : 'Nessun utente approvato senza KYC approvata.'}</p>}
             </div>
-            {kycError && <p style={{ color: '#EF4444' }}>{kycError}</p>}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
-              {documents.length === 0 && !kycError && <p style={muted}>Nessun documento caricato.</p>}
-              {documents.map(document => (
-                <div key={document.id}>
-                  <div style={{ ...muted, marginBottom: 6 }}>{documentLabel[document.documentType]}</div>
-                  <img src={document.signedUrl} alt={documentLabel[document.documentType]} className="w-full rounded-xl" style={{ maxHeight: 340, objectFit: 'contain', background: '#080C0E' }} referrerPolicy="no-referrer" />
-                </div>
-              ))}
-            </div>
-            {reviewUser.kyc_cases?.status === 'submitted' && (
-              <div className="flex flex-col sm:flex-row gap-2">
-                <button style={{ ...primary, background: '#10B981' }} onClick={() => decide('approved')}>Approva KYC</button>
-                <button style={{ ...primary, background: '#EF4444' }} onClick={() => decide('rejected')}>Rifiuta KYC</button>
-              </div>
-            )}
-          </div>
+          )}
         </div>
-      )}
+        <div className="p-3 rounded-xl" style={panel}>
+          <button
+            type="button"
+            onClick={() => setOpenedGroups(state => ({ ...state, pending: !state.pending }))}
+            style={accordionButton}
+          >
+            <span><strong>2. Richieste in attesa</strong> ({visiblePendingRows.length})</span>
+            <span className="inline-flex items-center gap-1">{openedGroups.pending ? 'Nascondi' : 'Apri'} {openedGroups.pending ? <Minus size={15} /> : <Plus size={15} />}</span>
+          </button>
+          {openedGroups.pending && (
+            <div className="mt-3">
+              {visiblePendingRows.length ? pendingRows(visiblePendingRows) : <p style={muted}>Nessuna richiesta in attesa.</p>}
+            </div>
+          )}
+        </div>
+        <div className="p-3 rounded-xl" style={panel}>
+          <button
+            type="button"
+            onClick={() => setOpenedGroups(state => ({ ...state, rejected: !state.rejected }))}
+            style={accordionButton}
+          >
+            <span><strong>3. Bloccati o non approvati</strong> ({visibleRejectedRows.length})</span>
+            <span className="inline-flex items-center gap-1">{openedGroups.rejected ? 'Nascondi' : 'Apri'} {openedGroups.rejected ? <Minus size={15} /> : <Plus size={15} />}</span>
+          </button>
+          {openedGroups.rejected && (
+            <div className="mt-3">
+              {visibleRejectedRows.length ? rejectedRows(visibleRejectedRows) : <p style={muted}>Nessun account bloccato o rifiutato.</p>}
+            </div>
+          )}
+        </div>
+      </div>
     </Section>
   )
 }
@@ -868,8 +843,17 @@ function BalanceAdmin({ profiles, reload }: { profiles: Row[]; reload: () => Pro
   )
 }
 
-function OrdersAdmin({ orders, reload }: { orders: Row[]; reload: () => Promise<void> }) {
+function OrdersAdmin({ orders, profiles, initialKycUserId, reload }: { orders: Row[]; profiles: Row[]; initialKycUserId: string; reload: () => Promise<void> }) {
+  const [query, setQuery] = useState('')
+  const [openedGroups, setOpenedGroups] = useState({ orders: true, kyc: true })
   const [message, setMessage] = useState('')
+  const [reviewUser, setReviewUser] = useState<Row | null>(null)
+  const [documents, setDocuments] = useState<KycReviewDocument[]>([])
+  const [kycError, setKycError] = useState('')
+  const [openedKycUserId, setOpenedKycUserId] = useState('')
+  const visibleKycRequests = profiles
+    .filter(profile => profile.kyc_cases?.status === 'submitted')
+    .filter(profile => `${profile.username} ${profile.telegram_subject}`.toLowerCase().includes(query.toLowerCase()))
   const updateStatus = async (orderId: string, status: 'processing' | 'completed' | 'cancelled') => {
     setMessage('')
     const { error } = await requireSupabase().rpc('admin_update_order_status', {
@@ -890,24 +874,134 @@ function OrdersAdmin({ orders, reload }: { orders: Row[]; reload: () => Promise<
     }
     await reload()
   }
+  const openKyc = async (profile: Row) => {
+    setKycError('')
+    setReviewUser(profile)
+    try {
+      setDocuments(await getAdminKycDocuments(profile.id))
+    } catch (caught) {
+      setKycError(italianErrorMessage(caught, 'Accesso documenti negato.'))
+    }
+  }
+  useEffect(() => {
+    if (!initialKycUserId || openedKycUserId === initialKycUserId) return
+    const profile = profiles.find(entry => entry.id === initialKycUserId && entry.kyc_cases?.status === 'submitted')
+    if (!profile) return
+    setOpenedKycUserId(initialKycUserId)
+    void openKyc(profile)
+  }, [initialKycUserId, openedKycUserId, profiles])
+  const decideKyc = async (decision: 'approved' | 'rejected', targetProfile?: Row) => {
+    const target = targetProfile ?? reviewUser
+    if (!target) return
+    const rejectionReason = decision === 'rejected'
+      ? window.prompt('Motivo del rifiuto (obbligatorio):', '') ?? ''
+      : ''
+    if (decision === 'rejected' && rejectionReason.trim().length < 4) return
+    try {
+      await reviewKyc(target.id, decision, rejectionReason)
+      setMessage(decision === 'approved' ? 'KYC approvata.' : 'KYC rifiutata.')
+      setReviewUser(null)
+      setDocuments([])
+      await reload()
+    } catch (caught) {
+      setKycError(italianErrorMessage(caught, 'Decisione non salvata.'))
+    }
+  }
   return (
-    <Section title="Ordini attivi" note="Accetta o rifiuta gli ordini. I premi vengono accreditati solo con la spunta su un ordine accettato.">
-      {message && <p className="mb-4" style={{ color: '#EF4444' }}>{message}</p>}
-      {orders.length === 0 && <p style={muted}>Nessun ordine attivo.</p>}
-      {orders.map(order => (
-        <div key={order.id} className="flex flex-col sm:flex-row sm:items-center gap-3" style={row}>
-          <div className="flex-1 min-w-0">
-            <strong>{order.display_id} / {orderStatusLabel[order.status]}</strong>
-            <div style={muted}>@{order.profiles?.username} / {order.total_units} g / EUR {order.total} / {scenarioLabel[order.scenario_type] ?? order.scenario_type} {order.scenario_city}{order.scenario_street ? `, ${order.scenario_street}` : ''}</div>
-            <div style={muted}>Gettoni usati: {order.tokens_reserved} / premio dopo completamento: +{order.points_awarded}</div>
-          </div>
-          <div className="flex flex-col sm:flex-row gap-2">
-            {order.status === 'submitted' && <button style={{ ...primary, background: '#10B981' }} onClick={() => updateStatus(order.id, 'processing')}>Accetta</button>}
-            {order.status === 'processing' && <button style={{ ...primary, background: '#10B981' }} onClick={() => updateStatus(order.id, 'completed')}>✓ Completa e accredita</button>}
-            <button style={dangerButton} onClick={() => updateStatus(order.id, 'cancelled')}>Rifiuta</button>
+    <Section title="Richieste" note="Gestisci ordini attivi e richieste KYC dallo stesso pannello.">
+      {message && <p className="mb-4" style={{ color: message.includes('KYC approvata') ? '#D7FE55' : '#EF4444' }}>{message}</p>}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
+        <Metric label="Ordini attivi" value={orders.length} />
+        <Metric label="KYC da revisionare" value={visibleKycRequests.length} />
+      </div>
+      <div className="grid grid-cols-1 gap-3">
+        <div className="p-3 rounded-xl" style={panel}>
+          <button
+            type="button"
+            onClick={() => setOpenedGroups(state => ({ ...state, orders: !state.orders }))}
+            style={accordionButton}
+          >
+            <span><strong>1. Ordini attivi</strong> ({orders.length})</span>
+            <span className="inline-flex items-center gap-1">{openedGroups.orders ? 'Nascondi' : 'Apri'} {openedGroups.orders ? <Minus size={15} /> : <Plus size={15} />}</span>
+          </button>
+          {openedGroups.orders && (
+            <div className="mt-3">
+              {orders.length === 0 && <p style={muted}>Nessun ordine attivo.</p>}
+              {orders.map(order => (
+                <div key={order.id} className="flex flex-col sm:flex-row sm:items-center gap-3" style={row}>
+                  <div className="flex-1 min-w-0">
+                    <strong>{order.display_id} / {orderStatusLabel[order.status]}</strong>
+                    <div style={muted}>@{order.profiles?.username} / {order.total_units} g / EUR {order.total} / {scenarioLabel[order.scenario_type] ?? order.scenario_type} {order.scenario_city}{order.scenario_street ? `, ${order.scenario_street}` : ''}</div>
+                    <div style={muted}>Gettoni usati: {order.tokens_reserved} / premio dopo completamento: +{order.points_awarded}</div>
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    {order.status === 'submitted' && <button style={{ ...primary, background: '#10B981' }} onClick={() => updateStatus(order.id, 'processing')}>Accetta</button>}
+                    {order.status === 'processing' && <button style={{ ...primary, background: '#10B981' }} onClick={() => updateStatus(order.id, 'completed')}>✓ Completa e accredita</button>}
+                    <button style={dangerButton} onClick={() => updateStatus(order.id, 'cancelled')}>Rifiuta</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="p-3 rounded-xl" style={panel}>
+          <button
+            type="button"
+            onClick={() => setOpenedGroups(state => ({ ...state, kyc: !state.kyc }))}
+            style={accordionButton}
+          >
+            <span><strong>2. Richieste KYC</strong> ({visibleKycRequests.length})</span>
+            <span className="inline-flex items-center gap-1">{openedGroups.kyc ? 'Nascondi' : 'Apri'} {openedGroups.kyc ? <Minus size={15} /> : <Plus size={15} />}</span>
+          </button>
+          {openedGroups.kyc && (
+            <div className="mt-3">
+              <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Cerca username o Telegram ID" style={{ ...input, width: '100%', marginBottom: 12 }} />
+              {visibleKycRequests.length === 0 && <p style={muted}>Nessuna richiesta KYC in attesa.</p>}
+              {visibleKycRequests.map(profile => (
+                <div key={profile.id} className="flex flex-col sm:flex-row sm:items-center gap-3" style={row}>
+                  <div className="flex-1 min-w-0">
+                    <strong>@{profile.username}</strong>
+                    <div className="break-all" style={muted}>Telegram ID: {profile.telegram_subject} / KYC: {kycStatusLabel[profile.kyc_cases?.status ?? 'not_started']}</div>
+                    {profile.kyc_cases?.submitted_at && <div style={muted}>Inviata: {new Date(profile.kyc_cases.submitted_at).toLocaleString('it-IT')}</div>}
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <button style={smallButton} onClick={() => openKyc(profile)}>Documenti</button>
+                    <button style={{ ...primary, background: '#10B981' }} onClick={() => decideKyc('approved', profile)}>Approva KYC</button>
+                    <button style={dangerButton} onClick={() => decideKyc('rejected', profile)}>Rifiuta KYC</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+      {reviewUser && (
+        <div className="fixed inset-0 z-50 p-3 sm:p-5 flex items-center justify-center" style={{ background: 'rgba(0,0,0,.85)' }}>
+          <div className="p-5 rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto" style={panel}>
+            <div className="flex flex-col sm:flex-row justify-between gap-3 mb-4">
+              <div className="min-w-0">
+                <h2 style={{ ...heading, fontSize: 22 }}>KYC @{reviewUser.username}</h2>
+                <p style={muted}>Link temporanei validi 60 secondi. Visualizzazione registrata nel registro di controllo.</p>
+              </div>
+              <button style={smallButton} onClick={() => { setReviewUser(null); setDocuments([]) }}>Chiudi</button>
+            </div>
+            {kycError && <p style={{ color: '#EF4444' }}>{kycError}</p>}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
+              {documents.length === 0 && !kycError && <p style={muted}>Nessun documento caricato.</p>}
+              {documents.map(document => (
+                <div key={document.id}>
+                  <div style={{ ...muted, marginBottom: 6 }}>{documentLabel[document.documentType]}</div>
+                  <img src={document.signedUrl} alt={documentLabel[document.documentType]} className="w-full rounded-xl" style={{ maxHeight: 340, objectFit: 'contain', background: '#080C0E' }} referrerPolicy="no-referrer" />
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <button style={{ ...primary, background: '#10B981' }} onClick={() => decideKyc('approved')}>Approva KYC</button>
+              <button style={{ ...primary, background: '#EF4444' }} onClick={() => decideKyc('rejected')}>Rifiuta KYC</button>
+            </div>
           </div>
         </div>
-      ))}
+      )}
     </Section>
   )
 }
@@ -1125,8 +1219,16 @@ function FeedbackAdmin({ feedback, reload }: { feedback: Row[]; reload: () => Pr
 function SettingsAdmin({ locations, settings, tokenTiers, reload }: { locations: Row[]; settings: Row[]; tokenTiers: Row[]; reload: () => Promise<void> }) {
   const retention = settings.find(setting => setting.key === 'kyc_retention')?.value ?? { approved_days: 365 }
   const links = settings.find(setting => setting.key === 'community_links')?.value ?? { instagram: '', viber: '', signal: null }
+  const [areaMessage, setAreaMessage] = useState('')
+  const [areaMessageError, setAreaMessageError] = useState(false)
+  const [locationMinimumDrafts, setLocationMinimumDrafts] = useState<Record<string, string>>({})
+  useEffect(() => {
+    setLocationMinimumDrafts(Object.fromEntries(locations.map(location => [location.id, String(location.minimum_units ?? '')])))
+  }, [locations])
   const addLocation = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    setAreaMessage('')
+    setAreaMessageError(false)
     const values = new FormData(event.currentTarget)
     const scenario = String(values.get('scenario'))
     const minimumUnits = parseOptionalInteger(String(values.get('minimum')))
@@ -1139,7 +1241,39 @@ function SettingsAdmin({ locations, settings, tokenTiers, reload }: { locations:
     })
     if (error) throw new Error(italianErrorMessage(error.message, 'Aggiunta dell’area non riuscita.'))
     event.currentTarget.reset()
+    setAreaMessage('Area di servizio aggiunta.')
     await reload()
+  }
+  const setLocationDraft = (locationId: string, value: string) => {
+    setLocationMinimumDrafts(current => ({ ...current, [locationId]: value.replace(/\D/g, '') }))
+  }
+  const resetLocationDraft = (location: Row) => {
+    setLocationMinimumDrafts(current => ({ ...current, [location.id]: String(location.minimum_units ?? '') }))
+  }
+  const updateLocationMinimum = async (location: Row) => {
+    const minimumUnits = parseOptionalInteger(locationMinimumDrafts[location.id] ?? '')
+    if (minimumUnits === null || minimumUnits < 1) {
+      setAreaMessageError(true)
+      setAreaMessage('Minimo non valido.')
+      resetLocationDraft(location)
+      return
+    }
+    if (minimumUnits === Number(location.minimum_units)) {
+      resetLocationDraft(location)
+      return
+    }
+    setAreaMessage('')
+    setAreaMessageError(false)
+    try {
+      const { error } = await requireSupabase().from('service_areas').update({ minimum_units: minimumUnits }).eq('id', location.id)
+      if (error) throw new Error(italianErrorMessage(error.message, 'Aggiornamento area non riuscito.'))
+      setAreaMessage('Minimo grammi aggiornato.')
+      await reload()
+    } catch (caught) {
+      resetLocationDraft(location)
+      setAreaMessageError(true)
+      setAreaMessage(italianErrorMessage(caught, 'Aggiornamento area non riuscito.'))
+    }
   }
   const updateRetention = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -1199,9 +1333,27 @@ function SettingsAdmin({ locations, settings, tokenTiers, reload }: { locations:
           }} style={{ ...input, width: 70, display: 'block' }} />
         </label>)}
       </div>
+      {areaMessage && <p className="mb-4" style={{ color: areaMessageError ? '#EF4444' : '#D7FE55' }}>{areaMessage}</p>}
       <h3 className="mb-3 mt-6">MEETUP</h3>
       <div className="mb-4">
-        {locations.filter(l => l.scenario_type === 'meetup').map(location => <div key={location.id} className="flex flex-wrap justify-between gap-2" style={row}><strong>{location.city}</strong><span>minimo {location.minimum_units} g</span></div>)}
+        {locations.filter(l => l.scenario_type === 'meetup').map(location => <div key={location.id} className="flex flex-wrap justify-between items-end gap-2" style={row}>
+          <strong>{location.city}</strong>
+          <label style={muted}>minimo g
+            <input
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={locationMinimumDrafts[location.id] ?? ''}
+              onChange={event => setLocationDraft(location.id, event.currentTarget.value)}
+              onBlur={() => { void updateLocationMinimum(location) }}
+              onKeyDown={event => {
+                if (event.key !== 'Enter') return
+                event.preventDefault()
+                event.currentTarget.blur()
+              }}
+              style={{ ...input, width: 110, display: 'block', marginTop: 5 }}
+            />
+          </label>
+        </div>)}
       </div>
       <form onSubmit={addLocation} className="grid grid-cols-1 sm:grid-cols-[1fr_150px_auto] gap-2 mb-6">
         <input type="hidden" name="scenario" value="meetup" />
@@ -1211,7 +1363,24 @@ function SettingsAdmin({ locations, settings, tokenTiers, reload }: { locations:
       </form>
       <h3 className="mb-3">DELIVERY LOCALE</h3>
       <div className="mb-4">
-        {locations.filter(l => l.scenario_type === 'delivery_zone').map(location => <div key={location.id} className="flex flex-wrap justify-between gap-2" style={row}><strong>{location.city}</strong><span>minimo {location.minimum_units} g</span></div>)}
+        {locations.filter(l => l.scenario_type === 'delivery_zone').map(location => <div key={location.id} className="flex flex-wrap justify-between items-end gap-2" style={row}>
+          <strong>{location.city}</strong>
+          <label style={muted}>minimo g
+            <input
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={locationMinimumDrafts[location.id] ?? ''}
+              onChange={event => setLocationDraft(location.id, event.currentTarget.value)}
+              onBlur={() => { void updateLocationMinimum(location) }}
+              onKeyDown={event => {
+                if (event.key !== 'Enter') return
+                event.preventDefault()
+                event.currentTarget.blur()
+              }}
+              style={{ ...input, width: 110, display: 'block', marginTop: 5 }}
+            />
+          </label>
+        </div>)}
       </div>
       <form onSubmit={addLocation} className="grid grid-cols-1 sm:grid-cols-[1fr_150px_auto] gap-2 mb-6">
         <input type="hidden" name="scenario" value="delivery_zone" />
@@ -1221,7 +1390,24 @@ function SettingsAdmin({ locations, settings, tokenTiers, reload }: { locations:
       </form>
       <h3 className="mb-3">DELIVERY TUTTA ITALIA</h3>
       <div className="mb-4">
-        {locations.filter(l => l.scenario_type === 'delivery_italia').map(location => <div key={location.id} className="flex flex-wrap justify-between gap-2" style={row}><strong>{location.city}</strong><span>minimo {location.minimum_units} g</span></div>)}
+        {locations.filter(l => l.scenario_type === 'delivery_italia').map(location => <div key={location.id} className="flex flex-wrap justify-between items-end gap-2" style={row}>
+          <strong>{location.city}</strong>
+          <label style={muted}>minimo g
+            <input
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={locationMinimumDrafts[location.id] ?? ''}
+              onChange={event => setLocationDraft(location.id, event.currentTarget.value)}
+              onBlur={() => { void updateLocationMinimum(location) }}
+              onKeyDown={event => {
+                if (event.key !== 'Enter') return
+                event.preventDefault()
+                event.currentTarget.blur()
+              }}
+              style={{ ...input, width: 110, display: 'block', marginTop: 5 }}
+            />
+          </label>
+        </div>)}
       </div>
       <form onSubmit={addLocation} className="grid grid-cols-1 sm:grid-cols-[1fr_150px_auto] gap-2">
         <input type="hidden" name="scenario" value="delivery_italia" />
@@ -1285,6 +1471,24 @@ function roundPrice(price: number) {
 function formatItalianNumber(value: number, digits: number) {
   return value.toLocaleString('it-IT', { minimumFractionDigits: 0, maximumFractionDigits: digits })
 }
+function isTab(value: string | null): value is Tab {
+  return value === 'catalog'
+    || value === 'categories'
+    || value === 'inventory'
+    || value === 'broadcasts'
+    || value === 'users'
+    || value === 'balance'
+    || value === 'orders'
+    || value === 'economy'
+    || value === 'feedback'
+    || value === 'settings'
+}
+function countApprovedProfiles(profiles: Row[], accessRows: Row[]) {
+  return profiles.filter(profile => {
+    const access = accessRows.find(row => row.telegram_subject === profile.telegram_subject)
+    return (access?.access_status ?? 'approved') === 'approved' && !profile.blocked
+  }).length
+}
 const panel = { background: '#11181B', border: '1px solid rgba(126,156,168,.18)' }
 const row = { padding: 12, marginBottom: 8, background: 'rgba(245,245,245,.035)', borderRadius: 10, minWidth: 0 }
 const heading = { fontFamily: 'Space Grotesk', fontWeight: 700, fontSize: 'clamp(24px, 7vw, 30px)', color: '#F5F5F5' }
@@ -1292,4 +1496,5 @@ const muted = { color: 'rgba(245,245,245,.55)', fontSize: 13 }
 const input = { minWidth: 0, maxWidth: '100%', boxSizing: 'border-box' as const, padding: '9px 12px', background: '#080C0E', border: '1px solid rgba(245,245,245,.18)', color: '#F5F5F5', borderRadius: 8 }
 const primary = { ...input, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#7E9CA8', fontWeight: 700 }
 const smallButton = { display: 'inline-flex', alignItems: 'center', gap: 5, padding: '9px 12px', borderRadius: 8, border: '1px solid rgba(126,156,168,.25)', background: '#11181B', color: '#F5F5F5' }
+const accordionButton = { ...smallButton, width: '100%', justifyContent: 'space-between', background: '#0D1417', border: '1px solid rgba(126,156,168,.35)' }
 const dangerButton = { ...smallButton, border: '1px solid rgba(239,68,68,.38)', color: '#FCA5A5' }
