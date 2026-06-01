@@ -51,16 +51,7 @@ export function KycCapture({ status, onChanged }: Props) {
       stopStream()
       try {
         if (!navigator.mediaDevices?.getUserMedia) throw new Error('Fotocamera non disponibile in questo browser.')
-        let stream: MediaStream
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({
-            audio: false,
-            video: { facingMode: { ideal: active.facingMode }, width: { ideal: 1280 }, height: { ideal: 720 } },
-          })
-        } catch (firstError) {
-          if (firstError instanceof DOMException && ['NotAllowedError', 'SecurityError'].includes(firstError.name)) throw firstError
-          stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: active.facingMode } })
-        }
+        const stream = await openCameraStream(active.facingMode)
         if (cancelled) {
           stream.getTracks().forEach(track => track.stop())
           return
@@ -69,10 +60,16 @@ export function KycCapture({ status, onChanged }: Props) {
         const video = videoRef.current
         if (!video) throw new Error('Anteprima fotocamera non disponibile.')
         video.srcObject = stream
+        video.muted = true
+        video.playsInline = true
         await video.play()
+        await waitForVideoFrame(video)
+        if (cancelled) return
+        setCameraReady(true)
       } catch (caught) {
         if (!cancelled) {
           stopStream()
+          setCameraReady(false)
           setError(cameraErrorMessage(caught))
         }
       }
@@ -107,7 +104,8 @@ export function KycCapture({ status, onChanged }: Props) {
       const context = canvas.getContext('2d')
       if (!context) throw new Error('Impossibile acquisire la foto.')
       context.drawImage(video, 0, 0, canvas.width, canvas.height)
-      const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error('Foto non valida.')), 'image/jpeg', 0.9))
+      if (isBlankCapture(canvas)) throw new Error('La foto risulta nera. Riavvia la fotocamera e riprova con più luce.')
+      const blob = await captureCanvasBlob(canvas)
       await uploadKycCapture(active.type, blob)
       stopCamera()
       await onChanged()
@@ -172,6 +170,12 @@ export function KycCapture({ status, onChanged }: Props) {
                 muted
                 playsInline
                 disablePictureInPicture
+                onLoadedData={() => {
+                  if (videoRef.current?.videoWidth && videoRef.current?.videoHeight) setCameraReady(true)
+                }}
+                onCanPlay={() => {
+                  if (videoRef.current?.videoWidth && videoRef.current?.videoHeight) setCameraReady(true)
+                }}
                 onPlaying={() => setCameraReady(true)}
                 className="w-full"
                 style={{ height: 420, maxHeight: '62vh', objectFit: 'cover', background: '#000' }}
@@ -203,6 +207,83 @@ function cameraErrorMessage(caught: unknown) {
     if (caught.name === 'NotReadableError') return 'La fotocamera è occupata da un’altra applicazione. Chiudila e riprova.'
   }
   return italianErrorMessage(caught, 'Impossibile avviare la fotocamera.')
+}
+
+async function openCameraStream(facingMode: 'environment' | 'user') {
+  const attempts: MediaStreamConstraints[] = [
+    { audio: false, video: { facingMode: { ideal: facingMode }, width: { ideal: 1280 }, height: { ideal: 720 } } },
+    { audio: false, video: { facingMode: { ideal: facingMode } } },
+    { audio: false, video: true },
+  ]
+  let lastError: unknown
+  for (const constraints of attempts) {
+    try {
+      return await navigator.mediaDevices.getUserMedia(constraints)
+    } catch (caught) {
+      if (caught instanceof DOMException && ['NotAllowedError', 'SecurityError'].includes(caught.name)) throw caught
+      lastError = caught
+    }
+  }
+  throw lastError ?? new Error('Fotocamera non disponibile.')
+}
+
+async function waitForVideoFrame(video: HTMLVideoElement) {
+  if (video.videoWidth && video.videoHeight && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) return
+  await new Promise<void>((resolve, reject) => {
+    const timeout = window.setTimeout(() => reject(new Error('Anteprima fotocamera non pronta.')), 8000)
+    const done = () => {
+      if (!video.videoWidth || !video.videoHeight) return
+      window.clearTimeout(timeout)
+      cleanup()
+      resolve()
+    }
+    const cleanup = () => {
+      video.removeEventListener('loadedmetadata', done)
+      video.removeEventListener('loadeddata', done)
+      video.removeEventListener('canplay', done)
+      video.removeEventListener('error', fail)
+    }
+    const fail = () => {
+      window.clearTimeout(timeout)
+      cleanup()
+      reject(new Error('Anteprima fotocamera non disponibile.'))
+    }
+    video.addEventListener('loadedmetadata', done)
+    video.addEventListener('loadeddata', done)
+    video.addEventListener('canplay', done)
+    video.addEventListener('error', fail)
+  })
+}
+
+async function captureCanvasBlob(canvas: HTMLCanvasElement) {
+  const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9))
+  if (blob?.size) return blob.type ? blob : new Blob([blob], { type: 'image/jpeg' })
+  const fallback = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'))
+  if (fallback?.size) return fallback.type ? fallback : new Blob([fallback], { type: 'image/png' })
+  throw new Error('Foto non valida.')
+}
+
+function isBlankCapture(source: HTMLCanvasElement) {
+  const sampleWidth = 96
+  const sampleHeight = 96
+  const sample = document.createElement('canvas')
+  sample.width = sampleWidth
+  sample.height = sampleHeight
+  const context = sample.getContext('2d')
+  if (!context) return false
+  context.drawImage(source, 0, 0, sampleWidth, sampleHeight)
+  const data = context.getImageData(0, 0, sampleWidth, sampleHeight).data
+  let brightness = 0
+  let variance = 0
+  let count = 0
+  for (let index = 0; index < data.length; index += 16) {
+    const value = (data[index] + data[index + 1] + data[index + 2]) / 3
+    brightness += value
+    variance += value * value
+    count += 1
+  }
+  const average = brightness / count
+  return average < 2 && (variance / count) - (average * average) < 1
 }
 
 function Notice({ text, ok }: { text: string; ok?: boolean }) {

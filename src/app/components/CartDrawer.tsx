@@ -27,6 +27,16 @@ const scenarios: { key: ScenarioType; label: string; Icon: typeof MapPin }[] = [
   { key: 'delivery_italia', label: 'DELIVERY TUTTA ITALIA', Icon: Truck },
 ]
 
+function tokenRewardForUnits(units: number) {
+  if (units >= 5000) return 100
+  if (units >= 3000) return 70
+  if (units >= 1000) return 50
+  if (units >= 500) return 30
+  if (units >= 300) return 20
+  if (units >= 100) return 10
+  return units >= 50 ? 5 : 0
+}
+
 export function CartDrawer({ open, onClose, cart, removeFromCart, tokens, serviceAreas, firstOrder, isAdmin, kycStatus, onKycChanged, onSubmit, onComplete }: Props) {
   const [step, setStep] = useState<Step>('cart')
   const [scenarioType, setScenarioType] = useState<ScenarioType>('meetup')
@@ -39,7 +49,7 @@ export function CartDrawer({ open, onClose, cart, removeFromCart, tokens, servic
   const [kycOpen, setKycOpen] = useState(false)
   const subtotal = cart.reduce((sum, item) => sum + item.price, 0)
   const totalUnits = cart.reduce((sum, item) => sum + item.unitAmount, 0)
-  const tokenReward = totalUnits >= 1000 ? 50 : totalUnits >= 500 ? 30 : totalUnits >= 300 ? 20 : totalUnits >= 100 ? 10 : 5
+  const tokenReward = tokenRewardForUnits(totalUnits)
   const surcharge = scenarioType === 'delivery_zone' ? Math.floor(totalUnits / 100) * 10 : 0
   const maximumReserve = Math.min(tokens, Math.floor(subtotal + surcharge))
   const reservedTokens = tokensToReserve === '' ? 0 : Number(tokensToReserve)
@@ -55,7 +65,7 @@ export function CartDrawer({ open, onClose, cart, removeFromCart, tokens, servic
   }
   const continueDetails = () => {
     const min = scenarioType === 'delivery_italia' ? 500 : selectedAreas.find(area => area.city === city)?.minimumUnits
-    if (totalUnits > 10000) return setError('Sono supportati al massimo 10000 g per ordine.')
+    if (totalUnits > 5000) return setError('Sono supportati al massimo 5000 g per ordine.')
     if (!city.trim()) return setError('Seleziona o inserisci una città.')
     if ((scenarioType !== 'meetup') && !street.trim()) return setError('Inserisci una via.')
     if (min && totalUnits < min) return setError(`Questo servizio richiede almeno ${min} g.`)

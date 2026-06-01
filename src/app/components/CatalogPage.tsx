@@ -7,6 +7,7 @@ type AddFn = (item: Omit<CartItem, 'id'>) => void
 interface Props { products: Product[]; categories: string[]; feedback: Feedback[]; addToCart: AddFn; selectedProductId: string | null; onProductSelect: (id: string | null) => void }
 const minimumGrams = 25
 const gramStep = 25
+const maximumCustomGrams = 5000
 
 export function CatalogPage({ products, categories, feedback, addToCart, selectedProductId, onProductSelect }: Props) {
   const [category, setCategory] = useState('Tutti')
@@ -53,14 +54,15 @@ function Detail({ product, feedback, onClose, addToCart }: { product?: Product; 
   if (!product) return null
   const availableVariants = product.variants.filter(item => item.available).sort((a, b) => a.unitAmount - b.unitAmount)
   const selectableVariants = availableVariants.filter(item => item.unitAmount >= minimumGrams)
-  const maximumGrams = selectableVariants[selectableVariants.length - 1]?.unitAmount ?? 0
+  const highestAvailableGrams = selectableVariants[selectableVariants.length - 1]?.unitAmount ?? 0
+  const maximumGrams = maximumCustomGrams
   const grams = Number(customGrams)
   const price = calculatePrice(selectableVariants, grams)
   const validWeight = Number.isInteger(grams) && grams >= minimumGrams && grams <= maximumGrams && grams % gramStep === 0 && price !== null
   const variantsBelowWeight = selectableVariants.filter(item => item.unitAmount <= grams)
   const pricingVariant = variantsBelowWeight[variantsBelowWeight.length - 1]
-  const tokenAward = pricingVariant?.tokenAward ?? 0
-  if (maximumGrams < minimumGrams) return null
+  const tokenAward = tokenAwardForGrams(grams, pricingVariant?.tokenAward ?? 0)
+  if (highestAvailableGrams < minimumGrams) return null
   const media = product.media.filter(item => item.url).slice(0, 8)
   const activeMedia = media.find(item => item.id === selectedMediaId) ?? media[0]
   const add = () => {
@@ -91,7 +93,7 @@ function Detail({ product, feedback, onClose, addToCart }: { product?: Product; 
         return <button key={variant.id} disabled={!selectable} onClick={() => setCustomGrams(String(variant.unitAmount))} className="py-2 px-1" style={{ minHeight: 64, opacity: selectable ? 1 : .62, border: `1px solid ${selected ? '#D7FE55' : 'rgba(126,156,168,.2)'}`, background: selected ? 'rgba(215,254,85,.06)' : '#080C0E' }}><strong style={{ display: 'block', fontSize: 17 }}>{variant.unitAmount}g</strong><div style={{ color: '#D7FE55', marginTop: 2, fontSize: 13 }}>EUR {formatPrice(variant.price)}</div></button>
       })}</div>
       <label className="block mb-3" style={{ color: 'rgba(245,245,245,.65)', fontSize: 13 }}>
-        Scegli i grammi (minimo {minimumGrams} g, multipli di {gramStep} g)
+        Scegli i grammi (minimo {minimumGrams} g, massimo {maximumCustomGrams} g, multipli di {gramStep} g)
         <div className="flex items-center gap-3 mt-2">
           <input inputMode="numeric" pattern="[0-9]*" value={customGrams} onChange={event => setCustomGrams(event.target.value.replace(/\D/g, ''))} placeholder="0" style={weightInput} />
           <strong style={{ color: validWeight ? '#D7FE55' : '#EF4444' }}>{validWeight && price !== null ? `EUR ${formatPrice(price)}` : 'Peso non valido'}</strong>
@@ -107,14 +109,26 @@ function Detail({ product, feedback, onClose, addToCart }: { product?: Product; 
 }
 
 function calculatePrice(variants: ProductVariant[], grams: number) {
-  if (!Number.isInteger(grams) || grams < minimumGrams || grams % gramStep !== 0) return null
+  if (!Number.isInteger(grams) || grams < minimumGrams || grams > maximumCustomGrams || grams % gramStep !== 0) return null
   const lowerVariants = variants.filter(variant => variant.unitAmount <= grams)
   const lower = lowerVariants[lowerVariants.length - 1]
   const upper = variants.find(variant => variant.unitAmount >= grams)
-  if (!lower || !upper) return null
+  if (!lower) return null
+  if (!upper) {
+    const previous = lowerVariants[lowerVariants.length - 2]
+    if (!previous || lower.unitAmount === previous.unitAmount) return roundPrice((lower.price / lower.unitAmount) * grams)
+    const perGram = (lower.price - previous.price) / (lower.unitAmount - previous.unitAmount)
+    return roundPrice(lower.price + ((grams - lower.unitAmount) * perGram))
+  }
   if (lower.unitAmount === upper.unitAmount) return roundPrice(lower.price)
   const ratio = (grams - lower.unitAmount) / (upper.unitAmount - lower.unitAmount)
   return roundPrice(lower.price + ((upper.price - lower.price) * ratio))
+}
+
+function tokenAwardForGrams(grams: number, fallback: number) {
+  if (grams >= 5000) return 100
+  if (grams >= 3000) return 70
+  return fallback
 }
 
 function formatPrice(price: number) {
