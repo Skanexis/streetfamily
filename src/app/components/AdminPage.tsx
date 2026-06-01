@@ -9,6 +9,7 @@ import type { Broadcast, DashboardData, GameType, KycReviewDocument } from '../d
 type Tab = 'catalog' | 'categories' | 'inventory' | 'broadcasts' | 'users' | 'balance' | 'orders' | 'kyc' | 'economy' | 'feedback' | 'settings'
 type Row = Record<string, any>
 type NumericDraft = string | number
+const productPriceUnits = [25, 50, 100, 300, 500, 1000, 2000, 3000, 4000, 5000]
 const orderStatusLabel: Record<string, string> = { submitted: 'Inviata', processing: 'Accettata', completed: 'Completata', cancelled: 'Rifiutata' }
 const feedbackStatusLabel: Record<string, string> = { pending: 'In moderazione', published: 'Pubblicata', hidden: 'Nascosta' }
 const kycStatusLabel: Record<string, string> = { not_started: 'Non iniziata', collecting: 'In raccolta', submitted: 'Inviata', approved: 'Approvata', rejected: 'Rifiutata' }
@@ -157,7 +158,7 @@ function CatalogAdmin({ products, categories, reload }: { products: Row[]; categ
     const values = new FormData(event.currentTarget)
     const db = requireSupabase()
     const name = String(values.get('name'))
-    const prices = Object.fromEntries([25, 50, 100, 300, 500, 1000].map(grams => [grams, parseOptionalInteger(String(values.get(`price${grams}`))) ?? -1]))
+    const prices = Object.fromEntries(productPriceUnits.map(grams => [grams, parseOptionalInteger(String(values.get(`price${grams}`))) ?? -1]))
     if (Object.values(prices).some(price => price < 0)) {
       setMessage('Inserisci prezzi validi.')
       return
@@ -206,7 +207,7 @@ function CatalogAdmin({ products, categories, reload }: { products: Row[]; categ
       <form onSubmit={addProduct} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 mb-6">
         <input className="w-full" name="name" required placeholder="Nome prodotto" style={input} />
         <select className="w-full" name="category" required style={input}><option value="">Categoria</option>{categories.map(category => <option value={category.id} key={category.id}>{category.name}</option>)}</select>
-        {[25, 50, 100, 300, 500, 1000].map(grams => <input className="w-full" key={grams} name={`price${grams}`} inputMode="numeric" pattern="[0-9]*" required placeholder={`EUR ${grams} g`} style={input} />)}
+        {productPriceUnits.map(grams => <input className="w-full" key={grams} name={`price${grams}`} inputMode="numeric" pattern="[0-9]*" required placeholder={`EUR ${formatWeightLabel(grams)}`} style={input} />)}
         <button style={primary}>Crea e pubblica</button>
         <label className="sm:col-span-2 lg:col-span-4 flex items-start gap-2" style={muted}>
           <input type="checkbox" name="announce" />
@@ -223,9 +224,12 @@ function CatalogAdmin({ products, categories, reload }: { products: Row[]; categ
             <button type="button" style={dangerButton} onClick={() => removeProduct(product)}>Elimina</button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
-            {(product.product_variants ?? []).filter((variant: Row) => variant.unit_amount).map((variant: Row) => (
+            {(product.product_variants ?? [])
+              .filter((variant: Row) => variant.unit_amount)
+              .sort((left: Row, right: Row) => Number(left.unit_amount) - Number(right.unit_amount))
+              .map((variant: Row) => (
               <div key={variant.id} className="grid grid-cols-[1fr_82px] sm:grid-cols-[1fr_82px_auto] gap-2 items-center p-2 rounded-lg" style={{ background: '#080C0E' }}>
-                <span>{variant.unit_amount} g / +{variant.token_award}</span>
+                <span>{formatWeightLabel(Number(variant.unit_amount))} / +{variant.token_award}</span>
                 <input inputMode="numeric" pattern="[0-9]*" defaultValue={roundPrice(Number(variant.price))} onBlur={event => {
                   const price = parseOptionalInteger(event.currentTarget.value)
                   if (price === null || price < 0) {
@@ -1518,6 +1522,9 @@ function makeRewardCode(type: GameType) {
 }
 function roundPrice(price: number) {
   return Math.round(price / 5) * 5
+}
+function formatWeightLabel(grams: number) {
+  return grams >= 1000 ? `${formatItalianNumber(grams / 1000, grams % 1000 === 0 ? 0 : 2)} kg` : `${grams} g`
 }
 function formatItalianNumber(value: number, digits: number) {
   return value.toLocaleString('it-IT', { minimumFractionDigits: 0, maximumFractionDigits: digits })
