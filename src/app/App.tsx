@@ -15,6 +15,7 @@ import { AccessDeniedPage, AccessPendingPage, BlockedPage, CallbackPage, LoginPa
 
 import { useAuth } from './auth/AuthProvider'
 import { getBroadcasts, getCatalog, getCatalogCategories, getKycStatus, getLevels, getProfileActivity, getServiceAreas, playGame, submitTestOrder } from './lib/api'
+import { requireSupabase } from './lib/supabase'
 import { italianErrorMessage } from './lib/errors'
 import '../styles/fonts.css'
 
@@ -58,6 +59,15 @@ function MemberApplication() {
   const [kycStatus, setKycStatus] = useState<KycStatus>({ status: 'not_started', documents: [], submittedAt: null, rejectionReason: null })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+
+  const refreshServiceAreas = useCallback(async () => {
+    try {
+      const areas = await getServiceAreas()
+      setServiceAreas(areas)
+    } catch (caught) {
+      setError(italianErrorMessage(caught, 'Errore nel caricamento della regolamentazione.'))
+    }
+  }, [])
 
   useEffect(() => {
     type TelegramViewport = {
@@ -132,6 +142,17 @@ function MemberApplication() {
 
   useEffect(() => { loadData() }, [loadData])
 
+  useEffect(() => {
+    const db = requireSupabase()
+    const channel = db
+      .channel('service-areas-regolamentazione')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'service_areas' }, () => {
+        void refreshServiceAreas()
+      })
+      .subscribe()
+    return () => { void db.removeChannel(channel) }
+  }, [refreshServiceAreas])
+
   const page: Page = location.pathname === '/catalog'
     ? 'catalog'
     : location.pathname === '/games'
@@ -179,7 +200,7 @@ function MemberApplication() {
             <Route path="/catalog" element={<CatalogPage products={products} categories={catalogCategories} feedback={feedback} addToCart={addToCart} selectedProductId={selectedProductId} onProductSelect={setSelectedProductId} />} />
             <Route path="/games" element={<GamesPage user={user} onPlay={playGame} onComplete={refreshAccount} />} />
             <Route path="/profile" element={<ProfilePage user={user} levels={levels} orders={orders} ledger={ledger} rewards={rewards} onChanged={refreshAccount} onAdmin={() => navigateRouter('/admin')} />} />
-            <Route path="/info" element={<InfoPage />} />
+            <Route path="/info" element={<InfoPage serviceAreas={serviceAreas} />} />
             <Route path="/contacts" element={<ContactsPage />} />
             <Route path="/admin" element={<RequireAdmin><AdminPage /></RequireAdmin>} />
             <Route path="*" element={<Navigate to="/" replace />} />

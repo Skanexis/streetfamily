@@ -70,6 +70,13 @@ function ledgerReason(reason: string) {
     .replace(/^Ticket ruota guadagnato$/, 'Biglietto ruota guadagnato')
 }
 
+function mediaSort(left: RecordValue, right: RecordValue) {
+  const leftRank = left.type === 'video' ? 0 : 1
+  const rightRank = right.type === 'video' ? 0 : 1
+  if (leftRank !== rightRank) return leftRank - rightRank
+  return Number(left.sortOrder ?? 0) - Number(right.sortOrder ?? 0)
+}
+
 export async function getAccessProfile(): Promise<Profile | null> {
   const db = requireSupabase()
   const { data, error } = await db.rpc('get_my_profile')
@@ -109,7 +116,7 @@ export async function getCatalog(): Promise<Product[]> {
       tokenAward: variant.token_award,
       available: variant.available,
     }))
-    const media = await Promise.all((row.media ?? []).map(async (entry: RecordValue) => {
+    const media = (await Promise.all((row.media ?? []).map(async (entry: RecordValue) => {
       let resolvedUrl = entry.url
       if (entry.storage_path) {
         const signed = await db.storage.from('product-media').createSignedUrl(entry.storage_path, 3600)
@@ -124,7 +131,7 @@ export async function getCatalog(): Promise<Product[]> {
         alt: entry.alt,
         sortOrder: entry.sort_order,
       }
-    }))
+    }))).sort(mediaSort)
     return {
       id: row.id,
       name: row.name,
@@ -133,6 +140,7 @@ export async function getCatalog(): Promise<Product[]> {
       startingPrice: variants.find((variant: { unitAmount: number; available: boolean }) => variant.available && variant.unitAmount >= 25)?.price ?? 0,
       rating: Number(row.rating),
       badge: row.badge,
+      promoTag: row.promo_tag ?? '',
       reviews: row.review_count,
       description: row.description,
       variants,

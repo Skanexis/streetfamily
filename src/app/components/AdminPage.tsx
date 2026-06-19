@@ -1,12 +1,12 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
-import { Package, Tags, Users, Gamepad2, ClipboardList, Settings, Megaphone, MessageSquare, Minus, Plus, Trash2, Warehouse, Wallet } from 'lucide-react'
+import { MapPin, Package, Tags, Users, Gamepad2, ClipboardList, Settings, Megaphone, MessageSquare, Minus, Plus, Trash2, Warehouse, Wallet } from 'lucide-react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { adminAdjustWallet, adminBroadcastAction, adminDeleteAccount, adminDeleteGameOption, adminReviewAccessRequest, adminSaveGameOptions, adminSendLowStockNotifications, adminSetGameActive, adminSimulateGame, getAdminDashboard, getAdminKycDocuments, reviewKyc } from '../lib/api'
 import { requireSupabase } from '../lib/supabase'
 import { italianErrorMessage } from '../lib/errors'
 import type { Broadcast, DashboardData, GameType, KycReviewDocument } from '../data'
 
-type Tab = 'catalog' | 'categories' | 'inventory' | 'broadcasts' | 'users' | 'balance' | 'orders' | 'kyc' | 'economy' | 'feedback' | 'settings'
+type Tab = 'catalog' | 'categories' | 'inventory' | 'broadcasts' | 'users' | 'balance' | 'orders' | 'kyc' | 'economy' | 'feedback' | 'settings' | 'regolamentazione'
 type Row = Record<string, any>
 type NumericDraft = string | number
 const productPriceUnits = [25, 50, 100, 300, 500, 1000, 2000, 3000, 4000, 5000]
@@ -51,7 +51,7 @@ export function AdminPage() {
       const db = requireSupabase()
       const [summary, productResult, inventoryResult, categoryResult, profileResult, accessResult, orderResult, gameResult, locationResult, settingsResult, broadcastResult, feedbackResult, optionsResult, tiersResult] = await Promise.all([
         getAdminDashboard(),
-        db.from('products').select('id,category_id,name,badge,published,featured,categories(name),product_variants(id,label,price,unit_amount,token_award,inventory_status(available)),product_media(id,url,storage_path,media_type,upload_status,sort_order)').order('name'),
+        db.from('products').select('id,category_id,name,badge,promo_tag,published,featured,categories(name),product_variants(id,label,price,unit_amount,token_award,inventory_status(available)),product_media(id,url,storage_path,media_type,upload_status,sort_order)').order('name'),
         db.from('product_inventory').select('product_id,stock_quantity,notify_threshold_quantity,updated_at,products(id,name,published,categories(name))').order('updated_at', { ascending: false }),
         db.from('categories').select('*').order('sort_order'),
         db.from('profiles').select('id,username,telegram_subject,role,blocked,wallet_balances(points,xp,spin_tickets,scratch_tickets,box_tickets),kyc_cases:kyc_cases!kyc_cases_user_id_fkey(status,submitted_at,rejection_reason,retain_until),orders(status),feedback:feedback!feedback_user_id_fkey(status)').order('created_at', { ascending: false }),
@@ -127,6 +127,7 @@ export function AdminPage() {
           ['economy', Gamepad2, 'Economia'],
           ['feedback', MessageSquare, 'Recensioni'],
           ['settings', Settings, 'Impostazioni'],
+          ['regolamentazione', MapPin, 'Regolamentazione'],
         ] as const).map(([id, Icon, label]) => (
           <button key={id} className="shrink-0" onClick={() => setTab(id)} style={{ ...smallButton, background: tab === id ? '#7E9CA8' : '#11181B' }}><Icon size={15} /> {label}</button>
         ))}
@@ -141,7 +142,8 @@ export function AdminPage() {
       {tab === 'kyc' && <KycRequestsAdmin profiles={profiles} initialKycUserId={requestedKycUserId} initialGroup={requestedKycGroup} reload={load} />}
       {tab === 'economy' && <EconomyAdmin games={games} options={rewardOptions} reload={load} />}
       {tab === 'feedback' && <FeedbackAdmin feedback={feedback} reload={load} />}
-      {tab === 'settings' && <SettingsAdmin locations={locations} settings={settings} tokenTiers={tokenTiers} reload={load} />}
+      {tab === 'settings' && <SettingsAdmin settings={settings} tokenTiers={tokenTiers} reload={load} />}
+      {tab === 'regolamentazione' && <RegolamentazioneAdmin locations={locations} reload={load} />}
     </AdminFrame>
   )
 }
@@ -168,6 +170,7 @@ function CatalogAdmin({ products, categories, reload }: { products: Row[]; categ
       p_category_id: values.get('category'),
       p_prices: Object.fromEntries(Object.entries(prices).map(([grams, price]) => [grams, roundPrice(price)])),
       p_announce: values.get('announce') === 'on',
+      p_promo_tag: String(values.get('promoTag') ?? '').trim(),
     })
     if (error) throw new Error(italianErrorMessage(error.message, 'Creazione del prodotto non riuscita.'))
     event.currentTarget.reset()
@@ -182,6 +185,13 @@ function CatalogAdmin({ products, categories, reload }: { products: Row[]; categ
     const active = variant.inventory_status?.available ?? false
     const { error } = await requireSupabase().from('inventory_status').update({ available: !active }).eq('variant_id', variant.id)
     if (error) throw new Error(italianErrorMessage(error.message, 'Aggiornamento della disponibilità non riuscito.'))
+    await reload()
+  }
+  const setPromoTag = async (product: Row, value: string) => {
+    const next = value.trim().slice(0, 40)
+    if (next === (product.promo_tag ?? '')) return
+    const { error } = await requireSupabase().from('products').update({ promo_tag: next }).eq('id', product.id)
+    if (error) throw new Error(italianErrorMessage(error.message, 'Aggiornamento del tag non riuscito.'))
     await reload()
   }
   const removeProduct = async (product: Row) => {
@@ -207,6 +217,7 @@ function CatalogAdmin({ products, categories, reload }: { products: Row[]; categ
       <form onSubmit={addProduct} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 mb-6">
         <input className="w-full" name="name" required placeholder="Nome prodotto" style={input} />
         <select className="w-full" name="category" required style={input}><option value="">Categoria</option>{categories.map(category => <option value={category.id} key={category.id}>{category.name}</option>)}</select>
+        <input className="w-full" name="promoTag" maxLength={40} placeholder="Tag card (opzionale)" style={input} />
         {productPriceUnits.map(grams => <input className="w-full" key={grams} name={`price${grams}`} inputMode="numeric" pattern="[0-9]*" required placeholder={`EUR ${formatWeightLabel(grams)}`} style={input} />)}
         <button style={primary}>Crea e pubblica</button>
         <label className="sm:col-span-2 lg:col-span-4 flex items-start gap-2" style={muted}>
@@ -223,6 +234,16 @@ function CatalogAdmin({ products, categories, reload }: { products: Row[]; categ
             <Toggle label="Pubblicato" active={product.published} onClick={() => toggle(product, 'published')} />
             <button type="button" style={dangerButton} onClick={() => removeProduct(product)}>Elimina</button>
           </div>
+          <label className="block mb-3" style={muted}>Tag card
+            <input
+              className="w-full"
+              maxLength={40}
+              defaultValue={product.promo_tag ?? ''}
+              placeholder="Vuoto = non visibile"
+              onBlur={event => { void setPromoTag(product, event.currentTarget.value) }}
+              style={{ ...input, display: 'block', marginTop: 5 }}
+            />
+          </label>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
             {(product.product_variants ?? [])
               .filter((variant: Row) => variant.unit_amount)
@@ -466,7 +487,13 @@ function BroadcastAdmin({ broadcasts, reload }: { broadcasts: Broadcast[]; reloa
 function MediaUploader({ product, reload }: { product: Row; reload: () => Promise<void> }) {
   const [uploads, setUploads] = useState<Record<string, { progress: number; status: string }>>({})
   const [uploadError, setUploadError] = useState('')
-  const existing = product.product_media ?? []
+  const [deletingMediaId, setDeletingMediaId] = useState('')
+  const existing = [...(product.product_media ?? [])].sort((left: Row, right: Row) => {
+    const leftRank = left.media_type === 'video' ? 0 : 1
+    const rightRank = right.media_type === 'video' ? 0 : 1
+    if (leftRank !== rightRank) return leftRank - rightRank
+    return Number(left.sort_order ?? 0) - Number(right.sort_order ?? 0)
+  })
   const imageCount = existing.filter((media: Row) => media.media_type === 'image' && media.upload_status !== 'failed').length
   const videoCount = existing.filter((media: Row) => media.media_type === 'video' && media.upload_status !== 'failed').length
 
@@ -521,6 +548,26 @@ function MediaUploader({ product, reload }: { product: Row; reload: () => Promis
     }
   }
 
+  const deleteMedia = async (media: Row) => {
+    if (!window.confirm('Eliminare questo contenuto multimediale?')) return
+    setUploadError('')
+    setDeletingMediaId(media.id)
+    const db = requireSupabase()
+    try {
+      if (media.storage_path) {
+        const removed = await db.storage.from('product-media').remove([media.storage_path])
+        if (removed.error) throw new Error(italianErrorMessage(removed.error.message, 'Eliminazione del file non riuscita.'))
+      }
+      const deleted = await db.from('product_media').delete().eq('id', media.id)
+      if (deleted.error) throw new Error(italianErrorMessage(deleted.error.message, 'Eliminazione del contenuto non riuscita.'))
+      await reload()
+    } catch (caught) {
+      setUploadError(italianErrorMessage(caught, 'Eliminazione del contenuto non riuscita.'))
+    } finally {
+      setDeletingMediaId('')
+    }
+  }
+
   return (
     <div className="mt-3 pt-3" style={{ borderTop: '1px solid rgba(245,245,245,.08)' }}>
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-2">
@@ -534,11 +581,15 @@ function MediaUploader({ product, reload }: { product: Row; reload: () => Promis
         const status = uploads[media.id]?.status ?? media.upload_status
         const progress = uploads[media.id]?.progress ?? 0
         return (
-          <div key={media.id} className="flex flex-wrap gap-2 items-center mb-1" style={{ fontSize: 12 }}>
+          <div key={media.id} className="flex flex-wrap gap-2 items-center mb-2 p-2 rounded-lg" style={{ fontSize: 12, background: '#080C0E' }}>
+            <AdminMediaPreview media={media} />
             <span className="flex-1 min-w-0 break-all">{media.media_type === 'image' ? 'foto' : 'video'} {media.storage_path?.split('/').pop() ?? 'contenuto iniziale'}</span>
             {status === 'uploading' && <span style={{ color: '#7E9CA8' }}>Caricamento {progress}%</span>}
             {status === 'ready' && <span style={{ color: '#D7FE55' }}>Pronto</span>}
             {status === 'failed' && <span style={{ color: '#EF4444' }}>Non riuscito</span>}
+            <button type="button" disabled={deletingMediaId === media.id} style={{ ...dangerButton, opacity: deletingMediaId === media.id ? 0.65 : 1 }} onClick={() => { void deleteMedia(media) }}>
+              <Trash2 size={14} /> Elimina
+            </button>
           </div>
         )
       })}
@@ -548,6 +599,28 @@ function MediaUploader({ product, reload }: { product: Row; reload: () => Promis
       {uploadError && <div style={{ color: '#EF4444', fontSize: 12 }}>{uploadError}</div>}
     </div>
   )
+}
+
+function AdminMediaPreview({ media }: { media: Row }) {
+  const [src, setSrc] = useState(media.url ?? '')
+  useEffect(() => {
+    let active = true
+    const load = async () => {
+      if (!media.storage_path) {
+        setSrc(media.url ?? '')
+        return
+      }
+      const signed = await requireSupabase().storage.from('product-media').createSignedUrl(media.storage_path, 3600)
+      if (active) setSrc(signed.data?.signedUrl ?? '')
+    }
+    void load()
+    return () => { active = false }
+  }, [media.storage_path, media.url])
+
+  if (!src) return <div className="shrink-0 flex items-center justify-center" style={{ width: 54, height: 44, background: '#11181B', color: 'rgba(245,245,245,.35)' }}>MEDIA</div>
+  return media.media_type === 'video'
+    ? <video src={src} muted playsInline preload="metadata" className="shrink-0 object-cover" style={{ width: 54, height: 44, background: '#11181B' }} />
+    : <img src={src} alt={media.alt ?? ''} className="shrink-0 object-cover" style={{ width: 54, height: 44, background: '#11181B' }} />
 }
 
 async function xhrStorageUpload(path: string, file: File, onProgress: (value: number) => void) {
@@ -1225,16 +1298,16 @@ function FeedbackAdmin({ feedback, reload }: { feedback: Row[]; reload: () => Pr
   )
 }
 
-function SettingsAdmin({ locations, settings, tokenTiers, reload }: { locations: Row[]; settings: Row[]; tokenTiers: Row[]; reload: () => Promise<void> }) {
-  const retention = settings.find(setting => setting.key === 'kyc_retention')?.value ?? { approved_days: 365 }
-  const links = settings.find(setting => setting.key === 'community_links')?.value ?? { instagram: '', viber: '', signal: null }
+function RegolamentazioneAdmin({ locations, reload }: { locations: Row[]; reload: () => Promise<void> }) {
   const [areaMessage, setAreaMessage] = useState('')
   const [areaMessageError, setAreaMessageError] = useState(false)
   const [locationMinimumDrafts, setLocationMinimumDrafts] = useState<Record<string, string>>({})
   const [deletingLocationId, setDeletingLocationId] = useState('')
+
   useEffect(() => {
     setLocationMinimumDrafts(Object.fromEntries(locations.map(location => [location.id, String(location.minimum_units ?? '')])))
   }, [locations])
+
   const addLocation = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setAreaMessage('')
@@ -1242,24 +1315,37 @@ function SettingsAdmin({ locations, settings, tokenTiers, reload }: { locations:
     const values = new FormData(event.currentTarget)
     const scenario = String(values.get('scenario'))
     const minimumUnits = parseOptionalInteger(String(values.get('minimum')))
-    if (minimumUnits === null || minimumUnits < 1) throw new Error('Minimo non valido')
-    const { error } = await requireSupabase().from('service_areas').insert({
-      scenario_type: scenario,
-      city: values.get('city'),
-      minimum_units: minimumUnits,
-      requires_street: scenario !== 'meetup',
-    })
-    if (error) throw new Error(italianErrorMessage(error.message, 'Aggiunta dell’area non riuscita.'))
-    event.currentTarget.reset()
-    setAreaMessage('Area di servizio aggiunta.')
-    await reload()
+    if (minimumUnits === null || minimumUnits < 1) {
+      setAreaMessageError(true)
+      setAreaMessage('Minimo non valido.')
+      return
+    }
+    try {
+      const { error } = await requireSupabase().from('service_areas').insert({
+        scenario_type: scenario,
+        city: String(values.get('city') ?? '').trim(),
+        minimum_units: minimumUnits,
+        requires_street: scenario !== 'meetup',
+        active: true,
+      })
+      if (error) throw new Error(italianErrorMessage(error.message, 'Aggiunta dell’area non riuscita.'))
+      event.currentTarget.reset()
+      setAreaMessage('Area di servizio aggiunta.')
+      await reload()
+    } catch (caught) {
+      setAreaMessageError(true)
+      setAreaMessage(italianErrorMessage(caught, 'Aggiunta dell’area non riuscita.'))
+    }
   }
+
   const setLocationDraft = (locationId: string, value: string) => {
     setLocationMinimumDrafts(current => ({ ...current, [locationId]: value.replace(/\D/g, '') }))
   }
+
   const resetLocationDraft = (location: Row) => {
     setLocationMinimumDrafts(current => ({ ...current, [location.id]: String(location.minimum_units ?? '') }))
   }
+
   const updateLocationMinimum = async (location: Row) => {
     const minimumUnits = parseOptionalInteger(locationMinimumDrafts[location.id] ?? '')
     if (minimumUnits === null || minimumUnits < 1) {
@@ -1285,6 +1371,7 @@ function SettingsAdmin({ locations, settings, tokenTiers, reload }: { locations:
       setAreaMessage(italianErrorMessage(caught, 'Aggiornamento area non riuscito.'))
     }
   }
+
   const deleteLocation = async (location: Row) => {
     if (!window.confirm(`Eliminare l'area di servizio "${location.city}"?`)) return
     setAreaMessage('')
@@ -1302,6 +1389,59 @@ function SettingsAdmin({ locations, settings, tokenTiers, reload }: { locations:
       setDeletingLocationId('')
     }
   }
+
+  const renderScenario = (scenario: 'meetup' | 'delivery_zone' | 'delivery_italia') => (
+    <>
+      <h3 className="mb-3 mt-6">{scenarioLabel[scenario]}</h3>
+      <div className="mb-4">
+        {locations.filter(location => location.scenario_type === scenario).map(location => (
+          <div key={location.id} className="flex flex-wrap justify-between items-end gap-2" style={row}>
+            <strong>{location.city}</strong>
+            <div className="flex flex-wrap items-end gap-2">
+              <label style={muted}>minimo g
+                <input
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={locationMinimumDrafts[location.id] ?? ''}
+                  onChange={event => setLocationDraft(location.id, event.currentTarget.value)}
+                  onBlur={() => { void updateLocationMinimum(location) }}
+                  onKeyDown={event => {
+                    if (event.key !== 'Enter') return
+                    event.preventDefault()
+                    event.currentTarget.blur()
+                  }}
+                  style={{ ...input, width: 110, display: 'block', marginTop: 5 }}
+                />
+              </label>
+              <button type="button" disabled={deletingLocationId === location.id} style={{ ...dangerButton, opacity: deletingLocationId === location.id ? 0.65 : 1 }} onClick={() => { void deleteLocation(location) }}>
+                <Trash2 size={15} /> Elimina
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+      <form onSubmit={addLocation} className="grid grid-cols-1 sm:grid-cols-[1fr_150px_auto] gap-2 mb-6">
+        <input type="hidden" name="scenario" value={scenario} />
+        <input className="w-full" name="city" required placeholder="Città" style={input} />
+        <input className="w-full" name="minimum" inputMode="numeric" pattern="[0-9]*" required placeholder="Minimo g" style={input} />
+        <button style={primary}>Aggiungi</button>
+      </form>
+    </>
+  )
+
+  return (
+    <Section title="Regolamentazione" note="Gestisci città disponibili e minimi in grammi usati da regolamento, carrello e validazione ordine.">
+      {areaMessage && <p className="mb-4" style={{ color: areaMessageError ? '#EF4444' : '#D7FE55' }}>{areaMessage}</p>}
+      {renderScenario('meetup')}
+      {renderScenario('delivery_zone')}
+      {renderScenario('delivery_italia')}
+    </Section>
+  )
+}
+
+function SettingsAdmin({ settings, tokenTiers, reload }: { settings: Row[]; tokenTiers: Row[]; reload: () => Promise<void> }) {
+  const retention = settings.find(setting => setting.key === 'kyc_retention')?.value ?? { approved_days: 365 }
+  const links = settings.find(setting => setting.key === 'community_links')?.value ?? { instagram: '', viber: '', signal: null }
   const updateRetention = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const values = new FormData(event.currentTarget)
@@ -1335,7 +1475,7 @@ function SettingsAdmin({ locations, settings, tokenTiers, reload }: { locations:
     await reload()
   }
   return (
-    <Section title="Impostazioni" note="Configura informazioni pubbliche, KYC, premi e aree di servizio.">
+    <Section title="Impostazioni" note="Configura informazioni pubbliche, KYC e premi.">
       <form onSubmit={updatePublicInfo} className="grid gap-2 mb-6">
         <h3>Link pubblici</h3>
         <input className="w-full" name="instagram" defaultValue={links.instagram} placeholder="URL Instagram" style={input} />
@@ -1360,103 +1500,6 @@ function SettingsAdmin({ locations, settings, tokenTiers, reload }: { locations:
           }} style={{ ...input, width: 70, display: 'block' }} />
         </label>)}
       </div>
-      {areaMessage && <p className="mb-4" style={{ color: areaMessageError ? '#EF4444' : '#D7FE55' }}>{areaMessage}</p>}
-      <h3 className="mb-3 mt-6">MEETUP</h3>
-      <div className="mb-4">
-        {locations.filter(l => l.scenario_type === 'meetup').map(location => <div key={location.id} className="flex flex-wrap justify-between items-end gap-2" style={row}>
-          <strong>{location.city}</strong>
-          <div className="flex flex-wrap items-end gap-2">
-            <label style={muted}>minimo g
-              <input
-                inputMode="numeric"
-                pattern="[0-9]*"
-                value={locationMinimumDrafts[location.id] ?? ''}
-                onChange={event => setLocationDraft(location.id, event.currentTarget.value)}
-                onBlur={() => { void updateLocationMinimum(location) }}
-                onKeyDown={event => {
-                  if (event.key !== 'Enter') return
-                  event.preventDefault()
-                  event.currentTarget.blur()
-                }}
-                style={{ ...input, width: 110, display: 'block', marginTop: 5 }}
-              />
-            </label>
-            <button type="button" disabled={deletingLocationId === location.id} style={{ ...dangerButton, opacity: deletingLocationId === location.id ? 0.65 : 1 }} onClick={() => { void deleteLocation(location) }}>
-              <Trash2 size={15} /> Elimina
-            </button>
-          </div>
-        </div>)}
-      </div>
-      <form onSubmit={addLocation} className="grid grid-cols-1 sm:grid-cols-[1fr_150px_auto] gap-2 mb-6">
-        <input type="hidden" name="scenario" value="meetup" />
-        <input className="w-full" name="city" required placeholder="Città" style={input} />
-        <input className="w-full" name="minimum" inputMode="numeric" pattern="[0-9]*" required placeholder="Minimo g" style={input} />
-        <button style={primary}>Aggiungi</button>
-      </form>
-      <h3 className="mb-3">DELIVERY LOCALE</h3>
-      <div className="mb-4">
-        {locations.filter(l => l.scenario_type === 'delivery_zone').map(location => <div key={location.id} className="flex flex-wrap justify-between items-end gap-2" style={row}>
-          <strong>{location.city}</strong>
-          <div className="flex flex-wrap items-end gap-2">
-            <label style={muted}>minimo g
-              <input
-                inputMode="numeric"
-                pattern="[0-9]*"
-                value={locationMinimumDrafts[location.id] ?? ''}
-                onChange={event => setLocationDraft(location.id, event.currentTarget.value)}
-                onBlur={() => { void updateLocationMinimum(location) }}
-                onKeyDown={event => {
-                  if (event.key !== 'Enter') return
-                  event.preventDefault()
-                  event.currentTarget.blur()
-                }}
-                style={{ ...input, width: 110, display: 'block', marginTop: 5 }}
-              />
-            </label>
-            <button type="button" disabled={deletingLocationId === location.id} style={{ ...dangerButton, opacity: deletingLocationId === location.id ? 0.65 : 1 }} onClick={() => { void deleteLocation(location) }}>
-              <Trash2 size={15} /> Elimina
-            </button>
-          </div>
-        </div>)}
-      </div>
-      <form onSubmit={addLocation} className="grid grid-cols-1 sm:grid-cols-[1fr_150px_auto] gap-2 mb-6">
-        <input type="hidden" name="scenario" value="delivery_zone" />
-        <input className="w-full" name="city" required placeholder="Città" style={input} />
-        <input className="w-full" name="minimum" inputMode="numeric" pattern="[0-9]*" required placeholder="Minimo g" style={input} />
-        <button style={primary}>Aggiungi</button>
-      </form>
-      <h3 className="mb-3">DELIVERY TUTTA ITALIA</h3>
-      <div className="mb-4">
-        {locations.filter(l => l.scenario_type === 'delivery_italia').map(location => <div key={location.id} className="flex flex-wrap justify-between items-end gap-2" style={row}>
-          <strong>{location.city}</strong>
-          <div className="flex flex-wrap items-end gap-2">
-            <label style={muted}>minimo g
-              <input
-                inputMode="numeric"
-                pattern="[0-9]*"
-                value={locationMinimumDrafts[location.id] ?? ''}
-                onChange={event => setLocationDraft(location.id, event.currentTarget.value)}
-                onBlur={() => { void updateLocationMinimum(location) }}
-                onKeyDown={event => {
-                  if (event.key !== 'Enter') return
-                  event.preventDefault()
-                  event.currentTarget.blur()
-                }}
-                style={{ ...input, width: 110, display: 'block', marginTop: 5 }}
-              />
-            </label>
-            <button type="button" disabled={deletingLocationId === location.id} style={{ ...dangerButton, opacity: deletingLocationId === location.id ? 0.65 : 1 }} onClick={() => { void deleteLocation(location) }}>
-              <Trash2 size={15} /> Elimina
-            </button>
-          </div>
-        </div>)}
-      </div>
-      <form onSubmit={addLocation} className="grid grid-cols-1 sm:grid-cols-[1fr_150px_auto] gap-2">
-        <input type="hidden" name="scenario" value="delivery_italia" />
-        <input className="w-full" name="city" required placeholder="Città" style={input} />
-        <input className="w-full" name="minimum" inputMode="numeric" pattern="[0-9]*" required placeholder="Minimo g" style={input} />
-        <button style={primary}>Aggiungi</button>
-      </form>
     </Section>
   )
 }
@@ -1541,6 +1584,7 @@ function isTab(value: string | null): value is Tab {
     || value === 'economy'
     || value === 'feedback'
     || value === 'settings'
+    || value === 'regolamentazione'
 }
 function parseOrdersGroup(value: string | null): OrdersGroup | null {
   return value === 'submitted' || value === 'processing' ? value : null

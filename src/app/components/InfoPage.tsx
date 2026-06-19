@@ -1,6 +1,14 @@
-import { MapPin, Truck } from 'lucide-react'
+import { MapPin, Truck, type LucideIcon } from 'lucide-react'
+import type { ServiceArea } from '../data'
 
-export function InfoPage() {
+interface Props {
+  serviceAreas: ServiceArea[]
+}
+
+export function InfoPage({ serviceAreas }: Props) {
+  const meetupGroups = groupAreas(serviceAreas.filter(area => area.scenarioType === 'meetup'))
+  const deliveryGroups = groupAreas(serviceAreas.filter(area => area.scenarioType === 'delivery_zone'))
+  const deliveryItaliaMinimum = serviceAreas.find(area => area.scenarioType === 'delivery_italia')?.minimumUnits ?? 500
   return (
     <div className="min-h-screen px-4 md:px-8 py-10" style={{ paddingTop: 100 }}>
       <div className="max-w-3xl mx-auto">
@@ -10,15 +18,14 @@ export function InfoPage() {
             <p style={{ ...copy, fontSize: 16 }}>Da 300g fino a 3kg aggiungere ai prezzi menù <strong>10€ ogni 100g</strong>, da 5kg in su prezzi compreso trasporto.</p>
             
             <h3 style={serviceHeading}>MEET UP UFFICIALI</h3>
-            <Rule Icon={MapPin} title="SPOLETO / FOLIGNO" text="GUALDO / BASTIA" detail="Minimo ordine 50g" />
-            <Rule Icon={MapPin} title="PERUGIA / GUBBIO / TERNI" detail="Minimo ordine 100g" />
+            {meetupGroups.map(group => <Rule key={`meetup-${group.minimumUnits}-${group.cities.join('-')}`} Icon={MapPin} title={group.cities.join(' / ').toUpperCase()} detail={`Minimo ordine ${group.minimumUnits}g`} />)}
             
             <h3 style={serviceHeading}>DELIVERY SEGUENTI ZONE</h3>
-            <Rule Icon={Truck} title="UMBERTIDE / CDC / MATELICA" text="FABRIANO / CAGLI / CERRETO DESI" detail="Minimo ordine 300g" />
+            {deliveryGroups.map(group => <Rule key={`delivery-${group.minimumUnits}-${group.cities.join('-')}`} Icon={Truck} title={group.cities.join(' / ').toUpperCase()} detail={`Minimo ordine ${group.minimumUnits}g`} />)}
             <p style={{ ...copy, marginTop: 8 }}>(Aggiungere 10€ ogni 100g)</p>
             
             <h3 style={serviceHeading}>DELIVERY TUTTA ITALIA</h3>
-            <Rule Icon={Truck} title="Minimo ordine 500g" text="La tariffa Delivery verrà stabilità in base la distanza e la quantità!" />
+            <Rule Icon={Truck} title={`Minimo ordine ${deliveryItaliaMinimum}g`} text="La tariffa Delivery verrà stabilità in base la distanza e la quantità!" />
             
             <div className="p-4 mt-7 rounded-xl" style={highlight}>
               <p style={{ ...copy, color: '#D7FE55', fontWeight: 700, textTransform: 'uppercase' }}>
@@ -44,7 +51,17 @@ export function InfoPage() {
   )
 }
 
-function Rule({ Icon, title, text, detail }: { Icon: typeof MapPin; title: string; text?: string; detail?: string }) {
+function groupAreas(areas: ServiceArea[]) {
+  const groups: Array<{ minimumUnits: number; cities: string[] }> = []
+  for (const area of areas) {
+    const existing = groups.find(group => group.minimumUnits === area.minimumUnits)
+    if (existing) existing.cities.push(area.city)
+    else groups.push({ minimumUnits: area.minimumUnits, cities: [area.city] })
+  }
+  return groups.sort((left, right) => left.minimumUnits - right.minimumUnits)
+}
+
+function Rule({ Icon, title, text, detail }: { Icon: LucideIcon; title: string; text?: string; detail?: string }) {
   return <div className="flex gap-4 mt-4 p-3 rounded-xl" style={rule}><Icon size={20} style={{ color: '#D7FE55', flexShrink: 0 }} /><div><strong>{title}</strong>{text && <p style={{ ...copy, marginTop: 5 }}>{text}</p>}{detail && <p style={{ ...copy, color: '#D7FE55', marginTop: 5, fontWeight: 700 }}>{detail}</p>}</div></div>
 }
 

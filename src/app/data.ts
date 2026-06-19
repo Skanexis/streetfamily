@@ -29,6 +29,7 @@ export interface Product {
   startingPrice: number
   rating: number
   badge: 'HOT' | 'NEW' | null
+  promoTag: string
   reviews: number
   description: string
   variants: ProductVariant[]

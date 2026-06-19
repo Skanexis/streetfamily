@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { ShoppingCart, Star, X } from 'lucide-react'
 import type { CartItem, Feedback, Product, ProductVariant } from '../data'
+import { ProductCardMedia } from './ProductCardMedia'
 
 type AddFn = (item: Omit<CartItem, 'id'>) => void
 interface Props { products: Product[]; categories: string[]; feedback: Feedback[]; addToCart: AddFn; selectedProductId: string | null; onProductSelect: (id: string | null) => void }
@@ -31,7 +32,7 @@ export function CatalogPage({ products, categories, feedback, addToCart, selecte
 
 function Card({ product, onClick }: { product: Product; onClick: () => void }) {
   return <motion.button whileHover={{ y: -3 }} onClick={onClick} className="text-left overflow-hidden" style={panel}>
-    {product.img ? <img src={product.img} alt={product.name} className="w-full object-cover" style={{ height: 176, background: '#182226' }} /> : <div className="flex items-center justify-center" style={{ height: 176, background: '#182226', color: 'rgba(245,245,245,.35)', fontFamily: 'Orbitron', fontSize: 11 }}>MEDIA</div>}
+    <ProductCardMedia product={product} height={176} />
     <div className="p-4"><span style={kicker}>{product.category}</span><h2 style={{ fontFamily: 'Space Grotesk', fontWeight: 700, margin: '5px 0 12px' }}>{product.name}</h2><div className="flex justify-between"><span style={{ color: 'rgba(245,245,245,.55)', fontSize: 12 }}>da 25 g</span><strong style={{ color: '#D7FE55' }}>EUR {formatPrice(product.startingPrice)}</strong></div></div>
   </motion.button>
 }

@@ -64,9 +64,10 @@ export function CartDrawer({ open, onClose, cart, removeFromCart, tokens, servic
     setScenarioType(value); setCity(''); setStreet(''); setStep('details')
   }
   const continueDetails = () => {
-    const min = scenarioType === 'delivery_italia' ? 500 : selectedAreas.find(area => area.city === city)?.minimumUnits
+    const min = scenarioMinimum(serviceAreas, scenarioType, city)
     if (totalUnits > 5000) return setError('Sono supportati al massimo 5000 g per ordine.')
     if (!city.trim()) return setError('Seleziona o inserisci una città.')
+    if (scenarioType !== 'delivery_italia' && !selectedAreas.some(area => area.city === city)) return setError('Città non disponibile.')
     if ((scenarioType !== 'meetup') && !street.trim()) return setError('Inserisci una via.')
     if (min && totalUnits < min) return setError(`Questo servizio richiede almeno ${min} g.`)
     setError(''); setStep('summary')
@@ -107,7 +108,7 @@ export function CartDrawer({ open, onClose, cart, removeFromCart, tokens, servic
             </div>}
             {step === 'scenario' && <div className="flex flex-col gap-3">
               <p style={muted}>Seleziona un servizio.</p>
-              {scenarios.map(({ key, label, Icon }) => <button key={key} onClick={() => chooseScenario(key)} className="p-5 flex gap-4 text-left" style={panel}><Icon style={{ color: '#D7FE55' }} /><div><strong>{label}</strong><ServiceMinimum service={key} /></div></button>)}
+              {scenarios.map(({ key, label, Icon }) => <button key={key} onClick={() => chooseScenario(key)} className="p-5 flex gap-4 text-left" style={panel}><Icon style={{ color: '#D7FE55' }} /><div><strong>{label}</strong><ServiceMinimum service={key} serviceAreas={serviceAreas} /></div></button>)}
             </div>}
             {step === 'details' && <div className="flex flex-col gap-4">
               <div>
@@ -187,14 +188,30 @@ export function CartDrawer({ open, onClose, cart, removeFromCart, tokens, servic
 function Line({ label, value, strong }: { label: string; value: number; strong?: boolean }) {
   return <div className="flex justify-between" style={strong ? { borderTop: '1px solid rgba(245,245,245,.12)', paddingTop: 14, color: '#D7FE55' } : undefined}><span>{label}</span><strong>EUR {value}</strong></div>
 }
-function ServiceMinimum({ service }: { service: ScenarioType }) {
+function scenarioMinimum(serviceAreas: ServiceArea[], service: ScenarioType, city: string) {
+  if (service === 'delivery_italia') return serviceAreas.find(area => area.scenarioType === 'delivery_italia')?.minimumUnits ?? 500
+  return serviceAreas.find(area => area.scenarioType === service && area.city === city)?.minimumUnits
+}
+function groupAreas(areas: ServiceArea[]) {
+  const groups: Array<{ minimumUnits: number; cities: string[] }> = []
+  for (const area of areas) {
+    const existing = groups.find(group => group.minimumUnits === area.minimumUnits)
+    if (existing) existing.cities.push(area.city)
+    else groups.push({ minimumUnits: area.minimumUnits, cities: [area.city] })
+  }
+  return groups.sort((left, right) => left.minimumUnits - right.minimumUnits)
+}
+function ServiceMinimum({ service, serviceAreas }: { service: ScenarioType; serviceAreas: ServiceArea[] }) {
   if (service === 'meetup') {
-    return <div style={muted}>SPOLETO / FOLIGNO / GUALDO / BASTIA - minimo 50 g<br />PERUGIA / GUBBIO / TERNI - minimo 100 g</div>
+    const groups = groupAreas(serviceAreas.filter(area => area.scenarioType === 'meetup'))
+    return <div style={muted}>{groups.map(group => <span key={`${group.minimumUnits}-${group.cities.join('-')}`}>{group.cities.join(' / ').toUpperCase()} - minimo {group.minimumUnits} g<br /></span>)}</div>
   }
   if (service === 'delivery_zone') {
-    return <div style={muted}>UMBERTIDE / CDC / MATELICA / FABRIANO / CAGLI / CERRETO DESI<br />Minimo 300 g / +10€ ogni 100 g</div>
+    const groups = groupAreas(serviceAreas.filter(area => area.scenarioType === 'delivery_zone'))
+    return <div style={muted}>{groups.map(group => <span key={`${group.minimumUnits}-${group.cities.join('-')}`}>{group.cities.join(' / ').toUpperCase()} - minimo {group.minimumUnits} g<br /></span>)}+10€ ogni 100 g</div>
   }
-  return <div style={muted}>Minimo 500 g / tariffa in base a distanza e quantità</div>
+  const minimum = serviceAreas.find(area => area.scenarioType === 'delivery_italia')?.minimumUnits ?? 500
+  return <div style={muted}>Minimo {minimum} g / tariffa in base a distanza e quantità</div>
 }
 function Action({ onClick, label, disabled }: { onClick: () => void; label: string; disabled?: boolean }) {
   return <button onClick={onClick} disabled={disabled} className="w-full py-4 flex justify-center items-center gap-2" style={{ background: '#D7FE55', color: '#080C0E', fontWeight: 700, opacity: disabled ? .5 : 1 }}>{label}<ChevronRight size={16} /></button>
