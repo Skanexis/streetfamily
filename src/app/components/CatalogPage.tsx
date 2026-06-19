@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { ShoppingCart, Star, X } from 'lucide-react'
 import type { CartItem, Feedback, Product, ProductVariant } from '../data'
-import { ProductCardMedia } from './ProductCardMedia'
+import { ProductCardMedia, VideoPreview } from './ProductCardMedia'
 
 type AddFn = (item: Omit<CartItem, 'id'>) => void
 interface Props { products: Product[]; categories: string[]; feedback: Feedback[]; addToCart: AddFn; selectedProductId: string | null; onProductSelect: (id: string | null) => void }
@@ -79,11 +79,11 @@ function Detail({ product, feedback, onClose, addToCart }: { product?: Product; 
       </div>
       {activeMedia && <div className="mb-3">
         {activeMedia.type === 'video'
-          ? <video src={activeMedia.url} controls playsInline preload="metadata" className="w-full object-cover" style={{ height: 210, background: '#080C0E' }} />
+          ? <video src={activeMedia.url} controls muted autoPlay loop playsInline preload="auto" className="w-full object-cover" style={{ height: 210, background: '#080C0E' }} />
           : <img src={activeMedia.url} alt={activeMedia.alt ?? product.name} className="w-full object-cover" style={{ height: 210, background: '#080C0E' }} />}
         {media.length > 1 && <div className="flex gap-2 overflow-x-auto mt-2 pb-1">
           {media.map(item => <button key={item.id} onClick={() => setSelectedMediaId(item.id)} className="shrink-0 overflow-hidden" style={{ width: 58, height: 48, border: `1px solid ${activeMedia.id === item.id ? '#D7FE55' : 'rgba(126,156,168,.24)'}`, background: '#080C0E' }}>
-            {item.type === 'video' ? <video src={item.url} muted playsInline preload="metadata" className="w-full h-full object-cover" /> : <img src={item.url} alt="" className="w-full h-full object-cover" />}
+            {item.type === 'video' ? <VideoPreview src={item.url} className="w-full h-full object-cover" /> : <img src={item.url} alt="" className="w-full h-full object-cover" />}
           </button>)}
         </div>}
       </div>}

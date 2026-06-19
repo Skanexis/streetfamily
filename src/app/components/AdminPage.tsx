@@ -5,6 +5,7 @@ import { adminAdjustWallet, adminBroadcastAction, adminDeleteAccount, adminDelet
 import { requireSupabase } from '../lib/supabase'
 import { italianErrorMessage } from '../lib/errors'
 import type { Broadcast, DashboardData, GameType, KycReviewDocument } from '../data'
+import { VideoPreview } from './ProductCardMedia'
 
 type Tab = 'catalog' | 'categories' | 'inventory' | 'broadcasts' | 'users' | 'balance' | 'orders' | 'kyc' | 'economy' | 'feedback' | 'settings' | 'regolamentazione'
 type Row = Record<string, any>
@@ -619,7 +620,7 @@ function AdminMediaPreview({ media }: { media: Row }) {
 
   if (!src) return <div className="shrink-0 flex items-center justify-center" style={{ width: 54, height: 44, background: '#11181B', color: 'rgba(245,245,245,.35)' }}>MEDIA</div>
   return media.media_type === 'video'
-    ? <video src={src} muted playsInline preload="metadata" className="shrink-0 object-cover" style={{ width: 54, height: 44, background: '#11181B' }} />
+    ? <VideoPreview src={src} className="shrink-0 object-cover" style={{ width: 54, height: 44, background: '#11181B' }} />
     : <img src={src} alt={media.alt ?? ''} className="shrink-0 object-cover" style={{ width: 54, height: 44, background: '#11181B' }} />
 }
 
