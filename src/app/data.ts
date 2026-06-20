@@ -103,7 +103,7 @@ export interface TestOrder {
 export interface UserReward {
   id: string
   label: string
-  kind: 'discount' | 'free_delivery' | 'xp_boost'
+  kind: 'discount' | 'free_delivery' | 'xp_boost' | 'item'
   state: 'available' | 'redeemed' | 'expired'
 }
 
@@ -177,6 +177,7 @@ export interface OrderSubmitResult {
   tokensOnComplete: number
   xpOnComplete: number
   firstOrderGift: number
+  itemRewards: Array<{ id: string; label: string }>
   balance: number
   disclaimer: string
 }

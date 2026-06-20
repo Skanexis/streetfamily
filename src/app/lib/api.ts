@@ -345,6 +345,7 @@ export async function submitTestOrder(
     tokensOnComplete: result.tokens_on_complete,
     xpOnComplete: result.xp_on_complete,
     firstOrderGift: result.first_order_gift ?? 0,
+    itemRewards: result.item_rewards ?? [],
     balance: result.balance,
     disclaimer: '',
   }

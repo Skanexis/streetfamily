@@ -57,13 +57,13 @@ export function AdminPage() {
         db.from('categories').select('*').order('sort_order'),
         db.from('profiles').select('id,username,telegram_subject,role,blocked,wallet_balances(points,xp,spin_tickets,scratch_tickets,box_tickets),kyc_cases:kyc_cases!kyc_cases_user_id_fkey(status,submitted_at,rejection_reason,retain_until),orders(status),feedback:feedback!feedback_user_id_fkey(status)').order('created_at', { ascending: false }),
         db.from('staging_allowlist').select('telegram_subject,enabled,access_status,access_username,access_requested_at,access_decided_at'),
-        db.from('orders').select('id,display_id,status,total,total_units,tokens_reserved,scenario_type,scenario_city,scenario_street,points_awarded,xp_awarded,created_at,profiles(username)').in('status', ['submitted', 'processing']).order('created_at', { ascending: false }),
+        db.from('orders').select('id,display_id,status,total,total_units,tokens_reserved,scenario_type,scenario_city,scenario_street,points_awarded,xp_awarded,created_at,profiles(username),redeemed_rewards:user_rewards!user_rewards_order_fk(id,state,reward_definitions(label,kind))').in('status', ['submitted', 'processing']).order('created_at', { ascending: false }),
         db.from('game_configs').select('*').order('game_type'),
         db.from('service_areas').select('*').order('sort_order'),
         db.from('app_settings').select('*'),
         db.from('broadcasts').select('id,kind,title,message,product_id,status,published_at,created_at').order('created_at', { ascending: false }),
         db.from('feedback').select('id,rating,message,status,created_at,profiles:profiles!feedback_user_id_fkey(username),orders(display_id)').order('created_at', { ascending: false }),
-        db.from('game_reward_options').select('*').in('game_type', ['spin', 'scratch', 'box']).order('id'),
+        db.from('game_reward_options').select('*,reward_definitions(id,label,kind)').in('game_type', ['spin', 'scratch', 'box']).order('id'),
         db.from('token_reward_tiers').select('*').order('minimum_units'),
       ])
       for (const result of [productResult, inventoryResult, categoryResult, profileResult, accessResult, orderResult, gameResult, locationResult, settingsResult, broadcastResult, feedbackResult, optionsResult, tiersResult]) {
@@ -942,20 +942,31 @@ function OrdersAdmin({ orders, initialGroup, reload }: { orders: Row[]; initialG
       </div>
       {visibleOrders.length === 0 && <p style={muted}>{activeGroup === 'submitted' ? 'Nessun ordine inviato.' : 'Nessun ordine accettato in lavorazione.'}</p>}
       {visibleOrders.map(order => (
-        <div key={order.id} className="flex flex-col sm:flex-row sm:items-center gap-3" style={row}>
-          <div className="flex-1 min-w-0">
-            <strong>{order.display_id} / {orderStatusLabel[order.status]}</strong>
-            <div style={muted}>@{order.profiles?.username} / {order.total_units} g / EUR {order.total} / {scenarioLabel[order.scenario_type] ?? order.scenario_type} {order.scenario_city}{order.scenario_street ? `, ${order.scenario_street}` : ''}</div>
-            <div style={muted}>Gettoni usati: {order.tokens_reserved} / premio dopo completamento: +{order.points_awarded}</div>
-          </div>
-          <div className="flex flex-col sm:flex-row gap-2">
-            {order.status === 'submitted' && <button style={{ ...primary, background: '#10B981' }} onClick={() => updateStatus(order.id, 'processing')}>Accetta</button>}
-            {order.status === 'processing' && <button style={{ ...primary, background: '#10B981' }} onClick={() => updateStatus(order.id, 'completed')}>✓ Completa e accredita</button>}
-            <button style={dangerButton} onClick={() => updateStatus(order.id, 'cancelled')}>Rifiuta</button>
-          </div>
-        </div>
+        <OrderAdminRow key={order.id} order={order} updateStatus={updateStatus} />
       ))}
     </Section>
+  )
+}
+
+function OrderAdminRow({ order, updateStatus }: { order: Row; updateStatus: (orderId: string, status: 'processing' | 'completed' | 'cancelled') => Promise<void> }) {
+  const itemRewards = (order.redeemed_rewards ?? [])
+    .filter((reward: Row) => reward.reward_definitions?.kind === 'item')
+    .map((reward: Row) => reward.reward_definitions?.label)
+    .filter(Boolean)
+  return (
+    <div className="flex flex-col sm:flex-row sm:items-center gap-3" style={row}>
+      <div className="flex-1 min-w-0">
+        <strong>{order.display_id} / {orderStatusLabel[order.status]}</strong>
+        <div style={muted}>@{order.profiles?.username} / {order.total_units} g / EUR {order.total} / {scenarioLabel[order.scenario_type] ?? order.scenario_type} {order.scenario_city}{order.scenario_street ? `, ${order.scenario_street}` : ''}</div>
+        <div style={muted}>Gettoni usati: {order.tokens_reserved} / premio dopo completamento: +{order.points_awarded}</div>
+        {itemRewards.length > 0 && <div className="mt-2 p-2 rounded-lg" style={accent}>Premi da consegnare: {itemRewards.join(', ')}</div>}
+      </div>
+      <div className="flex flex-col sm:flex-row gap-2">
+        {order.status === 'submitted' && <button style={{ ...primary, background: '#10B981' }} onClick={() => updateStatus(order.id, 'processing')}>Accetta</button>}
+        {order.status === 'processing' && <button style={{ ...primary, background: '#10B981' }} onClick={() => updateStatus(order.id, 'completed')}>✓ Completa e accredita</button>}
+        <button style={dangerButton} onClick={() => updateStatus(order.id, 'cancelled')}>Rifiuta</button>
+      </div>
+    </div>
   )
 }
 
@@ -1109,7 +1120,11 @@ function EconomyAdmin({ games, options, reload }: { games: Row[]; options: Row[]
   }, [ticketPrice])
 
   useEffect(() => {
-    setDrafts(options.filter(option => option.game_type === selectedGame))
+    setDrafts(options.filter(option => option.game_type === selectedGame).map(option => ({
+      ...option,
+      reward_kind: option.reward_definitions?.kind === 'item' ? 'item' : 'wallet',
+      item_label: option.reward_definitions?.kind === 'item' ? option.reward_definitions.label : '',
+    })))
     setSimulation(null)
     setMessage('')
   }, [options, selectedGame])
@@ -1153,11 +1168,32 @@ function EconomyAdmin({ games, options, reload }: { games: Row[]; options: Row[]
   const updateDraft = (draftKey: string, changes: Row) => {
     setDrafts(current => current.map(option => (option.id ?? option.draftKey) === draftKey ? { ...option, ...changes } : option))
   }
+  const setPrizeKind = (draftKey: string, kind: 'wallet' | 'item') => {
+    setDrafts(current => current.map(option => {
+      if ((option.id ?? option.draftKey) !== draftKey) return option
+      if (kind === 'item') {
+        return {
+          ...option,
+          reward_kind: 'item',
+          item_label: option.item_label || option.reward_definitions?.label || option.label || '',
+          points_awarded: '0',
+          xp_awarded: '0',
+          reward_definition_id: null,
+        }
+      }
+      return {
+        ...option,
+        reward_kind: 'wallet',
+        item_label: '',
+        reward_definition_id: option.reward_definitions?.kind === 'item' ? null : option.reward_definition_id ?? null,
+      }
+    }))
+  }
   const addPrize = () => {
     const draftKey = `new-${Date.now()}`
     setDrafts(current => [...current, {
       draftKey, game_type: selectedGame, code: makeRewardCode(selectedGame), label: '', points_awarded: '', xp_awarded: '',
-      weight: '', color: '#8B5CF6', active: true, reward_definition_id: null,
+      weight: '', color: '#8B5CF6', active: true, reward_definition_id: null, reward_kind: 'wallet', item_label: '',
     }])
   }
   const removePrize = async (option: Row) => {
@@ -1167,7 +1203,7 @@ function EconomyAdmin({ games, options, reload }: { games: Row[]; options: Row[]
     }
     try {
       await adminDeleteGameOption(option.id)
-      setMessage('Premio eliminato.')
+      setMessage('Premio eliminato. Se il gioco era attivo, può essere stato disattivato finché le probabilità non tornano al 100%.')
       await reload()
     } catch (caught) {
       setMessage(italianErrorMessage(caught, 'Eliminazione del premio non riuscita.'))
@@ -1183,8 +1219,14 @@ function EconomyAdmin({ games, options, reload }: { games: Row[]; options: Row[]
       setMessage('Disattiva il gioco prima di rimuovere tutti i premi.')
       return
     }
-    if (drafts.some(option => !String(option.label ?? '').trim() || !isIntegerAtLeast(option.weight, option.active ? 1 : 0) || !isIntegerAtLeast(option.points_awarded, 0) || !isIntegerAtLeast(option.xp_awarded, 0))) {
-      setMessage('Inserisci nome, probabilità, gettoni e XP validi.')
+    if (drafts.some(option => {
+      const kind = option.reward_kind === 'item' ? 'item' : 'wallet'
+      return !String(option.label ?? '').trim()
+        || !isIntegerAtLeast(option.weight, 1)
+        || (kind === 'item' && !String(option.item_label ?? '').trim())
+        || (kind === 'wallet' && (!isIntegerAtLeast(option.points_awarded, 0) || !isIntegerAtLeast(option.xp_awarded, 0)))
+    })) {
+      setMessage('Inserisci nome, probabilità e valori premio validi.')
       return
     }
     setSaving(true)
@@ -1192,12 +1234,14 @@ function EconomyAdmin({ games, options, reload }: { games: Row[]; options: Row[]
       await adminSaveGameOptions(selectedGame, drafts.map(option => ({
         code: String(option.code || makeRewardCode(selectedGame)).trim(),
         label: String(option.label).trim(),
-        points_awarded: Number(option.points_awarded),
-        xp_awarded: Number(option.xp_awarded),
+        points_awarded: option.reward_kind === 'item' ? 0 : Number(option.points_awarded),
+        xp_awarded: option.reward_kind === 'item' ? 0 : Number(option.xp_awarded),
         weight: Number(option.weight),
         color: String(option.color || '#8B5CF6'),
         active: Boolean(option.active),
         reward_definition_id: option.reward_definition_id ?? null,
+        reward_kind: option.reward_kind === 'item' ? 'item' : 'wallet',
+        item_label: String(option.item_label ?? '').trim(),
       })))
       setMessage('Configurazione premi salvata.')
       await reload()
@@ -1297,17 +1341,24 @@ function EconomyAdmin({ games, options, reload }: { games: Row[]; options: Row[]
         const expected = probability * exampleSpins
         const onceEvery = probability > 0 ? Math.round(1 / probability) : 0
         const key = option.id ?? option.draftKey
+        const prizeKind = option.reward_kind === 'item' ? 'item' : 'wallet'
         return (
           <div key={key} className="sf-admin-reward-card p-3 mb-3 rounded-xl">
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 items-end">
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-3 items-end">
               <label className="col-span-2 md:col-span-1" style={muted}>Nome premio
                 <input className="w-full" value={option.label} onChange={event => updateDraft(key, { label: event.target.value })} style={{ ...input, display: 'block', marginTop: 5 }} />
               </label>
+              <label style={muted}>Tipo
+                <select value={prizeKind} onChange={event => setPrizeKind(key, event.currentTarget.value as 'wallet' | 'item')} style={{ ...input, width: '100%', display: 'block', marginTop: 5 }}>
+                  <option value="wallet">Gettoni / XP</option>
+                  <option value="item">Oggetto / prodotto</option>
+                </select>
+              </label>
               <label style={muted}>Gettoni
-                <input inputMode="numeric" value={String(option.points_awarded)} onChange={event => updateDraft(key, { points_awarded: integerDraft(event.target.value) })} placeholder="0" style={{ ...input, width: '100%', display: 'block', marginTop: 5 }} />
+                <input inputMode="numeric" disabled={prizeKind === 'item'} value={prizeKind === 'item' ? '0' : String(option.points_awarded)} onChange={event => updateDraft(key, { points_awarded: integerDraft(event.target.value) })} placeholder="0" style={{ ...input, width: '100%', display: 'block', marginTop: 5, opacity: prizeKind === 'item' ? 0.6 : 1 }} />
               </label>
               <label style={muted}>XP
-                <input inputMode="numeric" value={String(option.xp_awarded)} onChange={event => updateDraft(key, { xp_awarded: integerDraft(event.target.value) })} placeholder="0" style={{ ...input, width: '100%', display: 'block', marginTop: 5 }} />
+                <input inputMode="numeric" disabled={prizeKind === 'item'} value={prizeKind === 'item' ? '0' : String(option.xp_awarded)} onChange={event => updateDraft(key, { xp_awarded: integerDraft(event.target.value) })} placeholder="0" style={{ ...input, width: '100%', display: 'block', marginTop: 5, opacity: prizeKind === 'item' ? 0.6 : 1 }} />
               </label>
               <label style={muted}>Probabilità %
                 <input inputMode="numeric" value={String(option.weight)} onChange={event => updateDraft(key, { weight: integerDraft(event.target.value) })} placeholder="%" style={{ ...input, width: '100%', display: 'block', marginTop: 5 }} />
@@ -1316,6 +1367,17 @@ function EconomyAdmin({ games, options, reload }: { games: Row[]; options: Row[]
                 <input type="color" value={option.color} onChange={event => updateDraft(key, { color: event.target.value })} style={{ ...input, width: '100%', height: 42, display: 'block', marginTop: 5 }} />
               </label>
             </div>
+            {prizeKind === 'item' && (
+              <label className="block mt-3" style={muted}>Oggetto/prodotto da consegnare nel prossimo ordine
+                <input
+                  className="w-full"
+                  value={String(option.item_label ?? '')}
+                  onChange={event => updateDraft(key, { item_label: event.currentTarget.value, label: event.currentTarget.value })}
+                  placeholder="Esempio: Grinder Street Family / prodotto omaggio"
+                  style={{ ...input, display: 'block', marginTop: 5 }}
+                />
+              </label>
+            )}
             <div className="flex flex-wrap justify-between gap-2 mt-3"><Toggle label="Attiva" active={option.active} onClick={() => updateDraft(key, { active: !option.active })} /><button type="button" style={dangerButton} onClick={() => removePrize(option)}>Elimina</button></div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3">
               <div style={muted}>Probabilità: <strong style={{ color: option.active ? '#D7FE55' : 'rgba(245,245,245,.45)' }}>{option.active ? weight : 0}%</strong></div>
@@ -1325,7 +1387,7 @@ function EconomyAdmin({ games, options, reload }: { games: Row[]; options: Row[]
           </div>
         )
       })}
-      {message && <p className="mb-4" style={{ color: message.includes('salvata') || message.includes('salvato') ? '#D7FE55' : '#EF4444' }}>{message}</p>}
+      {message && <p className="mb-4" style={{ color: message.includes('salvata') || message.includes('salvato') || message.includes('eliminato') ? '#D7FE55' : '#EF4444' }}>{message}</p>}
       <button type="button" disabled={saving} onClick={saveOptions} style={{ ...primary, width: '100%', opacity: saving ? 0.65 : 1 }}>
         {saving ? 'Salvataggio...' : 'Salva configurazione premi'}
       </button>
@@ -1662,6 +1724,7 @@ const panel = { background: '#11181B', border: '1px solid rgba(126,156,168,.18)'
 const row = { padding: 12, marginBottom: 8, background: 'rgba(245,245,245,.035)', borderRadius: 10, minWidth: 0 }
 const heading = { fontFamily: 'Space Grotesk', fontWeight: 700, fontSize: 'clamp(24px, 7vw, 30px)', color: '#F5F5F5' }
 const muted = { color: 'rgba(245,245,245,.55)', fontSize: 13 }
+const accent = { color: '#D7FE55', background: 'rgba(215,254,85,.06)', border: '1px solid rgba(215,254,85,.18)' }
 const input = { minWidth: 0, maxWidth: '100%', boxSizing: 'border-box' as const, padding: '9px 12px', background: '#080C0E', border: '1px solid rgba(245,245,245,.18)', color: '#F5F5F5', borderRadius: 8 }
 const primary = { ...input, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#7E9CA8', fontWeight: 700 }
 const smallButton = { display: 'inline-flex', alignItems: 'center', gap: 5, padding: '9px 12px', borderRadius: 8, border: '1px solid rgba(126,156,168,.25)', background: '#11181B', color: '#F5F5F5' }

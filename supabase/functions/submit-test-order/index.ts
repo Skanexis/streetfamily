@@ -51,6 +51,13 @@ Deno.serve(async req => {
   const { data: items } = await db.from('order_items')
     .select('name_snapshot,variant_label,unit_price')
     .eq('order_id', data.order_id)
+  const { data: rewards } = await db.from('user_rewards')
+    .select('reward_definitions(label,kind)')
+    .eq('redeemed_order_id', data.order_id)
+  const itemRewards = (rewards ?? [])
+    .filter(reward => reward.reward_definitions?.kind === 'item')
+    .map(reward => reward.reward_definitions?.label)
+    .filter(Boolean)
   const scenarioLabels: Record<string, string> = {
     meetup: 'MEETUP',
     delivery_zone: 'DELIVERY LOCALE',
@@ -72,6 +79,7 @@ Deno.serve(async req => {
     `Gettoni usati: ${data.tokens_reserved}`,
     `Totale: EUR ${data.simulated_total}`,
     `Grammi: ${data.total_units}`,
+    ...(itemRewards.length ? ['', 'Premi da consegnare:', ...itemRewards.map(label => `- ${label}`)] : []),
     `Premio dopo completamento: +${data.tokens_on_complete} gettoni / +${data.xp_on_complete} XP`,
   ].join('\n')
   const keyboard = {
