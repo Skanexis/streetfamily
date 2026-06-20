@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { MapPin, Package, Tags, Users, Gamepad2, ClipboardList, Settings, Megaphone, MessageSquare, Minus, Plus, Trash2, Warehouse, Wallet } from 'lucide-react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { adminAdjustWallet, adminBroadcastAction, adminDeleteAccount, adminDeleteGameOption, adminReviewAccessRequest, adminSaveGameOptions, adminSendLowStockNotifications, adminSetGameActive, adminSimulateGame, getAdminDashboard, getAdminKycDocuments, reviewKyc } from '../lib/api'
+import { adminAdjustWallet, adminBroadcastAction, adminDeleteAccount, adminDeleteGameOption, adminReviewAccessRequest, adminSaveGameOptions, adminSendLowStockNotifications, adminSetGameActive, adminSetGameTicketPrice, adminSimulateGame, getAdminDashboard, getAdminKycDocuments, reviewKyc } from '../lib/api'
 import { requireSupabase } from '../lib/supabase'
 import { italianErrorMessage } from '../lib/errors'
 import type { Broadcast, DashboardData, GameType, KycReviewDocument } from '../data'
@@ -1095,7 +1095,18 @@ function EconomyAdmin({ games, options, reload }: { games: Row[]; options: Row[]
   const [exampleSpins, setExampleSpins] = useState(1000)
   const [message, setMessage] = useState('')
   const [saving, setSaving] = useState(false)
+  const [ticketSaving, setTicketSaving] = useState(false)
+  const [ticketPriceDraft, setTicketPriceDraft] = useState('')
   const [simulation, setSimulation] = useState<Record<string, number> | null>(null)
+  const ticketPrice = Number(
+    games.find(item => item.game_type === 'spin')?.cost
+      ?? games.find(item => item.game_type === 'scratch')?.cost
+      ?? 20
+  )
+
+  useEffect(() => {
+    setTicketPriceDraft(String(ticketPrice || 20))
+  }, [ticketPrice])
 
   useEffect(() => {
     setDrafts(options.filter(option => option.game_type === selectedGame))
@@ -1109,6 +1120,26 @@ function EconomyAdmin({ games, options, reload }: { games: Row[]; options: Row[]
     ? activeOptions.reduce((total, option) => total + (parseOptionalInteger(option.points_awarded) ?? 0) * (parseOptionalInteger(option.weight) ?? 0), 0) / totalWeight
     : 0
   const game = games.find(item => item.game_type === selectedGame)
+
+  const saveTicketPrice = async () => {
+    const price = parseOptionalInteger(ticketPriceDraft)
+    if (price === null || price < 1 || price > 100) {
+      setMessage('Prezzo biglietto non valido: usa un valore da 1 a 100 gettoni.')
+      setTicketPriceDraft(String(ticketPrice || 20))
+      return
+    }
+    setMessage('')
+    setTicketSaving(true)
+    try {
+      await adminSetGameTicketPrice(price)
+      setMessage('Prezzo biglietto salvato.')
+      await reload()
+    } catch (caught) {
+      setMessage(italianErrorMessage(caught, 'Aggiornamento del prezzo biglietto non riuscito.'))
+    } finally {
+      setTicketSaving(false)
+    }
+  }
 
   const toggleGame = async () => {
     setMessage('')
@@ -1200,6 +1231,31 @@ function EconomyAdmin({ games, options, reload }: { games: Row[]; options: Row[]
         </div>
         {game && <Toggle label="Attivo" active={game.active} onClick={toggleGame} />}
       </div>
+      <div className="sf-admin-ticket-price">
+        <div>
+          <div className="sf-admin-game-label">PREZZO BIGLIETTO</div>
+          <strong>Ruota / Scratch</strong>
+          <p style={muted}>Un prezzo comune per l'acquisto di 1 biglietto. Mystery Box non usa acquisto.</p>
+        </div>
+        <label style={muted}>Gettoni
+          <input
+            inputMode="numeric"
+            pattern="[0-9]*"
+            value={ticketPriceDraft}
+            onChange={event => setTicketPriceDraft(integerDraft(event.currentTarget.value))}
+            onBlur={() => { void saveTicketPrice() }}
+            onKeyDown={event => {
+              if (event.key !== 'Enter') return
+              event.preventDefault()
+              event.currentTarget.blur()
+            }}
+            style={{ ...input, width: 100, display: 'block', marginTop: 5 }}
+          />
+        </label>
+        <button type="button" disabled={ticketSaving} style={{ ...smallButton, opacity: ticketSaving ? 0.65 : 1 }} onClick={() => { void saveTicketPrice() }}>
+          {ticketSaving ? 'Salvataggio...' : 'Salva prezzo'}
+        </button>
+      </div>
       <div className="sf-admin-probability p-3 sm:p-4 my-5 rounded-xl">
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-4">
           <div>
@@ -1269,7 +1325,7 @@ function EconomyAdmin({ games, options, reload }: { games: Row[]; options: Row[]
           </div>
         )
       })}
-      {message && <p className="mb-4" style={{ color: message.includes('salvata') ? '#D7FE55' : '#EF4444' }}>{message}</p>}
+      {message && <p className="mb-4" style={{ color: message.includes('salvata') || message.includes('salvato') ? '#D7FE55' : '#EF4444' }}>{message}</p>}
       <button type="button" disabled={saving} onClick={saveOptions} style={{ ...primary, width: '100%', opacity: saving ? 0.65 : 1 }}>
         {saving ? 'Salvataggio...' : 'Salva configurazione premi'}
       </button>

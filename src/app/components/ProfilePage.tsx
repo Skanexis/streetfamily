@@ -14,6 +14,7 @@ export function ProfilePage({ user, levels, orders, ledger, rewards, onChanged, 
   const [tab, setTab] = useState<Tab>('orders')
   const current = levels.find(level => level.level === user.level) ?? levels[0]
   if (!current) return null
+  const totalTickets = user.spinTickets + user.scratchTickets + user.boxTickets
   return <div className="min-h-screen px-4 md:px-8 py-10" style={{ paddingTop: 100 }}>
     <div className="max-w-2xl mx-auto">
       <div className="sf-kicker mb-5">Profilo</div>
@@ -23,10 +24,10 @@ export function ProfilePage({ user, levels, orders, ledger, rewards, onChanged, 
         {user.role === 'admin' && <button onClick={onAdmin} className="mb-5 px-4 py-3 flex items-center gap-2" style={notice}><ShieldCheck size={17} /> Amministratore / Apri pannello amministrazione</button>}
         <div className="grid grid-cols-3 gap-3">
           <Stat Icon={Star} value={user.tokens} label="Gettoni" />
-          <Stat Icon={Ticket} value={user.spinTickets} label="Biglietti" />
+          <Stat Icon={Ticket} value={totalTickets} label="Biglietti" />
           <Stat Icon={Package} value={user.completedOrders} label="Completati" />
         </div>
-        {user.tokens >= 100 && <p className="p-3 mt-5" style={notice}>Limite gettoni raggiunto: nel prossimo ordine dovrai usarne almeno uno.</p>}
+        {user.tokens >= 100 && <p className="p-3 mt-5" style={notice}>Limite gettoni raggiunto: negli ordini puoi usarli come sconto fino al 5% del totale.</p>}
       </section>
       <div className="flex gap-2 mb-6">{([['orders', 'Richieste', Package], ['tokens', 'Gettoni', Star], ['levels', 'Livelli', Trophy]] as const).map(([id, label, Icon]) => <button key={id} onClick={() => setTab(id)} className="flex-1 py-3 flex justify-center gap-2" style={{ ...panel, color: tab === id ? '#D7FE55' : '#F5F5F5' }}><Icon size={16} />{label}</button>)}</div>
       {tab === 'orders' && <div className="flex flex-col gap-3">{orders.map(order => <OrderCard key={order.id} order={order} onChanged={onChanged} />)}</div>}

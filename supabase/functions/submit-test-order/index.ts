@@ -32,6 +32,10 @@ Deno.serve(async req => {
   const { data: { user }, error: userError } = await auth.auth.getUser()
   if (userError || !user) return json({ error: 'Non autorizzato' }, 401)
   const body = await req.json()
+  const tokensToReserve = Number(body.tokensToReserve ?? 0)
+  if (!Number.isInteger(tokensToReserve) || tokensToReserve < 0) {
+    return json({ error: orderErrorMessage('TOKEN_RESERVE_INVALID') }, 400)
+  }
   const db = adminClient()
   const { data, error } = await db.rpc('submit_test_order_internal', {
     p_user_id: user.id,
@@ -39,7 +43,7 @@ Deno.serve(async req => {
     p_scenario_type: body.scenarioType,
     p_city: body.city ?? '',
     p_street: body.street ?? '',
-    p_tokens_to_reserve: Number(body.tokensToReserve ?? 0),
+    p_tokens_to_reserve: tokensToReserve,
   })
   if (error) return json({ error: orderErrorMessage(error.message) }, 400)
 

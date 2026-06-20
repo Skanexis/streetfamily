@@ -130,7 +130,17 @@ export interface GamePlayResult {
 export interface PlayableGame {
   gameType: GameType
   title: string
+  ticketPrice: number
   options: Array<{ code: string; label: string; color: string }>
+}
+
+export interface TicketPurchaseResult {
+  gameType: GameType
+  ticketPrice: number
+  balance: number
+  spinTickets: number
+  scratchTickets: number
+  boxTickets: number
 }
 
 export interface ScenarioSelection {

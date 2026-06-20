@@ -14,7 +14,7 @@ import { AdminPage } from './components/AdminPage'
 import { AccessDeniedPage, AccessPendingPage, BlockedPage, CallbackPage, LoginPage, RequireAdmin, RequireMember } from './components/AuthPages'
 
 import { useAuth } from './auth/AuthProvider'
-import { getBroadcasts, getCatalog, getCatalogCategories, getKycStatus, getLevels, getProfileActivity, getServiceAreas, playGame, submitTestOrder } from './lib/api'
+import { buyGameTicket, getBroadcasts, getCatalog, getCatalogCategories, getKycStatus, getLevels, getProfileActivity, getServiceAreas, playGame, submitTestOrder } from './lib/api'
 import { requireSupabase } from './lib/supabase'
 import { italianErrorMessage } from './lib/errors'
 import '../styles/fonts.css'
@@ -198,7 +198,7 @@ function MemberApplication() {
           <Routes>
             <Route path="/" element={<HomePage navigate={navigate} products={products} levels={levels} addToCart={addToCart} user={user} onProductSelect={(id) => { setSelectedProductId(id); navigate('catalog') }} />} />
             <Route path="/catalog" element={<CatalogPage products={products} categories={catalogCategories} feedback={feedback} addToCart={addToCart} selectedProductId={selectedProductId} onProductSelect={setSelectedProductId} />} />
-            <Route path="/games" element={<GamesPage user={user} onPlay={playGame} onComplete={refreshAccount} />} />
+            <Route path="/games" element={<GamesPage user={user} onPlay={playGame} onBuyTicket={buyGameTicket} onComplete={refreshAccount} />} />
             <Route path="/profile" element={<ProfilePage user={user} levels={levels} orders={orders} ledger={ledger} rewards={rewards} onChanged={refreshAccount} onAdmin={() => navigateRouter('/admin')} />} />
             <Route path="/info" element={<InfoPage serviceAreas={serviceAreas} />} />
             <Route path="/contacts" element={<ContactsPage />} />

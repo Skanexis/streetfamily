@@ -51,8 +51,10 @@ export function CartDrawer({ open, onClose, cart, removeFromCart, tokens, servic
   const totalUnits = cart.reduce((sum, item) => sum + item.unitAmount, 0)
   const tokenReward = tokenRewardForUnits(totalUnits)
   const surcharge = scenarioType === 'delivery_zone' ? Math.floor(totalUnits / 100) * 10 : 0
-  const maximumReserve = Math.min(tokens, Math.floor(subtotal + surcharge))
+  const grossTotal = subtotal + surcharge
+  const maximumReserve = Math.min(tokens, Math.floor(grossTotal * 0.05))
   const reservedTokens = tokensToReserve === '' ? 0 : Number(tokensToReserve)
+  const displayedTokenCredit = Number.isInteger(reservedTokens) && reservedTokens > 0 ? Math.min(reservedTokens, maximumReserve) : 0
   const selectedAreas = useMemo(() => serviceAreas.filter(area => area.scenarioType === scenarioType), [serviceAreas, scenarioType])
   const requiresKyc = !isAdmin && firstOrder && kycStatus.status !== 'approved'
 
@@ -73,8 +75,8 @@ export function CartDrawer({ open, onClose, cart, removeFromCart, tokens, servic
     setError(''); setStep('summary')
   }
   const confirm = async () => {
-    if (!Number.isInteger(reservedTokens) || reservedTokens < (tokens >= 100 ? 1 : 0) || reservedTokens > maximumReserve) {
-      setError(tokens >= 100 ? 'Usa almeno 1 gettone e non superare il saldo disponibile.' : 'Inserisci un numero di gettoni valido.')
+    if (!Number.isInteger(reservedTokens) || reservedTokens < 0 || reservedTokens > maximumReserve) {
+      setError(`Inserisci un numero intero di gettoni da 0 a ${maximumReserve}.`)
       return
     }
     setSaving(true); setError('')
@@ -149,8 +151,9 @@ export function CartDrawer({ open, onClose, cart, removeFromCart, tokens, servic
               {surcharge > 0 && <Line label="Sovrapprezzo" value={surcharge} />}
               <label style={muted}>Usa gettoni (saldo: {tokens})</label>
               <input inputMode="numeric" value={tokensToReserve} onChange={event => setTokensToReserve(event.target.value.replace(/\D/g, ''))} placeholder="0" style={input} />
-              {tokens >= 100 && <p style={accent}>Saldo massimo raggiunto: usa almeno 1 gettone per inviare un nuovo ordine.</p>}
-              <Line label="Totale" value={Math.max(subtotal + surcharge - reservedTokens, 0)} strong />
+              <p style={accent}>Puoi usare fino a {maximumReserve} gettoni (5% del totale prima dello sconto).</p>
+              {displayedTokenCredit > 0 && <Line label="Sconto gettoni" value={-displayedTokenCredit} />}
+              <Line label="Totale" value={Math.max(grossTotal - displayedTokenCredit, 0)} strong />
               {error && <p style={{ color: '#EF4444' }}>{error}</p>}
             </div>}
             {step === 'success' && result && <div className="text-center py-12"><Check size={50} style={{ color: '#D7FE55', margin: '0 auto 16px' }} /><h2 style={{ color: '#D7FE55', fontFamily: 'Orbitron' }}>ORDINE INVIATO</h2><p>{result.displayId}</p>{result.disclaimer && <p style={muted}>{result.disclaimer}</p>}{result.firstOrderGift > 0 && <div className="p-4 mt-6" style={accent}>+{result.firstOrderGift} gettoni regalo accreditati subito per il primo ordine</div>}<div className="p-4 mt-6" style={panel}>EUR {result.simulatedTotal} / {result.totalUnits} g<br />+{result.tokensOnComplete} gettoni dopo il completamento</div></div>}

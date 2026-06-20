@@ -20,6 +20,7 @@ import type {
   ScenarioSelection,
   ServiceArea,
   TestOrder,
+  TicketPurchaseResult,
   UserReward,
 } from '../data'
 
@@ -68,6 +69,8 @@ function ledgerReason(reason: string) {
     .replace(/^Game: /, 'Gioco: ')
     .replace(/^Admin gettoni:/, 'Amministrazione gettoni:')
     .replace(/^Ticket ruota guadagnato$/, 'Biglietto ruota guadagnato')
+    .replace(/^Biglietto ruota acquistato$/, 'Biglietto ruota acquistato')
+    .replace(/^Biglietto Scratch acquistato$/, 'Biglietto Scratch acquistato')
 }
 
 function mediaSort(left: RecordValue, right: RecordValue) {
@@ -245,13 +248,14 @@ export async function getProfileActivity(userId: string) {
 export async function getPlayableGames(): Promise<PlayableGame[]> {
   const db = requireSupabase()
   const { data, error } = await db.from('game_configs')
-    .select('game_type,title,game_reward_options(code,label,color,active)')
+    .select('game_type,title,cost,game_reward_options(code,label,color,active)')
     .eq('active', true)
     .in('game_type', ['spin', 'scratch', 'box'])
   if (error) throw new Error(italianErrorMessage(error.message, 'Caricamento giochi non riuscito.'))
   return (data ?? []).map((game: RecordValue) => ({
     gameType: game.game_type,
     title: game.title,
+    ticketPrice: Number(game.cost ?? 0),
     options: (game.game_reward_options ?? [])
       .filter((option: RecordValue) => option.active)
       .map((option: RecordValue) => ({ code: option.code, label: option.label, color: option.color })),
@@ -281,6 +285,19 @@ export async function playGame(gameType: GameType): Promise<GamePlayResult> {
     segmentIndex: result.segment_index,
     segmentCount: result.segment_count,
     boxStopIndex: result.box_stop_index,
+  }
+}
+
+export async function buyGameTicket(gameType: GameType): Promise<TicketPurchaseResult> {
+  const db = requireSupabase()
+  const result = unwrap(await db.rpc('buy_game_ticket', { p_game_type: gameType })) as RecordValue
+  return {
+    gameType: result.game_type,
+    ticketPrice: result.ticket_price,
+    balance: result.balance,
+    spinTickets: result.spin_tickets,
+    scratchTickets: result.scratch_tickets,
+    boxTickets: result.box_tickets,
   }
 }
 
@@ -382,6 +399,11 @@ export async function adminDeleteGameOption(optionId: string) {
 export async function adminSimulateGame(gameType: GameType, attempts: number): Promise<Record<string, number>> {
   const result = unwrap(await requireSupabase().rpc('admin_simulate_game', { p_game_type: gameType, p_attempts: attempts })) as Record<string, number>
   return result
+}
+
+export async function adminSetGameTicketPrice(price: number) {
+  const { error } = await requireSupabase().rpc('admin_set_game_ticket_price', { p_price: price })
+  if (error) throw new Error(italianErrorMessage(error.message))
 }
 
 export async function getKycStatus(): Promise<KycStatus> {

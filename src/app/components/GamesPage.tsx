@@ -2,14 +2,15 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, useReducedMotion } from 'motion/react'
 import confetti from 'canvas-confetti'
-import { ArrowLeft, ArrowRight, Fingerprint, Gift, LockKeyhole, RotateCw, ShieldCheck, Smartphone, Sparkles, Ticket, Trophy, X } from 'lucide-react'
-import type { GamePlayResult, GameType, PlayableGame, User } from '../data'
+import { ArrowLeft, ArrowRight, Coins, Fingerprint, Gift, LockKeyhole, RotateCw, ShieldCheck, Smartphone, Sparkles, Ticket, Trophy, X } from 'lucide-react'
+import type { GamePlayResult, GameType, PlayableGame, TicketPurchaseResult, User } from '../data'
 import { getPlayableGames } from '../lib/api'
 import { italianErrorMessage } from '../lib/errors'
 
 interface Props {
   user: User
   onPlay: (gameType: GameType) => Promise<GamePlayResult>
+  onBuyTicket: (gameType: GameType) => Promise<TicketPurchaseResult>
   onComplete: () => Promise<void>
 }
 
@@ -19,7 +20,7 @@ const gameCards: Array<{ type: GameType; title: string; subtitle: string; tag: s
   { type: 'box', title: 'Mystery Box', subtitle: 'Apri la cassa fortunata', tag: 'DROP', Icon: Gift },
 ]
 
-export function GamesPage({ user, onPlay, onComplete }: Props) {
+export function GamesPage({ user, onPlay, onBuyTicket, onComplete }: Props) {
   const [games, setGames] = useState<PlayableGame[]>([])
   const [selected, setSelected] = useState<GameType | null>(null)
   const [loading, setLoading] = useState(true)
@@ -79,7 +80,9 @@ export function GamesPage({ user, onPlay, onComplete }: Props) {
         {loading ? <StateMessage text="Caricamento giochi..." /> : (
           <div className="sf-game-grid">
             {gameCards.map(({ type, title, subtitle, tag, Icon }, index) => {
-              const enabled = Boolean(available(type))
+              const playable = available(type)
+              const enabled = Boolean(playable)
+              const canBuy = isPurchasable(type) && enabled
               return (
                 <motion.button key={type} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * .08 }}
                   onClick={() => setSelected(type)} className={`sf-game-card sf-game-card-${type} text-left`} style={gameCard}>
@@ -93,6 +96,7 @@ export function GamesPage({ user, onPlay, onComplete }: Props) {
                       <div className="sf-game-card-icon"><Icon size={32} /></div>
                       <h2 className="sf-game-card-title">{title}</h2>
                       <p className="sf-game-card-copy">{enabled ? subtitle : 'Configurazione in arrivo'}</p>
+                      {canBuy && <p className="sf-game-card-price"><Coins size={13} /> Biglietto {playable?.ticketPrice ?? 0} gettoni</p>}
                     </div>
                     <GameArtwork type={type} />
                   </div>
@@ -110,9 +114,9 @@ export function GamesPage({ user, onPlay, onComplete }: Props) {
           {!current ? (
             <UnavailableGame onClose={closeGame} />
           ) : selected === 'spin' ? (
-            <WheelGame user={user} game={current} onPlay={onPlay} onComplete={refresh} />
+            <WheelGame user={user} game={current} onPlay={onPlay} onBuyTicket={onBuyTicket} onComplete={refresh} />
           ) : selected === 'scratch' ? (
-            <ScratchGame user={user} onPlay={onPlay} onComplete={refresh} />
+            <ScratchGame user={user} game={current} onPlay={onPlay} onBuyTicket={onBuyTicket} onComplete={refresh} />
           ) : (
             <BoxGame user={user} game={current} onPlay={onPlay} onComplete={refresh} />
           )}
@@ -187,26 +191,40 @@ function UnavailableGame({ onClose }: { onClose: () => void }) {
   )
 }
 
-function WheelGame({ user, game, onPlay, onComplete }: { user: User; game: PlayableGame; onPlay: Props['onPlay']; onComplete: () => Promise<void> }) {
+function WheelGame({ user, game, onPlay, onBuyTicket, onComplete }: { user: User; game: PlayableGame; onPlay: Props['onPlay']; onBuyTicket: Props['onBuyTicket']; onComplete: () => Promise<void> }) {
   const reducedMotion = useReducedMotion()
   const [result, setResult] = useState<GamePlayResult | null>(null)
   const [rotation, setRotation] = useState(0)
   const [busy, setBusy] = useState(false)
+  const [buying, setBuying] = useState(false)
   const [error, setError] = useState('')
   const colors = game.options.map(option => option.color)
-  const gradient = colors.length ? colors.join(',') : '#8B5CF6,#22C55E'
+  const gradient = wheelGradient(colors)
+  const hasTicket = user.spinTickets > 0
+
+  const buyTicket = async () => {
+    setBuying(true); setError('')
+    try {
+      await onBuyTicket('spin')
+      await onComplete()
+    } catch (caught) {
+      setError(italianErrorMessage(caught, 'Acquisto biglietto non riuscito.'))
+    } finally {
+      setBuying(false)
+    }
+  }
 
   const spin = async () => {
     setBusy(true); setResult(null); setError('')
     try {
       const played = await onPlay('spin')
       setRotation(value => value + (reducedMotion ? 360 : 1440) + ((played.angle - (value % 360) + 360) % 360))
-      playTicks(reducedMotion ? 250 : 1450)
-      window.setTimeout(() => {
-        setResult(played)
-        if (!reducedMotion) confetti({ particleCount: 70, colors: ['#D7FE55', '#B99361'] })
-        setBusy(false)
-      }, reducedMotion ? 250 : 1450)
+      const duration = reducedMotion ? 250 : 1450
+      playTicks(duration)
+      await wait(duration)
+      setResult(played)
+      if (!reducedMotion) confetti({ particleCount: 58, spread: 55, colors: ['#D7FE55', '#22C55E', '#B99361'] })
+      setBusy(false)
       await onComplete()
     } catch (caught) {
       setError(italianErrorMessage(caught, 'Estrazione non disponibile.'))
@@ -216,6 +234,7 @@ function WheelGame({ user, game, onPlay, onComplete }: { user: User; game: Playa
   return (
     <div className="sf-game-stage w-full text-center p-5 sm:p-7 rounded-3xl" style={gamePanel}>
       <TicketBalance value={user.spinTickets} />
+      <TicketShop user={user} game={game} buying={buying} onBuy={buyTicket} />
       <div className="sf-wheel-wrap">
         <div className="sf-wheel-pointer" />
         <motion.div className="sf-wheel mx-auto my-8 rounded-full flex items-center justify-center" animate={{ rotate: rotation }}
@@ -225,13 +244,17 @@ function WheelGame({ user, game, onPlay, onComplete }: { user: User; game: Playa
         </motion.div>
       </div>
       {result && <Reward result={result} />}
-      <GameButton disabled={busy || user.spinTickets < 1} onClick={spin} label={busy ? 'Estrazione...' : user.spinTickets ? 'Usa 1 biglietto' : 'Nessun biglietto'} />
+      <GameButton
+        disabled={busy || buying || (!hasTicket && user.tokens < game.ticketPrice)}
+        onClick={hasTicket ? spin : buyTicket}
+        label={busy ? 'Estrazione...' : buying ? 'Acquisto...' : hasTicket ? 'Usa 1 biglietto' : user.tokens >= game.ticketPrice ? `Compra 1 biglietto - ${game.ticketPrice} gettoni` : `Servono ${game.ticketPrice} gettoni`}
+      />
       {error && <StateMessage text={error} tone="error" />}
     </div>
   )
 }
 
-function ScratchGame({ user, onPlay, onComplete }: { user: User; onPlay: Props['onPlay']; onComplete: () => Promise<void> }) {
+function ScratchGame({ user, game, onPlay, onBuyTicket, onComplete }: { user: User; game: PlayableGame; onPlay: Props['onPlay']; onBuyTicket: Props['onBuyTicket']; onComplete: () => Promise<void> }) {
   const reducedMotion = useReducedMotion()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const pointerRef = useRef<number | null>(null)
@@ -246,8 +269,10 @@ function ScratchGame({ user, onPlay, onComplete }: { user: User; onPlay: Props['
   const [revealed, setRevealed] = useState(false)
   const [finishing, setFinishing] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [buying, setBuying] = useState(false)
   const [error, setError] = useState('')
   const [percent, setPercent] = useState(0)
+  const hasTicket = user.scratchTickets > 0
 
   useEffect(() => {
     if (!result || !canvasRef.current) return
@@ -298,11 +323,22 @@ function ScratchGame({ user, onPlay, onComplete }: { user: User; onPlay: Props['
     setBusy(true); setError(''); setResult(null); setRevealed(false); setFinishing(false); setPercent(0)
     try {
       setResult(await onPlay('scratch'))
-      await onComplete()
     } catch (caught) {
       setError(italianErrorMessage(caught, 'Scratch non disponibile.'))
     } finally {
       setBusy(false)
+    }
+  }
+
+  const buyTicket = async () => {
+    setBuying(true); setError('')
+    try {
+      await onBuyTicket('scratch')
+      await onComplete()
+    } catch (caught) {
+      setError(italianErrorMessage(caught, 'Acquisto biglietto non riuscito.'))
+    } finally {
+      setBuying(false)
     }
   }
 
@@ -312,6 +348,7 @@ function ScratchGame({ user, onPlay, onComplete }: { user: User; onPlay: Props['
     setRevealed(true)
     if (!reducedMotion) confetti({ particleCount: 46, colors: ['#8B5CF6', '#22C55E'] })
     navigator.vibrate?.(45)
+    void onComplete()
   }
 
   const autoErase = () => {
@@ -450,6 +487,7 @@ function ScratchGame({ user, onPlay, onComplete }: { user: User; onPlay: Props['
   return (
     <div className="sf-game-stage sf-scratch-stage w-full text-center p-5 sm:p-7 rounded-3xl" style={gamePanel}>
       <TicketBalance value={user.scratchTickets} />
+      <TicketShop user={user} game={game} buying={buying} onBuy={buyTicket} hidden={Boolean(result)} />
       {!result ? <div className="sf-idle-state"><Sparkles size={34} /><strong>Carta sigillata</strong><span>Avviala e gratta per scoprire il premio.</span></div> : (
         <>
           <div className={`sf-scratch-ticket relative my-8 overflow-hidden rounded-2xl ${revealed ? 'is-revealed' : ''}`} style={{ height: 200 }}>
@@ -459,7 +497,13 @@ function ScratchGame({ user, onPlay, onComplete }: { user: User; onPlay: Props['
           <div className={`sf-progress ${revealed ? 'is-complete' : ''}`}><div className="sf-progress-label"><span>{revealed ? 'Premio rivelato' : finishing ? 'Rivelazione premio...' : 'Superficie scoperta'}</span><strong>{percent}%</strong></div><div className="sf-progress-track"><div style={{ width: `${Math.min(percent / 60 * 100, 100)}%` }} /></div></div>
         </>
       )}
-      {!result && <GameButton disabled={busy || user.scratchTickets < 1} onClick={start} label={busy ? 'Preparazione...' : user.scratchTickets ? 'Usa 1 biglietto' : 'Nessun biglietto'} />}
+      {!result && (
+        <GameButton
+          disabled={busy || buying || (!hasTicket && user.tokens < game.ticketPrice)}
+          onClick={hasTicket ? start : buyTicket}
+          label={busy ? 'Preparazione...' : buying ? 'Acquisto...' : hasTicket ? 'Usa 1 biglietto' : user.tokens >= game.ticketPrice ? `Compra 1 biglietto - ${game.ticketPrice} gettoni` : `Servono ${game.ticketPrice} gettoni`}
+        />
+      )}
       {error && <StateMessage text={error} tone="error" />}
     </div>
   )
@@ -486,7 +530,6 @@ function BoxGame({ user, game, onPlay, onComplete }: { user: User; game: Playabl
         const width = viewportRef.current?.clientWidth ?? 330
         setX(-(played.boxStopIndex * 128) + width / 2 - 59)
       })
-      await onComplete()
     } catch (caught) {
       setBusy(false)
       setError(italianErrorMessage(caught, 'Mystery Box non disponibile.'))
@@ -498,9 +541,9 @@ function BoxGame({ user, game, onPlay, onComplete }: { user: User; game: Playabl
       <div ref={viewportRef} className="sf-box-viewport relative overflow-hidden my-9 py-5">
         <div className="sf-box-marker" />
         {!items.length ? <div className="sf-idle-state sf-idle-compact"><Gift size={34} /><strong>Cassa chiusa</strong><span>Apri la scatola per avviare l'estrazione.</span></div> : (
-          <motion.div className="flex gap-[10px]" animate={{ x, filter: busy && !reducedMotion ? 'blur(1.5px)' : 'blur(0px)' }}
+          <motion.div className="sf-box-reel flex gap-[10px]" animate={{ x }}
             transition={{ duration: reducedMotion ? .25 : 4.2, ease: [0.1, 0.7, 0.1, 1] }}
-            onAnimationComplete={() => { if (x !== 0) { setBusy(false); setFinished(true); if (!reducedMotion) confetti({ particleCount: 55, colors: ['#8B5CF6', '#22C55E'] }) } }}>
+            onAnimationComplete={() => { if (x !== 0) { setBusy(false); setFinished(true); if (!reducedMotion) confetti({ particleCount: 44, spread: 52, colors: ['#8B5CF6', '#22C55E'] }); void onComplete() } }}>
             {items.map((item, index) => (
               <div key={index} className="sf-box-item shrink-0 flex items-center justify-center rounded-xl px-2" style={{ width: 118, height: 82, borderColor: item.color }}>
                 <span style={{ fontSize: 12 }}>{item.label}</span>
@@ -527,6 +570,25 @@ function Reward({ result, compact = false }: { result: GamePlayResult; compact?:
 }
 function TicketBalance({ value }: { value: number }) {
   return <div className="sf-ticket-balance flex justify-between p-4 rounded-xl"><span className="flex items-center gap-2"><Ticket size={17} /> Biglietti disponibili</span><strong>{value.toString().padStart(2, '0')}</strong></div>
+}
+function TicketShop({ user, game, buying, hidden, onBuy }: { user: User; game: PlayableGame; buying: boolean; hidden?: boolean; onBuy: () => void }) {
+  if (hidden) return null
+  const canBuy = user.tokens >= game.ticketPrice
+  return (
+    <div className="sf-ticket-shop">
+      <div>
+        <span>Biglietto</span>
+        <strong>{game.ticketPrice} gettoni</strong>
+      </div>
+      <div>
+        <span>Saldo</span>
+        <strong>{user.tokens} gettoni</strong>
+      </div>
+      <button type="button" disabled={buying || !canBuy} onClick={onBuy}>
+        {buying ? 'Acquisto...' : canBuy ? 'Compra 1 biglietto' : 'Saldo insufficiente'}
+      </button>
+    </div>
+  )
 }
 function GameButton({ disabled, onClick, label }: { disabled: boolean; onClick: () => void; label: string }) {
   return <button disabled={disabled} onClick={onClick} className="sf-game-action w-full py-4 rounded-xl">{label}<ArrowRight size={17} /></button>
@@ -565,6 +627,17 @@ function playTicks(duration: number) {
   } catch {
     // Audio is optional and can be blocked by browser policies.
   }
+}
+function wait(ms: number) {
+  return new Promise(resolve => window.setTimeout(resolve, ms))
+}
+function wheelGradient(colors: string[]) {
+  if (!colors.length) return '#7E9CA8 0 50%, #D7FE55 50% 100%'
+  const step = 100 / colors.length
+  return colors.map((color, index) => `${color} ${index * step}% ${(index + 1) * step}%`).join(',')
+}
+function isPurchasable(type: GameType) {
+  return type === 'spin' || type === 'scratch'
 }
 
 const gameCard = { color: '#F5F5F5' }

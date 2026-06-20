@@ -50,9 +50,9 @@ html.sf-scratching .sf-game-overlay {
   overflow: hidden;
   color: #f5f5f5;
   background:
-    radial-gradient(circle at 14% 12%, rgba(139, 92, 246, .16), transparent 27rem),
-    radial-gradient(circle at 86% 15%, rgba(34, 197, 94, .1), transparent 25rem),
-    #0a0a0b;
+    radial-gradient(circle at 18% 10%, rgba(126, 156, 168, .14), transparent 27rem),
+    radial-gradient(circle at 86% 16%, rgba(215, 254, 85, .08), transparent 25rem),
+    linear-gradient(180deg, #0b1012 0%, #080c0e 68%, #070909 100%);
 }
 
 .sf-arcade::before {
@@ -60,7 +60,7 @@ html.sf-scratching .sf-game-overlay {
   position: absolute;
   inset: 0;
   z-index: -1;
-  opacity: .36;
+  opacity: .24;
   background-image:
     linear-gradient(rgba(255, 255, 255, .045) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, .045) 1px, transparent 1px);
@@ -76,19 +76,19 @@ html.sf-scratching .sf-game-overlay {
   border-radius: 50%;
   pointer-events: none;
   filter: blur(80px);
-  opacity: .3;
+  opacity: .2;
 }
 
 .sf-arcade-orb-purple {
   top: 9rem;
   left: -11rem;
-  background: #8b5cf6;
+  background: #7e9ca8;
 }
 
 .sf-arcade-orb-green {
   top: 28rem;
   right: -11rem;
-  background: #22c55e;
+  background: #d7fe55;
 }
 
 .sf-arcade-hero {
@@ -104,7 +104,7 @@ html.sf-scratching .sf-game-overlay {
   align-items: center;
   gap: .65rem;
   margin-bottom: 1.2rem;
-  color: #a78bfa;
+  color: #d7fe55;
   font: 700 .68rem/1 'Orbitron', sans-serif;
   letter-spacing: .22em;
   text-transform: uppercase;
@@ -137,14 +137,14 @@ html.sf-scratching .sf-game-overlay {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #8b5cf6;
-  box-shadow: 0 0 13px rgba(139, 92, 246, .9);
+  background: #7e9ca8;
+  box-shadow: 0 0 13px rgba(126, 156, 168, .76);
   animation: sf-lights 1.35s ease-in-out infinite alternate;
 }
 
 .sf-casino-lights span:nth-child(3n) {
-  background: #22c55e;
-  box-shadow: 0 0 13px rgba(34, 197, 94, .9);
+  background: #d7fe55;
+  box-shadow: 0 0 13px rgba(215, 254, 85, .7);
 }
 
 .sf-casino-lights span:nth-child(2n) {
@@ -153,7 +153,7 @@ html.sf-scratching .sf-game-overlay {
 
 .sf-arcade-title span {
   color: transparent;
-  background: linear-gradient(110deg, #a78bfa, #8b5cf6 45%, #22c55e 110%);
+  background: linear-gradient(110deg, #f5f5f5, #d7fe55 58%, #7e9ca8 110%);
   background-clip: text;
 }
 
@@ -192,9 +192,9 @@ html.sf-scratching .sf-game-overlay {
   min-width: 270px;
   padding: 1.2rem;
   overflow: hidden;
-  border: 1px solid rgba(139, 92, 246, .28);
+  border: 1px solid rgba(126, 156, 168, .28);
   border-radius: 1.35rem;
-  background: linear-gradient(135deg, rgba(139, 92, 246, .14), rgba(18, 18, 20, .84) 42%, rgba(34, 197, 94, .08));
+  background: linear-gradient(135deg, rgba(126, 156, 168, .13), rgba(17, 24, 27, .88) 45%, rgba(215, 254, 85, .06));
   box-shadow: inset 0 1px rgba(255, 255, 255, .06), 0 24px 65px rgba(0, 0, 0, .25);
 }
 
@@ -206,7 +206,7 @@ html.sf-scratching .sf-game-overlay {
   top: -8rem;
   right: -5rem;
   border-radius: 50%;
-  background: rgba(139, 92, 246, .38);
+  background: rgba(215, 254, 85, .16);
   filter: blur(32px);
 }
 
@@ -264,13 +264,14 @@ html.sf-scratching .sf-game-overlay {
 
 .sf-game-card {
   position: relative;
-  min-height: 295px;
+  min-height: 286px;
   padding: 1.3rem;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, .08);
-  border-radius: 1.35rem;
-  background: linear-gradient(145deg, rgba(24, 24, 27, .88), rgba(14, 14, 16, .98));
+  border: 1px solid rgba(126, 156, 168, .16);
+  border-radius: 18px;
+  background: linear-gradient(145deg, rgba(17, 24, 27, .94), rgba(8, 12, 14, .98));
   transition: transform .3s ease, border-color .3s ease, box-shadow .3s ease;
+  will-change: transform;
 }
 
 .sf-game-card-spin {
@@ -290,15 +291,15 @@ html.sf-scratching .sf-game-overlay {
   transition: opacity .3s ease;
 }
 
-.sf-game-card-spin::after { background: #8b5cf6; }
-.sf-game-card-scratch::after { background: #22c55e; }
-.sf-game-card-box::after { background: #a78bfa; }
+.sf-game-card-spin::after { background: #7e9ca8; }
+.sf-game-card-scratch::after { background: #d7fe55; }
+.sf-game-card-box::after { background: #7e9ca8; }
 
 .sf-game-card:hover,
 .sf-game-card:focus-visible {
-  transform: translateY(-5px) scale(1.01);
-  border-color: rgba(139, 92, 246, .43);
-  box-shadow: 0 24px 62px rgba(0, 0, 0, .36), 0 0 34px rgba(139, 92, 246, .13);
+  transform: translateY(-3px);
+  border-color: rgba(215, 254, 85, .32);
+  box-shadow: 0 22px 56px rgba(0, 0, 0, .34), 0 0 26px rgba(215, 254, 85, .08);
   outline: none;
 }
 
@@ -350,15 +351,15 @@ html.sf-scratching .sf-game-overlay {
   height: 60px;
   margin: 2rem 0 1.55rem;
   border-radius: 1rem;
-  color: #a78bfa;
-  background: rgba(139, 92, 246, .13);
-  border: 1px solid rgba(139, 92, 246, .25);
+  color: #d7fe55;
+  background: rgba(215, 254, 85, .08);
+  border: 1px solid rgba(215, 254, 85, .18);
 }
 
 .sf-game-card-scratch .sf-game-card-icon {
-  color: #22c55e;
-  background: rgba(34, 197, 94, .1);
-  border-color: rgba(34, 197, 94, .22);
+  color: #7e9ca8;
+  background: rgba(126, 156, 168, .1);
+  border-color: rgba(126, 156, 168, .22);
 }
 
 .sf-game-card-title {
@@ -373,6 +374,18 @@ html.sf-scratching .sf-game-overlay {
   z-index: 1;
   color: rgba(245, 245, 245, .52);
   font-size: .82rem;
+}
+
+.sf-game-card-price {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  margin-top: .7rem;
+  color: #d7fe55;
+  font-size: .74rem;
+  font-weight: 700;
 }
 
 .sf-game-card-status {
@@ -517,8 +530,8 @@ html.sf-scratching .sf-game-overlay {
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
   background:
-    radial-gradient(circle at 50% 20%, rgba(139, 92, 246, .16), transparent 27rem),
-    #09090b;
+    radial-gradient(circle at 50% 18%, rgba(126, 156, 168, .13), transparent 27rem),
+    #080c0e;
 }
 
 .sf-overlay-glow {
@@ -533,7 +546,7 @@ html.sf-scratching .sf-game-overlay {
   margin-right: -.2rem;
   padding: max(1rem, env(safe-area-inset-top, 0px)) .2rem 1rem;
   border-bottom: 1px solid rgba(255, 255, 255, .06);
-  background: linear-gradient(#09090b 70%, rgba(9, 9, 11, 0));
+  background: linear-gradient(#080c0e 70%, rgba(8, 12, 14, 0));
 }
 
 .sf-game-overlay-frame {
@@ -552,14 +565,14 @@ html.sf-scratching .sf-game-overlay {
 
 .sf-overlay-close:hover,
 .sf-overlay-close:focus-visible {
-  border-color: rgba(139, 92, 246, .45) !important;
-  background: rgba(139, 92, 246, .13) !important;
+  border-color: rgba(215, 254, 85, .35) !important;
+  background: rgba(215, 254, 85, .08) !important;
   outline: none;
 }
 
 .sf-overlay-label {
   margin-bottom: .28rem;
-  color: #a78bfa;
+  color: #d7fe55;
   font: 700 .6rem 'Orbitron', sans-serif;
   letter-spacing: .18em;
   text-transform: uppercase;
@@ -572,13 +585,13 @@ html.sf-scratching .sf-game-overlay {
 
 .sf-game-stage {
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, .08);
-  background: linear-gradient(150deg, rgba(24, 24, 27, .88), rgba(12, 12, 14, .96));
+  border: 1px solid rgba(126, 156, 168, .16);
+  background: linear-gradient(150deg, rgba(17, 24, 27, .94), rgba(8, 12, 14, .98));
   box-shadow: 0 28px 80px rgba(0, 0, 0, .38), inset 0 1px rgba(255, 255, 255, .055);
 }
 
 .sf-ticket-balance {
-  border: 1px solid rgba(139, 92, 246, .19);
+  border: 1px solid rgba(126, 156, 168, .22);
   color: rgba(245, 245, 245, .62);
   background: rgba(10, 10, 11, .56);
   font-size: .83rem;
@@ -586,7 +599,45 @@ html.sf-scratching .sf-game-overlay {
 
 .sf-ticket-balance svg,
 .sf-ticket-balance strong {
-  color: #22c55e;
+  color: #d7fe55;
+}
+
+.sf-ticket-shop {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: .55rem;
+  align-items: center;
+  margin-top: .7rem;
+  padding: .7rem;
+  border: 1px solid rgba(215, 254, 85, .16);
+  border-radius: .9rem;
+  background: rgba(215, 254, 85, .045);
+  text-align: left;
+}
+
+.sf-ticket-shop span {
+  display: block;
+  color: rgba(245, 245, 245, .46);
+  font-size: .68rem;
+}
+
+.sf-ticket-shop strong {
+  color: #f5f5f5;
+  font-size: .82rem;
+}
+
+.sf-ticket-shop button {
+  min-height: 38px;
+  padding: 0 .8rem;
+  border-radius: .7rem;
+  color: #080c0e;
+  background: #d7fe55;
+  font-weight: 800;
+}
+
+.sf-ticket-shop button:disabled {
+  color: rgba(245, 245, 245, .5);
+  background: rgba(245, 245, 245, .08);
 }
 
 .sf-ticket-balance strong {
@@ -618,6 +669,8 @@ html.sf-scratching .sf-game-overlay {
   padding: 5px;
   border: 5px solid #1c1c20;
   box-shadow: 0 0 0 1px rgba(255, 255, 255, .1), 0 20px 45px rgba(0, 0, 0, .35);
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
 }
 
 .sf-wheel-center {
@@ -626,10 +679,10 @@ html.sf-scratching .sf-game-overlay {
   justify-content: center;
   width: 96px;
   height: 96px;
-  border: 1px solid rgba(139, 92, 246, .35);
+  border: 1px solid rgba(215, 254, 85, .35);
   border-radius: 50%;
-  background: #0a0a0b;
-  color: #22c55e;
+  background: #080c0e;
+  color: #d7fe55;
   font: 700 .82rem 'Orbitron', sans-serif;
   letter-spacing: .14em;
   box-shadow: inset 0 0 30px rgba(139, 92, 246, .12);
@@ -642,8 +695,8 @@ html.sf-scratching .sf-game-overlay {
   gap: .55rem;
   margin: 2rem 0;
   padding: 2rem 1rem;
-  color: #a78bfa;
-  border: 1px dashed rgba(139, 92, 246, .25);
+  color: #d7fe55;
+  border: 1px dashed rgba(126, 156, 168, .25);
   border-radius: 1.2rem;
   background: rgba(139, 92, 246, .045);
 }
@@ -666,12 +719,13 @@ html.sf-scratching .sf-game-overlay {
 }
 
 .sf-scratch-ticket {
-  border: 1px solid rgba(139, 92, 246, .28);
+  border: 1px solid rgba(126, 156, 168, .28);
   background:
     radial-gradient(circle at center, rgba(34, 197, 94, .16), transparent 70%),
     #0a0a0b;
   contain: layout paint;
   touch-action: none;
+  transform: translate3d(0, 0, 0);
 }
 
 .sf-scratch-ticket.is-revealed {
@@ -719,7 +773,7 @@ html.sf-scratching .sf-game-overlay {
 .sf-progress-track div {
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #8b5cf6, #22c55e);
+  background: linear-gradient(90deg, #7e9ca8, #d7fe55);
   transition: width .18s ease;
 }
 
@@ -729,7 +783,7 @@ html.sf-scratching .sf-game-overlay {
 
 .sf-box-viewport {
   min-height: 130px;
-  border: 1px solid rgba(139, 92, 246, .15);
+  border: 1px solid rgba(126, 156, 168, .18);
   border-radius: 1.1rem;
   background: rgba(10, 10, 11, .58);
 }
@@ -741,8 +795,8 @@ html.sf-scratching .sf-game-overlay {
   left: 50%;
   z-index: 10;
   width: 2px;
-  background: #22c55e;
-  box-shadow: 0 0 12px #22c55e;
+  background: #d7fe55;
+  box-shadow: 0 0 12px rgba(215, 254, 85, .75);
 }
 
 .sf-box-marker::before,
@@ -756,12 +810,17 @@ html.sf-scratching .sf-game-overlay {
 
 .sf-box-marker::before {
   top: 0;
-  border-top: 10px solid #22c55e;
+  border-top: 10px solid #d7fe55;
 }
 
 .sf-box-marker::after {
   bottom: 0;
-  border-bottom: 10px solid #22c55e;
+  border-bottom: 10px solid #d7fe55;
+}
+
+.sf-box-reel {
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
 }
 
 .sf-box-item {
@@ -788,14 +847,15 @@ html.sf-scratching .sf-game-overlay {
   gap: .55rem;
   color: #fff;
   font-weight: 700;
-  background: linear-gradient(100deg, #7c3aed, #8b5cf6 55%, #6d28d9);
-  box-shadow: 0 14px 30px rgba(124, 58, 237, .28);
+  background: linear-gradient(100deg, #d7fe55, #b7d94a);
+  color: #080c0e;
+  box-shadow: 0 14px 30px rgba(215, 254, 85, .16);
   transition: transform .16s ease, box-shadow .16s ease, opacity .16s ease;
 }
 
 .sf-game-action:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 18px 38px rgba(124, 58, 237, .38);
+  box-shadow: 0 18px 38px rgba(215, 254, 85, .2);
 }
 
 .sf-game-action:disabled {
@@ -994,29 +1054,41 @@ html.sf-scratching .sf-game-overlay {
 }
 
 .sf-admin-game-tabs button.is-active {
-  color: #f5f5f5;
-  background: linear-gradient(105deg, rgba(139, 92, 246, .58), rgba(139, 92, 246, .22));
-  box-shadow: 0 8px 25px rgba(139, 92, 246, .16);
+  color: #080c0e;
+  background: #d7fe55;
+  box-shadow: 0 8px 25px rgba(215, 254, 85, .12);
 }
 
 .sf-admin-game-header {
   padding: 1rem;
-  border: 1px solid rgba(139, 92, 246, .17);
+  border: 1px solid rgba(126, 156, 168, .18);
   border-radius: .9rem;
-  background: linear-gradient(110deg, rgba(139, 92, 246, .09), rgba(17, 24, 27, .2));
+  background: linear-gradient(110deg, rgba(126, 156, 168, .09), rgba(17, 24, 27, .2));
 }
 
 .sf-admin-game-label {
   margin-bottom: .3rem;
-  color: #a78bfa;
+  color: #d7fe55;
   font: 700 .58rem 'Orbitron', sans-serif;
   letter-spacing: .18em;
 }
 
+.sf-admin-ticket-price {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: .85rem;
+  align-items: end;
+  margin-top: .85rem;
+  padding: 1rem;
+  border: 1px solid rgba(215, 254, 85, .16);
+  border-radius: .9rem;
+  background: rgba(215, 254, 85, .045);
+}
+
 .sf-admin-probability {
-  border: 1px solid rgba(139, 92, 246, .16);
+  border: 1px solid rgba(126, 156, 168, .16);
   background:
-    radial-gradient(circle at 100% 0, rgba(139, 92, 246, .13), transparent 17rem),
+    radial-gradient(circle at 100% 0, rgba(126, 156, 168, .13), transparent 17rem),
     rgba(8, 12, 14, .36);
 }
 
@@ -1081,10 +1153,10 @@ html.sf-scratching .sf-game-overlay {
   display: block;
   margin-top: .85rem;
   padding: .65rem .9rem;
-  border: 1px solid rgba(139, 92, 246, .25);
+  border: 1px solid rgba(126, 156, 168, .25);
   border-radius: .65rem;
-  color: #c4b5fd;
-  background: rgba(139, 92, 246, .1);
+  color: #d7fe55;
+  background: rgba(126, 156, 168, .1);
   font-size: .82rem;
 }
 
@@ -1216,6 +1288,10 @@ html.sf-telegram-app .sf-bottom-nav {
     display: block;
   }
 
+  .sf-admin-ticket-price {
+    grid-template-columns: 1fr;
+  }
+
   .sf-balance-target,
   .sf-balance-submit {
     grid-template-columns: 1fr;
@@ -1249,6 +1325,14 @@ html.sf-telegram-app .sf-bottom-nav {
   .sf-scratch-stage .sf-scratch-ticket {
     height: clamp(176px, 30vh, 200px) !important;
     margin: 1.1rem 0 !important;
+  }
+
+  .sf-ticket-shop {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .sf-ticket-shop button {
+    grid-column: 1 / -1;
   }
 }
 
