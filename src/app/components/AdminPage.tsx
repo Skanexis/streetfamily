@@ -1196,6 +1196,36 @@ function EconomyAdmin({ games, options, reload }: { games: Row[]; options: Row[]
       weight: '', color: '#8B5CF6', active: true, reward_definition_id: null, reward_kind: 'wallet', item_label: '',
     }])
   }
+  const copyPrizesFromSpin = () => {
+    setMessage('')
+    if (selectedGame === 'spin') return
+    const sourceOptions = options.filter(option => option.game_type === 'spin')
+    if (!sourceOptions.length) {
+      setMessage('Configura prima i premi della Ruota.')
+      return
+    }
+    if (drafts.length && !window.confirm('Sostituire i premi in modifica con una copia della Ruota?')) return
+    const copiedAt = Date.now()
+    setDrafts(sourceOptions.map((option, index) => {
+      const kind = option.reward_definitions?.kind === 'item' ? 'item' : 'wallet'
+      return {
+        draftKey: `copy-${selectedGame}-${copiedAt}-${index}`,
+        game_type: selectedGame,
+        code: String(option.code || makeRewardCode(selectedGame)).trim(),
+        label: option.label,
+        points_awarded: kind === 'item' ? '0' : option.points_awarded,
+        xp_awarded: kind === 'item' ? '0' : option.xp_awarded,
+        reward_definition_id: kind === 'item' ? null : option.reward_definition_id ?? null,
+        weight: option.weight,
+        color: option.color || '#8B5CF6',
+        active: option.active,
+        reward_kind: kind,
+        item_label: kind === 'item' ? option.reward_definitions?.label ?? option.label : '',
+      }
+    }))
+    setSimulation(null)
+    setMessage('Premi copiati dalla Ruota. Controlla e salva la configurazione.')
+  }
   const removePrize = async (option: Row) => {
     if (!option.id) {
       setDrafts(current => current.filter(entry => entry.draftKey !== option.draftKey))
@@ -1333,7 +1363,13 @@ function EconomyAdmin({ games, options, reload }: { games: Row[]; options: Row[]
         <button type="button" onClick={simulate} disabled={!activeOptions.length || totalWeight !== 100} className="sf-admin-simulate" style={{ opacity: !activeOptions.length || totalWeight !== 100 ? .45 : 1 }}>Esegui simulazione server</button>
         {simulation && <div className="sf-admin-results mt-3 grid grid-cols-2 gap-2">{Object.entries(simulation).map(([code, count]) => <div key={code}><strong>{code}</strong><span>{count}</span></div>)}</div>}
       </div>
-      <div className="sf-admin-reward-title flex items-center justify-between my-4"><h3>Premi configurabili</h3><button type="button" style={smallButton} onClick={addPrize}>+ Aggiungi premio</button></div>
+      <div className="sf-admin-reward-title flex flex-wrap items-center justify-between gap-2 my-4">
+        <h3>Premi configurabili</h3>
+        <div className="flex flex-wrap gap-2">
+          {selectedGame !== 'spin' && <button type="button" style={smallButton} onClick={copyPrizesFromSpin}>Copia da Ruota</button>}
+          <button type="button" style={smallButton} onClick={addPrize}>+ Aggiungi premio</button>
+        </div>
+      </div>
       {!drafts.length && <p className="mb-4" style={muted}>Aggiungi il primo premio; potrai attivare il gioco dopo aver raggiunto il 100%.</p>}
       {drafts.map(option => {
         const weight = Math.max(0, parseOptionalInteger(option.weight) ?? 0)
