@@ -14,11 +14,15 @@ const card = {
   padding: 32,
 }
 
+type TelegramWindow = Window & {
+  Telegram?: { WebApp?: { initData?: string; ready?: () => void; expand?: () => void } }
+}
+
+const telegramMiniAppInitData = () => (window as TelegramWindow).Telegram?.WebApp?.initData || ''
+
 export function LoginPage() {
   const auth = useAuth()
-  const telegram = (window as Window & {
-    Telegram?: { WebApp?: { initData?: string; ready?: () => void; expand?: () => void } }
-  }).Telegram?.WebApp
+  const telegram = (window as TelegramWindow).Telegram?.WebApp
   const [challenge, setChallenge] = useState<{ token: string; botUrl: string } | null>(null)
   const [preparedChallenge, setPreparedChallenge] = useState<{ token: string; botUrl: string } | null>(null)
   const [preparingBotLink, setPreparingBotLink] = useState(false)

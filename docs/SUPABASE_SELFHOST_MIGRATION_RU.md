@@ -275,6 +275,54 @@ curl "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getWebhookInfo"
 
 Только после этого старый Supabase Cloud можно считать неактивным.
 
+## 9. Чистый self-host, сохранить только approved ID
+
+Если полная миграция Cloud -> self-host восстановилась криво, можно очистить self-host и оставить только список одобренных Telegram ID.
+
+Этот сценарий:
+
+- не трогает Supabase Cloud;
+- не удаляет старые self-host volumes, а переименовывает их с timestamp;
+- накатывает чистую схему из `supabase/migrations/*.sql`;
+- возвращает только `staging_allowlist` со статусом `approved`;
+- очищает `auth.users`, `profiles`, заказы, KYC, Storage-файлы и старые сессии.
+
+На VPS:
+
+```bash
+cd /opt/apps/streetfamily
+git pull origin main
+chmod +x scripts/*.sh
+
+CONFIRM_CLEAN_SELFHOST=yes ./scripts/supabase_clean_selfhost_keep_approved.sh
+```
+
+После успешного reset:
+
+```bash
+cd /opt/supabase-project
+docker compose up -d
+sleep 15
+
+cd /opt/apps/streetfamily
+export SELFHOST_SUPABASE_DIR=/opt/supabase-project
+export ENV_DEPLOY_FILE=/opt/apps/streetfamily/.env.deploy
+./scripts/supabase_install_selfhost_functions.sh
+
+sudo docker compose --env-file .env.deploy -p street-family build --no-cache web
+sudo docker compose --env-file .env.deploy -p street-family up -d --force-recreate web
+
+set -a
+source /opt/apps/streetfamily/.env.deploy
+set +a
+
+curl "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook?url=https://supa.streetfamily.net/functions/v1/telegram-bot-webhook&secret_token=${TELEGRAM_WEBHOOK_SECRET}"
+curl "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getWebhookInfo"
+curl http://127.0.0.1:18087/healthz
+```
+
+Пользователи должны заново зайти через `/start`. Если их Telegram ID был `approved`, они пройдут сразу, а `auth.users` и `profiles` создадутся заново чистыми.
+
 ## Источники
 
 - Supabase Restore Platform Project to Self-Hosted: <https://supabase.com/docs/guides/self-hosting/restore-from-platform>
