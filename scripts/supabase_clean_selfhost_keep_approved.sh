@@ -64,6 +64,22 @@ until docker exec "$DB_CONTAINER" pg_isready -U postgres >/dev/null 2>&1; do
 done
 
 echo "Saving approved allowlist from current self-hosted database..."
+docker exec -i "$DB_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+alter table public.staging_allowlist
+  add column if not exists access_status text not null default 'approved'
+    check (access_status in ('pending', 'approved', 'rejected')),
+  add column if not exists access_requested_at timestamptz,
+  add column if not exists access_username text,
+  add column if not exists access_notified_at timestamptz,
+  add column if not exists access_decided_at timestamptz;
+
+update public.staging_allowlist
+set access_status = case when enabled then 'approved' else 'rejected' end,
+    access_requested_at = coalesce(access_requested_at, created_at),
+    access_decided_at = case when enabled then coalesce(access_decided_at, created_at) else access_decided_at end
+where access_status is null or access_status = 'approved' or not enabled;
+SQL
+
 docker exec -i "$DB_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 --csv -c "
 select
   telegram_subject,
