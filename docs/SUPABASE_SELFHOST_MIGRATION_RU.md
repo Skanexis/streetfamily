@@ -44,11 +44,26 @@ git pull origin main
 chmod +x scripts/*.sh
 ```
 
-В Supabase Dashboard откройте `Connect` и скопируйте connection string. Лучше использовать session pooler/direct connection. Пароль базы подставьте вручную.
-Если в пароле есть `@`, `#`, `/`, `:` или пробелы, пароль должен быть URL-encoded.
+В Supabase Dashboard откройте `Connect` и скопируйте настоящий connection string. На VPS лучше использовать `Session pooler`: прямой `db.PROJECT_REF.supabase.co` часто доступен только по IPv6, и тогда `psql` падает с `Network is unreachable`. Не оставляйте `...`, `PROJECT_REF`, `DB_PASSWORD` или `HOST` из примера.
+
+Если в пароле есть `@`, `#`, `/`, `:` или пробелы, пароль должен быть URL-encoded. Быстро закодировать пароль можно так:
 
 ```bash
-export SUPABASE_DB_URL='postgresql://postgres.PROJECT_REF:DB_PASSWORD@HOST:5432/postgres'
+node -e 'console.log(encodeURIComponent(process.argv[1]))' 'PASTE_DB_PASSWORD_HERE'
+```
+
+Безопаснее не вставлять пароль прямо в команду, а ввести скрыто:
+
+```bash
+read -s -p "Database password: " DB_PASS_RAW; echo
+DB_PASS_ENCODED="$(node -e 'console.log(encodeURIComponent(process.argv[1]))' "$DB_PASS_RAW")"
+export SUPABASE_DB_URL='postgresql://postgres.PROJECT_REF:'"$DB_PASS_ENCODED"'@REAL_POOLER_HOST:5432/postgres?sslmode=require'
+```
+
+Пример формы, не копируйте его дословно:
+
+```bash
+export SUPABASE_DB_URL='postgresql://postgres.abcdefghijklmnopqrst:encoded_password@aws-0-eu-central-1.pooler.supabase.com:5432/postgres?sslmode=require'
 ```
 
 Для Storage откройте `Storage -> S3 Configuration -> Access keys`, создайте access key и выставьте:
@@ -136,10 +151,10 @@ sudo certbot --nginx -d supa.streetfamily.net
 export BACKUP_DIR='/opt/apps/streetfamily/backups/supabase-cloud-YYYYMMDDTHHMMSSZ'
 ```
 
-Возьмите `POSTGRES_PASSWORD` и `POOLER_TENANT_ID` из `/opt/supabase-project/.env`, затем задайте self-hosted connection string:
+Для restore используйте прямой доступ к контейнеру `supabase-db`. Не восстанавливайте через pooler/внешний порт: на внутренних storage-таблицах может быть `permission denied`, например для `buckets_vectors`.
 
 ```bash
-export SELFHOST_DB_URL='postgres://postgres.POOLER_TENANT_ID:POSTGRES_PASSWORD@127.0.0.1:5432/postgres'
+export SELFHOST_DB_CONTAINER=supabase-db
 ```
 
 Восстановление запускается только с явным подтверждением:

@@ -25,11 +25,27 @@ if [ -z "${SUPABASE_DB_URL:-}" ]; then
   cat >&2 <<'EOF'
 Set SUPABASE_DB_URL first.
 Example:
-  export SUPABASE_DB_URL='postgresql://postgres.<project-ref>:<password>@aws-...pooler.supabase.com:5432/postgres'
+  export SUPABASE_DB_URL='postgresql://postgres.PROJECT_REF:URL_ENCODED_DB_PASSWORD@aws-0-REGION.pooler.supabase.com:5432/postgres?sslmode=require'
 Copy it from Supabase Dashboard -> Connect.
 EOF
   exit 1
 fi
+
+case "$SUPABASE_DB_URL" in
+  *...*|*PROJECT_REF*|*DB_PASSWORD*|*URL_ENCODED_DB_PASSWORD*|*HOST*|*YOUR_*|*"<"*|*">"*)
+    cat >&2 <<EOF
+SUPABASE_DB_URL still contains a placeholder.
+Do not use "..." or example values.
+
+Open Supabase Dashboard -> Connect -> Connection string and copy the real string.
+Then replace the password placeholder with the real database password.
+
+Current value starts with:
+  ${SUPABASE_DB_URL:0:80}
+EOF
+    exit 1
+    ;;
+esac
 
 mkdir -p "$BACKUP_DIR"
 chmod 700 "$BACKUP_DIR"
@@ -42,7 +58,7 @@ echo "Dumping database schema..."
 npx supabase@latest db dump --db-url "$SUPABASE_DB_URL" -f "$BACKUP_DIR/schema.sql"
 
 echo "Dumping database data..."
-npx supabase@latest db dump --db-url "$SUPABASE_DB_URL" -f "$BACKUP_DIR/data.sql" --use-copy --data-only
+npx supabase@latest db dump --db-url "$SUPABASE_DB_URL" -f "$BACKUP_DIR/data.sql" --use-copy --data-only -x "storage.buckets_vectors" -x "storage.vector_indexes"
 
 echo "Saving local migration/function sources..."
 tar -C "$ROOT_DIR" -czf "$BACKUP_DIR/repo-supabase-sources.tar.gz" supabase

@@ -16,6 +16,9 @@ const card = {
 
 export function LoginPage() {
   const auth = useAuth()
+  const telegram = (window as Window & {
+    Telegram?: { WebApp?: { initData?: string; ready?: () => void; expand?: () => void } }
+  }).Telegram?.WebApp
   const [challenge, setChallenge] = useState<{ token: string; botUrl: string } | null>(null)
   const [preparedChallenge, setPreparedChallenge] = useState<{ token: string; botUrl: string } | null>(null)
   const [preparingBotLink, setPreparingBotLink] = useState(false)
@@ -24,6 +27,10 @@ export function LoginPage() {
   const [miniAppAttempted, setMiniAppAttempted] = useState(false)
   const [error, setError] = useState('')
   const prepareBotLogin = async () => {
+    if (telegramMiniAppInitData()) {
+      setBotLinkAttempted(true)
+      return
+    }
     setBotLinkAttempted(true)
     setPreparingBotLink(true)
     setError('')
@@ -31,6 +38,7 @@ export function LoginPage() {
       const created = await auth.beginTelegramBotLogin()
       setPreparedChallenge(created)
     } catch (caught) {
+      if (telegramMiniAppInitData()) return
       setError(italianErrorMessage(caught, 'Impossibile avviare Telegram.'))
     } finally {
       setPreparingBotLink(false)
@@ -45,9 +53,6 @@ export function LoginPage() {
     }
   }
   useEffect(() => {
-    const telegram = (window as Window & {
-      Telegram?: { WebApp?: { initData?: string; ready?: () => void; expand?: () => void } }
-    }).Telegram?.WebApp
     if (auth.loading || miniAppAttempted || auth.session || !telegram?.initData) return
     setChallenge(null)
     setPreparedChallenge(null)
@@ -56,11 +61,14 @@ export function LoginPage() {
     telegram.ready?.()
     telegram.expand?.()
     loginMiniApp(telegram.initData)
-  }, [auth, miniAppAttempted])
+  }, [auth, miniAppAttempted, telegram])
   useEffect(() => {
-    if (!auth.configured || miniAppData || challenge || preparedChallenge || preparingBotLink || botLinkAttempted) return
-    void prepareBotLogin()
-  }, [auth.configured, botLinkAttempted, challenge, miniAppData, preparedChallenge, preparingBotLink])
+    if (!auth.configured || auth.loading || telegram?.initData || miniAppData || challenge || preparedChallenge || preparingBotLink || botLinkAttempted) return
+    const timer = window.setTimeout(() => {
+      if (!telegramMiniAppInitData()) void prepareBotLogin()
+    }, 350)
+    return () => window.clearTimeout(timer)
+  }, [auth.configured, auth.loading, botLinkAttempted, challenge, miniAppData, preparedChallenge, preparingBotLink, telegram])
   useEffect(() => {
     if (!challenge) return
     const timer = window.setInterval(async () => {
