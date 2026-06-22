@@ -1,4 +1,6 @@
 node_modules/
 dist/
+backups/
+supabase-backups/
 .env.*
 !.env.deploy.example
