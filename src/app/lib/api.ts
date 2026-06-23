@@ -8,7 +8,6 @@ import type {
   DashboardData,
   DemoInfo,
   Estrazione,
-  EstrazioneInstagramVerification,
   EstrazioneUserTicket,
   EstrazioneWinner,
   GamePlayResult,
@@ -108,26 +107,13 @@ function mapEstrazione(row: RecordValue | null): Estrazione | null {
   }
 }
 
-function mapEstrazioneInstagramVerification(row: RecordValue | null): EstrazioneInstagramVerification | null {
-  if (!row) return null
-  return {
-    required: Boolean(row.required),
-    targetUsername: row.target_username ?? '',
-    verificationUrl: row.verification_url ?? '',
-    instagramUsername: row.instagram_username ?? '',
-    verificationCode: row.verification_code ?? '',
-    verifiedAt: row.verified_at ?? null,
-    expiresAt: row.expires_at ?? null,
-    verified: Boolean(row.verified),
-  }
-}
-
 function mapEstrazioneTicket(row: RecordValue | null): EstrazioneUserTicket | null {
   if (!row) return null
   return {
     id: row.id,
     selectedNumber: Number(row.selected_number ?? 0),
     paidPoints: Number(row.paid_points ?? 0),
+    instagramUsername: row.instagram_username ?? '',
     purchasedAt: row.purchased_at,
   }
 }
@@ -138,6 +124,7 @@ function mapEstrazioneWinner(row: RecordValue): EstrazioneWinner {
     selectedNumber: Number(row.selected_number ?? 0),
     username: row.username ?? null,
     telegramSubject: row.telegram_subject ?? null,
+    instagramUsername: row.instagram_username ?? null,
     ticketId: row.ticket_id,
   }
 }
@@ -148,7 +135,6 @@ function mapCurrentEstrazione(row: RecordValue): CurrentEstrazione {
     soldNumbers: (row.sold_numbers ?? []).map((value: number | string) => Number(value)),
     userTicket: mapEstrazioneTicket(row.user_ticket),
     winners: (row.winners ?? []).map(mapEstrazioneWinner),
-    instagramVerification: mapEstrazioneInstagramVerification(row.instagram_verification),
     userCompletedOrders: Number(row.user_completed_orders ?? 0),
     userEligible: Boolean(row.user_eligible),
     userBalance: Number(row.user_balance ?? 0),
@@ -389,24 +375,14 @@ export async function getCurrentEstrazione(publicToken?: string): Promise<Curren
   return mapCurrentEstrazione(unwrap(response) as RecordValue)
 }
 
-export async function buyEstrazioneTicket(estrazioneId: string, selectedNumber: number): Promise<CurrentEstrazione> {
+export async function buyEstrazioneTicket(estrazioneId: string, selectedNumber: number, instagramUsername: string): Promise<CurrentEstrazione> {
   const db = requireSupabase()
   const response = await db.rpc('buy_estrazione_ticket', {
     p_estrazione_id: estrazioneId,
     p_selected_number: selectedNumber,
-  })
-  return mapCurrentEstrazione(unwrap(response) as RecordValue)
-}
-
-export async function ensureEstrazioneInstagramVerification(estrazioneId: string, instagramUsername: string): Promise<EstrazioneInstagramVerification> {
-  const db = requireSupabase()
-  const response = await db.rpc('ensure_estrazione_instagram_verification', {
-    p_estrazione_id: estrazioneId,
     p_instagram_username: instagramUsername,
   })
-  const result = mapEstrazioneInstagramVerification(unwrap(response) as RecordValue)
-  if (!result) throw new Error('Verifica Instagram non riuscita.')
-  return result
+  return mapCurrentEstrazione(unwrap(response) as RecordValue)
 }
 
 export async function getServiceAreas(): Promise<ServiceArea[]> {
@@ -528,15 +504,14 @@ function mapAdminEstrazione(row: RecordValue): AdminEstrazione {
       userId: ticket.user_id,
       username: ticket.username ?? null,
       telegramSubject: ticket.telegram_subject ?? null,
-      instagramUsername: ticket.instagram_username ?? null,
-      instagramVerifiedAt: ticket.instagram_verified_at ?? null,
+      instagramUsername: ticket.instagram_username ?? '',
       selectedNumber: Number(ticket.selected_number ?? 0),
       paidPoints: Number(ticket.paid_points ?? 0),
       status: ticket.status,
       purchasedAt: ticket.purchased_at,
     })),
     winners: (row.winners ?? []).map(mapEstrazioneWinner),
-    instagramVerifiedCount: Number(row.instagram_verified_count ?? 0),
+    instagramCount: Number(row.instagram_count ?? row.instagram_verified_count ?? 0),
     messageCounts: {
       adminSoldOut: Number(row.message_counts?.admin_sold_out ?? 0),
       reminder: Number(row.message_counts?.reminder ?? 0),

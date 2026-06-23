@@ -173,6 +173,7 @@ export interface EstrazioneUserTicket {
   id: string
   selectedNumber: number
   paidPoints: number
+  instagramUsername: string
   purchasedAt: string
 }
 
@@ -181,18 +182,8 @@ export interface EstrazioneWinner {
   selectedNumber: number
   username: string | null
   telegramSubject: string | null
+  instagramUsername: string | null
   ticketId?: string
-}
-
-export interface EstrazioneInstagramVerification {
-  required: boolean
-  targetUsername: string
-  verificationUrl: string
-  instagramUsername: string
-  verificationCode: string
-  verifiedAt: string | null
-  expiresAt: string | null
-  verified: boolean
 }
 
 export interface CurrentEstrazione {
@@ -200,7 +191,6 @@ export interface CurrentEstrazione {
   soldNumbers: number[]
   userTicket: EstrazioneUserTicket | null
   winners: EstrazioneWinner[]
-  instagramVerification: EstrazioneInstagramVerification | null
   userCompletedOrders: number
   userEligible: boolean
   userBalance: number
@@ -210,15 +200,14 @@ export interface AdminEstrazioneTicket extends EstrazioneUserTicket {
   userId: string
   username: string | null
   telegramSubject: string | null
-  instagramUsername: string | null
-  instagramVerifiedAt: string | null
+  instagramUsername: string
   status: 'active' | 'cancelled'
 }
 
 export interface AdminEstrazione extends Estrazione {
   tickets: AdminEstrazioneTicket[]
   winners: EstrazioneWinner[]
-  instagramVerifiedCount: number
+  instagramCount: number
   messageCounts: {
     adminSoldOut: number
     reminder: number

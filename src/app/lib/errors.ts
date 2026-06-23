@@ -23,7 +23,7 @@ const exactMessages: Record<string, string> = {
   ESTR_INSTAGRAM_REQUIRED: 'Verifica Instagram richiesta prima di comprare il biglietto.',
   ESTR_INSTAGRAM_USERNAME_INVALID: 'Inserisci un nome Instagram valido.',
   ESTR_INSTAGRAM_TARGET_REQUIRED: 'Configura l’account Instagram richiesto.',
-  ESTR_INSTAGRAM_URL_INVALID: 'Inserisci un link ManyChat o Instagram valido.',
+  ESTR_INSTAGRAM_URL_INVALID: 'Inserisci un link Instagram valido.',
   ESTR_INSTAGRAM_CODE_NOT_FOUND: 'Codice Instagram non trovato. Generane uno nuovo.',
   ESTR_INSTAGRAM_CODE_EXPIRED: 'Codice Instagram scaduto. Generane uno nuovo.',
   ESTR_NOT_FOUND: 'Estrazione non trovata.',

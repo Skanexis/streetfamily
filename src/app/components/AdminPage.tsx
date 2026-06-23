@@ -724,6 +724,15 @@ function UsersAdmin({ profiles, accessRows, initialGroup, reload }: { profiles: 
     setMessage(nextBlocked ? 'Utente bloccato.' : 'Utente sbloccato.')
     await reload()
   }
+  const openKycDocuments = (profile: Row) => {
+    const group = parseKycGroup(profile.kyc_cases?.status ?? null)
+    if (!profile.id || !group) return
+    const params = new URLSearchParams(location.search)
+    params.set('tab', 'kyc')
+    params.set('kyc', profile.id)
+    params.set('kycGroup', group)
+    navigate({ search: `?${params.toString()}` })
+  }
   const removeAccount = async (profile: Row) => {
     if (!window.confirm(`Eliminare definitivamente l'account @${profile.username}? Tutti i dati associati verranno rimossi.`)) return
     setMessage('')
@@ -749,6 +758,7 @@ function UsersAdmin({ profiles, accessRows, initialGroup, reload }: { profiles: 
       </div>
       {profile.blocked && <span style={{ color: '#FCA5A5' }}>BLOCCATO</span>}
       <span style={{ color: profile.kyc_cases?.status === 'approved' ? '#D7FE55' : '#F59E0B' }}>KYC: {kycStatusLabel[profile.kyc_cases?.status ?? 'not_started']}</span>
+      {parseKycGroup(profile.kyc_cases?.status ?? null) && <button style={smallButton} onClick={() => openKycDocuments(profile)}>Documenti KYC</button>}
       {profile.role !== 'admin' && (
         <>
           <button style={profile.blocked ? smallButton : dangerButton} onClick={() => toggleBlocked(profile)}>
@@ -1482,7 +1492,6 @@ function EstrazioneAdmin({ estrazioni, reload }: { estrazioni: AdminEstrazione[]
   const [winnersDraft, setWinnersDraft] = useState('1')
   const [instagramRequiredDraft, setInstagramRequiredDraft] = useState(false)
   const [instagramTargetDraft, setInstagramTargetDraft] = useState('')
-  const [instagramUrlDraft, setInstagramUrlDraft] = useState('')
   const [scheduleDraft, setScheduleDraft] = useState('')
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
@@ -1503,7 +1512,6 @@ function EstrazioneAdmin({ estrazioni, reload }: { estrazioni: AdminEstrazione[]
       setWinnersDraft('1')
       setInstagramRequiredDraft(false)
       setInstagramTargetDraft('')
-      setInstagramUrlDraft('')
       setScheduleDraft('')
       return
     }
@@ -1514,7 +1522,6 @@ function EstrazioneAdmin({ estrazioni, reload }: { estrazioni: AdminEstrazione[]
     setWinnersDraft(String(selected.winnersCount))
     setInstagramRequiredDraft(selected.instagramRequired)
     setInstagramTargetDraft(selected.instagramTargetUsername)
-    setInstagramUrlDraft(selected.instagramVerificationUrl)
     setScheduleDraft(selected.scheduledAt ? datetimeLocal(selected.scheduledAt) : '')
   }, [selected?.id])
 
@@ -1550,7 +1557,7 @@ function EstrazioneAdmin({ estrazioni, reload }: { estrazioni: AdminEstrazione[]
       winnersCount,
       instagramRequired: instagramRequiredDraft,
       instagramTargetUsername: instagramTargetDraft,
-      instagramVerificationUrl: instagramUrlDraft,
+      instagramVerificationUrl: '',
     }), 'Estrazione salvata.')
   }
 
@@ -1608,17 +1615,12 @@ function EstrazioneAdmin({ estrazioni, reload }: { estrazioni: AdminEstrazione[]
             </label>
             <label className="sm:col-span-2" style={{ ...muted, display: 'flex', gap: 10, alignItems: 'center' }}>
               <input type="checkbox" checked={instagramRequiredDraft} disabled={!canEdit} onChange={event => setInstagramRequiredDraft(event.currentTarget.checked)} style={{ width: 18, height: 18, accentColor: '#D7FE55' }} />
-              Richiedi follow Instagram verificato da ManyChat prima dell'acquisto
+              Richiedi Instagram nel biglietto. Il controllo follow resta manuale in admin.
             </label>
             {instagramRequiredDraft && (
-              <>
-                <label style={muted}>Account Instagram richiesto
-                  <input value={instagramTargetDraft} disabled={!canEdit} onChange={event => setInstagramTargetDraft(event.currentTarget.value)} placeholder="streetfamily" style={{ ...input, display: 'block', width: '100%', marginTop: 5 }} />
-                </label>
-                <label style={muted}>Link ManyChat / DM Instagram
-                  <input value={instagramUrlDraft} disabled={!canEdit} onChange={event => setInstagramUrlDraft(event.currentTarget.value)} placeholder="https://ig.me/m/streetfamily" style={{ ...input, display: 'block', width: '100%', marginTop: 5 }} />
-                </label>
-              </>
+              <label className="sm:col-span-2" style={muted}>Account Instagram da seguire
+                <input value={instagramTargetDraft} disabled={!canEdit} onChange={event => setInstagramTargetDraft(event.currentTarget.value)} placeholder="streetfamily" style={{ ...input, display: 'block', width: '100%', marginTop: 5 }} />
+              </label>
             )}
           </div>
           <div className="flex flex-wrap gap-2 mt-4">
@@ -1644,16 +1646,10 @@ function EstrazioneAdmin({ estrazioni, reload }: { estrazioni: AdminEstrazione[]
               <div className="grid grid-cols-2 gap-2 mb-4">
                 <EstrazioneMetric label="Stato" value={estrazioneStatusLabel(selected.status)} />
                 <EstrazioneMetric label="Venduti" value={`${selected.soldCount}/${selected.maxTickets}`} />
-                <EstrazioneMetric label="IG verificati" value={selected.instagramRequired ? selected.instagramVerifiedCount : 'Off'} />
+                <EstrazioneMetric label="Instagram" value={selected.instagramRequired ? selected.instagramCount : 'Off'} />
                 <EstrazioneMetric label="Reminder TG" value={selected.messageCounts.reminder} />
                 <EstrazioneMetric label="Errori TG" value={selected.messageCounts.errors} />
               </div>
-              {selected.instagramRequired && (
-                <div className="mb-4 p-3 rounded-xl" style={accent}>
-                  <div style={muted}>Webhook ManyChat</div>
-                  <code style={{ color: '#D7FE55', wordBreak: 'break-all' }}>https://supa.streetfamily.net/functions/v1/manychat-estrazione-webhook</code>
-                </div>
-              )}
               <div className="mb-4">
                 <h3 style={{ ...heading, fontSize: 17 }}>Numeri venduti</h3>
                 <div className="sf-admin-number-strip">
@@ -1661,12 +1657,29 @@ function EstrazioneAdmin({ estrazioni, reload }: { estrazioni: AdminEstrazione[]
                   {!selected.tickets.some(ticket => ticket.status === 'active') && <small style={muted}>Nessun biglietto venduto.</small>}
                 </div>
               </div>
+              <div className="mb-4">
+                <h3 style={{ ...heading, fontSize: 17 }}>Partecipanti</h3>
+                {selected.tickets.filter(ticket => ticket.status === 'active').map(ticket => (
+                  <div key={ticket.id} className="grid grid-cols-[48px_1fr] gap-3 p-3 mb-2 rounded-xl" style={row}>
+                    <strong style={{ color: '#D7FE55', fontFamily: 'Orbitron' }}>{String(ticket.selectedNumber).padStart(2, '0')}</strong>
+                    <div className="min-w-0">
+                      <div>@{ticket.username ?? ticket.telegramSubject ?? 'utente'}</div>
+                      <div className="break-all" style={muted}>Telegram ID: {ticket.telegramSubject ?? '-'}</div>
+                      <div className="break-all" style={{ color: ticket.instagramUsername ? '#D7FE55' : '#FCA5A5' }}>Instagram: {ticket.instagramUsername ? `@${ticket.instagramUsername}` : 'mancante'}</div>
+                    </div>
+                  </div>
+                ))}
+                {!selected.tickets.some(ticket => ticket.status === 'active') && <p style={muted}>Nessun partecipante.</p>}
+              </div>
               {selected.winners.length > 0 && (
                 <div>
                   <h3 style={{ ...heading, fontSize: 17 }}>Vincitori</h3>
                   {selected.winners.map(winner => (
-                    <div key={winner.place} className="flex justify-between p-3 mb-2 rounded-xl" style={row}>
-                      <span>{winner.place}° posto / n. {String(winner.selectedNumber).padStart(2, '0')}</span>
+                    <div key={winner.place} className="grid grid-cols-[1fr_auto] gap-3 p-3 mb-2 rounded-xl" style={row}>
+                      <div>
+                        <span>{winner.place}° posto / n. {String(winner.selectedNumber).padStart(2, '0')}</span>
+                        <div className="break-all" style={muted}>IG: {winner.instagramUsername ? `@${winner.instagramUsername}` : 'mancante'}</div>
+                      </div>
                       <strong>@{winner.username ?? winner.telegramSubject ?? 'utente'}</strong>
                     </div>
                   ))}

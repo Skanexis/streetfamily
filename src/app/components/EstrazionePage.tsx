@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { motion, useReducedMotion } from 'motion/react'
 import confetti from 'canvas-confetti'
-import { AtSign, CalendarClock, Check, Clock3, Coins, ExternalLink, Hash, Loader2, RadioTower, RefreshCw, ShieldCheck, Sparkles, Ticket, Trophy } from 'lucide-react'
-import type { CurrentEstrazione, Estrazione, EstrazioneInstagramVerification, EstrazioneWinner, User } from '../data'
-import { buyEstrazioneTicket, ensureEstrazioneInstagramVerification, getCurrentEstrazione } from '../lib/api'
+import { AtSign, CalendarClock, Check, Clock3, Coins, Hash, Loader2, RadioTower, ShieldCheck, Sparkles, Ticket, Trophy } from 'lucide-react'
+import type { CurrentEstrazione, Estrazione, EstrazioneWinner, User } from '../data'
+import { buyEstrazioneTicket, getCurrentEstrazione } from '../lib/api'
 import { italianErrorMessage } from '../lib/errors'
 
 interface Props {
@@ -19,7 +19,6 @@ export function EstrazionePage({ user, onComplete }: Props) {
   const [selectedNumber, setSelectedNumber] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [buying, setBuying] = useState(false)
-  const [verifyingInstagram, setVerifyingInstagram] = useState(false)
   const [instagramUsername, setInstagramUsername] = useState('')
   const [error, setError] = useState('')
 
@@ -37,39 +36,24 @@ export function EstrazionePage({ user, onComplete }: Props) {
   useEffect(() => { void load() }, [load])
 
   const draw = data?.estrazione ?? null
-  const instagramVerification = data?.instagramVerification ?? null
   const sold = useMemo(() => new Set(data?.soldNumbers ?? []), [data?.soldNumbers])
   const ownNumber = data?.userTicket?.selectedNumber ?? null
   const balance = data?.userBalance ?? user.tokens
   const soldOut = draw ? draw.soldCount >= draw.maxTickets || draw.status === 'sold_out' : false
-  const instagramReady = !draw?.instagramRequired || Boolean(instagramVerification?.verified)
-  const canBuy = Boolean(draw && draw.status === 'open' && !data?.userTicket && data?.userEligible && instagramReady && balance >= draw.ticketPrice && !soldOut)
+  const instagramReady = !draw?.instagramRequired || isValidInstagramUsername(instagramUsername)
+  const canSelectNumber = Boolean(draw && draw.status === 'open' && !data?.userTicket && data?.userEligible && balance >= draw.ticketPrice && !soldOut)
+  const canBuy = Boolean(canSelectNumber && instagramReady)
 
   useEffect(() => {
-    if (instagramVerification?.instagramUsername) setInstagramUsername(instagramVerification.instagramUsername)
-  }, [instagramVerification?.instagramUsername])
-
-  const generateInstagramCode = async () => {
-    if (!draw) return
-    setVerifyingInstagram(true)
-    setError('')
-    try {
-      const next = await ensureEstrazioneInstagramVerification(draw.id, instagramUsername)
-      setInstagramUsername(next.instagramUsername)
-      setData(current => current ? { ...current, instagramVerification: next } : current)
-    } catch (caught) {
-      setError(italianErrorMessage(caught, 'Verifica Instagram non riuscita.'))
-    } finally {
-      setVerifyingInstagram(false)
-    }
-  }
+    if (data?.userTicket?.instagramUsername) setInstagramUsername(data.userTicket.instagramUsername)
+  }, [data?.userTicket?.instagramUsername])
 
   const buy = async () => {
     if (!draw || selectedNumber === null) return
     setBuying(true)
     setError('')
     try {
-      const next = await buyEstrazioneTicket(draw.id, selectedNumber)
+      const next = await buyEstrazioneTicket(draw.id, selectedNumber, instagramUsername)
       setData(next)
       setSelectedNumber(null)
       confetti({ particleCount: 42, spread: 48, colors: ['#D7FE55', '#7E9CA8', '#F5F5F5'] })
@@ -108,18 +92,14 @@ export function EstrazionePage({ user, onComplete }: Props) {
           <>
             <DrawSummary draw={draw} completedOrders={data?.userCompletedOrders ?? 0} eligible={Boolean(data?.userEligible)} ownNumber={ownNumber} />
             {data?.userTicket ? (
-              <OwnedTicket number={data.userTicket.selectedNumber} draw={draw} />
+              <OwnedTicket number={data.userTicket.selectedNumber} instagramUsername={data.userTicket.instagramUsername} draw={draw} />
             ) : (
               <section className="sf-number-panel">
                 {draw.instagramRequired && (
                   <InstagramGate
                     draw={draw}
-                    verification={instagramVerification}
                     username={instagramUsername}
-                    busy={verifyingInstagram}
                     onUsernameChange={setInstagramUsername}
-                    onGenerate={generateInstagramCode}
-                    onRefresh={load}
                   />
                 )}
                 <div className="sf-number-panel-head">
@@ -127,7 +107,7 @@ export function EstrazionePage({ user, onComplete }: Props) {
                     <span>Scegli numero</span>
                     <strong>{selectedNumber === null ? '1-99' : formatNumber(selectedNumber)}</strong>
                   </div>
-                  <p>{!instagramReady ? 'Verifica Instagram richiesta.' : draw.status === 'open' ? 'Ogni numero può essere venduto una sola volta.' : statusLabel(draw.status)}</p>
+                  <p>{draw.status === 'open' ? 'Ogni numero può essere venduto una sola volta.' : statusLabel(draw.status)}</p>
                 </div>
                 <div className="sf-number-grid" aria-label="Numeri Estrazione">
                   {numberList.map(number => {
@@ -138,7 +118,7 @@ export function EstrazionePage({ user, onComplete }: Props) {
                         key={number}
                         type="button"
                         className={`sf-number-cell ${isSold ? 'is-sold' : ''} ${selected ? 'is-selected' : ''}`}
-                        disabled={!canBuy || isSold || buying}
+                        disabled={!canSelectNumber || isSold || buying}
                         onClick={() => setSelectedNumber(number)}
                       >
                         {formatNumber(number)}
@@ -156,7 +136,7 @@ export function EstrazionePage({ user, onComplete }: Props) {
                     <strong>{selectedNumber === null ? '--' : formatNumber(selectedNumber)}</strong>
                   </div>
                   <button type="button" disabled={!canBuy || selectedNumber === null || buying} onClick={buy}>
-                    {buying ? <><Loader2 size={16} className="sf-spin" /> Acquisto...</> : !data?.userEligible ? `Servono ${draw.minCompletedOrders} ordini` : !instagramReady ? 'Verifica Instagram' : balance < draw.ticketPrice ? 'Gettoni insufficienti' : 'Conferma'}
+                    {buying ? <><Loader2 size={16} className="sf-spin" /> Acquisto...</> : !data?.userEligible ? `Servono ${draw.minCompletedOrders} ordini` : !instagramReady ? 'Inserisci Instagram' : balance < draw.ticketPrice ? 'Gettoni insufficienti' : 'Conferma'}
                   </button>
                 </div>
               </section>
@@ -171,56 +151,28 @@ export function EstrazionePage({ user, onComplete }: Props) {
 
 function InstagramGate({
   draw,
-  verification,
   username,
-  busy,
   onUsernameChange,
-  onGenerate,
-  onRefresh,
 }: {
   draw: Estrazione
-  verification: EstrazioneInstagramVerification | null
   username: string
-  busy: boolean
   onUsernameChange: (value: string) => void
-  onGenerate: () => Promise<void>
-  onRefresh: () => Promise<void>
 }) {
-  const target = verification?.targetUsername || draw.instagramTargetUsername
-  const verificationUrl = verification?.verificationUrl || draw.instagramVerificationUrl || (target ? `https://ig.me/m/${target}` : '')
-  const verified = Boolean(verification?.verified)
+  const target = draw.instagramTargetUsername
+  const valid = isValidInstagramUsername(username)
   return (
-    <div className={`sf-instagram-gate ${verified ? 'is-verified' : ''}`}>
+    <div className={`sf-instagram-gate ${valid ? 'is-verified' : ''}`}>
       <div className="sf-instagram-gate-head">
         <div><AtSign size={18} /><span>Instagram richiesto</span></div>
-        <strong>{verified ? 'Verificato' : `Segui @${target}`}</strong>
+        <strong>{target ? `Follow @${target}` : 'Controllo manuale'}</strong>
       </div>
       <div className="sf-instagram-gate-row">
         <label>
           <span>Il tuo Instagram</span>
-          <input value={username} disabled={verified || busy} onChange={event => onUsernameChange(event.currentTarget.value)} placeholder="username" />
+          <input value={username} onChange={event => onUsernameChange(event.currentTarget.value)} placeholder="username" />
         </label>
-        <button type="button" disabled={busy || verified} onClick={() => { void onGenerate() }}>
-          {busy ? <><Loader2 size={15} className="sf-spin" /> Codice...</> : verification?.verificationCode ? 'Rigenera' : 'Genera codice'}
-        </button>
       </div>
-      {verification?.verificationCode && (
-        <div className="sf-instagram-code">
-          <span>Messaggio da inviare</span>
-          <strong>ESTR {verification.verificationCode}</strong>
-        </div>
-      )}
-      <div className="sf-instagram-gate-actions">
-        {verificationUrl && verification?.verificationCode && (
-          <a href={verificationUrl} target="_blank" rel="noreferrer">
-            <ExternalLink size={15} /> Apri Instagram e invia il codice
-          </a>
-        )}
-        <button type="button" onClick={() => { void onRefresh() }}>
-          <RefreshCw size={15} /> Aggiorna stato
-        </button>
-      </div>
-      {!verified && <p>ManyChat conferma il follow e sblocca l’acquisto del biglietto.</p>}
+      <p>L’amministrazione controllerà manualmente l’account Instagram al momento dell’Estrazione.</p>
     </div>
   )
 }
@@ -308,11 +260,12 @@ function Metric({ Icon, label, value, suffix, tone }: { Icon: typeof Ticket; lab
   return <div className={`sf-estrazione-metric ${tone ? `is-${tone}` : ''}`}><Icon size={17} /><span>{label}</span><strong>{value}</strong>{suffix && <small>{suffix}</small>}</div>
 }
 
-function OwnedTicket({ number, draw }: { number: number; draw: Estrazione }) {
+function OwnedTicket({ number, instagramUsername, draw }: { number: number; instagramUsername: string; draw: Estrazione }) {
   return (
     <section className="sf-owned-ticket">
       <div><Ticket size={26} /><span>Biglietto confermato</span></div>
       <strong>{formatNumber(number)}</strong>
+      {instagramUsername && <p><AtSign size={14} style={{ display: 'inline', marginRight: 4 }} />{instagramUsername}</p>}
       <p>{draw.status === 'open' || draw.status === 'sold_out' ? 'Attendi la programmazione dell’Estrazione.' : statusLabel(draw.status)}</p>
     </section>
   )
@@ -416,9 +369,14 @@ function statusLabel(status: Estrazione['status']) {
 }
 
 function winnerName(winner: EstrazioneWinner) {
-  if (winner.username) return `@${winner.username}`
-  if (winner.telegramSubject) return `Telegram ${winner.telegramSubject}`
-  return 'Utente Street Family'
+  const profile = winner.username ? `@${winner.username}` : winner.telegramSubject ? `Telegram ${winner.telegramSubject}` : 'Utente Street Family'
+  if (winner.instagramUsername) return `${profile} / IG @${winner.instagramUsername}`
+  return profile
+}
+
+function isValidInstagramUsername(value: string) {
+  const normalized = value.trim().replace(/^@+/, '').toLowerCase()
+  return /^[a-z0-9._]{1,30}$/.test(normalized)
 }
 
 function formatNumber(value: number) {
