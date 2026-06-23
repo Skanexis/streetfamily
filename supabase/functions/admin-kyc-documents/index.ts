@@ -20,6 +20,31 @@ function exposeSignedUrl(signedUrl: string, req: Request) {
   return internal.toString()
 }
 
+function bytesToBase64(bytes: Uint8Array) {
+  let binary = ''
+  const chunkSize = 0x8000
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize))
+  }
+  return btoa(binary)
+}
+
+async function storageDataUrl(db: ReturnType<typeof adminClient>, storagePath: string, contentType: string | null) {
+  const downloaded = await db.storage.from('kyc-documents').download(storagePath)
+  if (downloaded.error || !downloaded.data) {
+    return {
+      dataUrl: '',
+      error: publicErrorMessage(downloaded.error?.message, 'File documento non trovato nello storage.'),
+    }
+  }
+  const bytes = new Uint8Array(await downloaded.data.arrayBuffer())
+  const mime = contentType || downloaded.data.type || 'image/jpeg'
+  return {
+    dataUrl: `data:${mime};base64,${bytesToBase64(bytes)}`,
+    error: '',
+  }
+}
+
 Deno.serve(async req => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
   if (req.method !== 'POST') return json({ error: 'Metodo non consentito' }, 405)
@@ -33,8 +58,9 @@ Deno.serve(async req => {
   const { data, error } = await db.from('kyc_documents').select('id,document_type,storage_path,captured_at,content_type,byte_size').eq('user_id', userId)
   if (error) return json({ error: publicErrorMessage(error.message, 'Lettura documenti non riuscita.') }, 500)
   const documents = await Promise.all((data ?? []).map(async row => {
+    const inline = await storageDataUrl(db, row.storage_path, row.content_type)
     const signed = await db.storage.from('kyc-documents').createSignedUrl(row.storage_path, 300)
-    if (signed.error || !signed.data?.signedUrl) {
+    if (inline.error || signed.error || !signed.data?.signedUrl) {
       return {
         id: row.id,
         documentType: row.document_type,
@@ -42,8 +68,9 @@ Deno.serve(async req => {
         storagePath: row.storage_path,
         contentType: row.content_type,
         byteSize: row.byte_size,
+        dataUrl: inline.dataUrl,
         signedUrl: '',
-        error: publicErrorMessage(signed.error?.message, 'Link documento non disponibile.'),
+        error: inline.error || publicErrorMessage(signed.error?.message, 'Link documento non disponibile.'),
       }
     }
     return {
@@ -53,6 +80,7 @@ Deno.serve(async req => {
       storagePath: row.storage_path,
       contentType: row.content_type,
       byteSize: row.byte_size,
+      dataUrl: inline.dataUrl,
       signedUrl: exposeSignedUrl(signed.data.signedUrl, req),
       error: '',
     }

@@ -1105,6 +1105,7 @@ function KycRequestsAdmin({ profiles, initialKycUserId, initialGroup, reload }: 
 function KycDocumentPreview({ document }: { document: KycReviewDocument }) {
   const [loadError, setLoadError] = useState(false)
   const label = documentLabel[document.documentType] ?? document.documentType
+  const previewUrl = document.dataUrl || document.signedUrl
   const meta = [
     document.contentType,
     document.byteSize ? `${Math.round(document.byteSize / 1024)} KB` : '',
@@ -1114,21 +1115,19 @@ function KycDocumentPreview({ document }: { document: KycReviewDocument }) {
     <div>
       <div style={{ ...muted, marginBottom: 6 }}>{label}</div>
       {meta && <div style={{ ...muted, marginBottom: 6, fontSize: 11 }}>{meta}</div>}
-      {document.signedUrl && !document.error ? (
+      {previewUrl && !document.error ? (
         <>
-          <a href={document.signedUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'block' }}>
-            <img
-              src={document.signedUrl}
-              alt={label}
-              className="w-full rounded-xl"
-              style={{ maxHeight: 340, objectFit: 'contain', background: '#080C0E' }}
-              referrerPolicy="no-referrer"
-              onError={() => setLoadError(true)}
-            />
-          </a>
-          <a href={document.signedUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#D7FE55', fontSize: 12, display: 'inline-block', marginTop: 7 }}>
+          <img
+            src={previewUrl}
+            alt={label}
+            className="w-full rounded-xl"
+            style={{ maxHeight: 340, objectFit: 'contain', background: '#080C0E' }}
+            referrerPolicy="no-referrer"
+            onError={() => setLoadError(true)}
+          />
+          {document.signedUrl && <a href={document.signedUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#D7FE55', fontSize: 12, display: 'inline-block', marginTop: 7 }}>
             Apri originale
-          </a>
+          </a>}
         </>
       ) : null}
       {error && (

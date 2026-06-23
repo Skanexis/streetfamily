@@ -598,6 +598,7 @@ export async function getAdminKycDocuments(userId: string): Promise<KycReviewDoc
     documentType: document.documentType,
     capturedAt: document.capturedAt,
     signedUrl: document.signedUrl ?? '',
+    dataUrl: document.dataUrl ?? '',
     storagePath: document.storagePath ?? '',
     contentType: document.contentType ?? '',
     byteSize: Number(document.byteSize ?? 0),
