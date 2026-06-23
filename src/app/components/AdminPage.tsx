@@ -1480,6 +1480,9 @@ function EstrazioneAdmin({ estrazioni, reload }: { estrazioni: AdminEstrazione[]
   const [minOrdersDraft, setMinOrdersDraft] = useState('0')
   const [maxTicketsDraft, setMaxTicketsDraft] = useState('99')
   const [winnersDraft, setWinnersDraft] = useState('1')
+  const [instagramRequiredDraft, setInstagramRequiredDraft] = useState(false)
+  const [instagramTargetDraft, setInstagramTargetDraft] = useState('')
+  const [instagramUrlDraft, setInstagramUrlDraft] = useState('')
   const [scheduleDraft, setScheduleDraft] = useState('')
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
@@ -1498,6 +1501,9 @@ function EstrazioneAdmin({ estrazioni, reload }: { estrazioni: AdminEstrazione[]
       setMinOrdersDraft('0')
       setMaxTicketsDraft('99')
       setWinnersDraft('1')
+      setInstagramRequiredDraft(false)
+      setInstagramTargetDraft('')
+      setInstagramUrlDraft('')
       setScheduleDraft('')
       return
     }
@@ -1506,6 +1512,9 @@ function EstrazioneAdmin({ estrazioni, reload }: { estrazioni: AdminEstrazione[]
     setMinOrdersDraft(String(selected.minCompletedOrders))
     setMaxTicketsDraft(String(selected.maxTickets))
     setWinnersDraft(String(selected.winnersCount))
+    setInstagramRequiredDraft(selected.instagramRequired)
+    setInstagramTargetDraft(selected.instagramTargetUsername)
+    setInstagramUrlDraft(selected.instagramVerificationUrl)
     setScheduleDraft(selected.scheduledAt ? datetimeLocal(selected.scheduledAt) : '')
   }, [selected?.id])
 
@@ -1539,6 +1548,9 @@ function EstrazioneAdmin({ estrazioni, reload }: { estrazioni: AdminEstrazione[]
       minCompletedOrders,
       maxTickets,
       winnersCount,
+      instagramRequired: instagramRequiredDraft,
+      instagramTargetUsername: instagramTargetDraft,
+      instagramVerificationUrl: instagramUrlDraft,
     }), 'Estrazione salvata.')
   }
 
@@ -1594,6 +1606,20 @@ function EstrazioneAdmin({ estrazioni, reload }: { estrazioni: AdminEstrazione[]
             <label style={muted}>Programma data/ora
               <input type="datetime-local" value={scheduleDraft} disabled={!canSchedule} onChange={event => setScheduleDraft(event.currentTarget.value)} style={{ ...input, display: 'block', width: '100%', marginTop: 5 }} />
             </label>
+            <label className="sm:col-span-2" style={{ ...muted, display: 'flex', gap: 10, alignItems: 'center' }}>
+              <input type="checkbox" checked={instagramRequiredDraft} disabled={!canEdit} onChange={event => setInstagramRequiredDraft(event.currentTarget.checked)} style={{ width: 18, height: 18, accentColor: '#D7FE55' }} />
+              Richiedi follow Instagram verificato da ManyChat prima dell'acquisto
+            </label>
+            {instagramRequiredDraft && (
+              <>
+                <label style={muted}>Account Instagram richiesto
+                  <input value={instagramTargetDraft} disabled={!canEdit} onChange={event => setInstagramTargetDraft(event.currentTarget.value)} placeholder="streetfamily" style={{ ...input, display: 'block', width: '100%', marginTop: 5 }} />
+                </label>
+                <label style={muted}>Link ManyChat / DM Instagram
+                  <input value={instagramUrlDraft} disabled={!canEdit} onChange={event => setInstagramUrlDraft(event.currentTarget.value)} placeholder="https://ig.me/m/streetfamily" style={{ ...input, display: 'block', width: '100%', marginTop: 5 }} />
+                </label>
+              </>
+            )}
           </div>
           <div className="flex flex-wrap gap-2 mt-4">
             <button type="button" disabled={busy || !canEdit} style={{ ...primary, opacity: busy || !canEdit ? .55 : 1 }} onClick={() => { void save() }}>{selected ? 'Salva' : 'Crea bozza'}</button>
@@ -1618,13 +1644,20 @@ function EstrazioneAdmin({ estrazioni, reload }: { estrazioni: AdminEstrazione[]
               <div className="grid grid-cols-2 gap-2 mb-4">
                 <EstrazioneMetric label="Stato" value={estrazioneStatusLabel(selected.status)} />
                 <EstrazioneMetric label="Venduti" value={`${selected.soldCount}/${selected.maxTickets}`} />
+                <EstrazioneMetric label="IG verificati" value={selected.instagramRequired ? selected.instagramVerifiedCount : 'Off'} />
                 <EstrazioneMetric label="Reminder TG" value={selected.messageCounts.reminder} />
                 <EstrazioneMetric label="Errori TG" value={selected.messageCounts.errors} />
               </div>
+              {selected.instagramRequired && (
+                <div className="mb-4 p-3 rounded-xl" style={accent}>
+                  <div style={muted}>Webhook ManyChat</div>
+                  <code style={{ color: '#D7FE55', wordBreak: 'break-all' }}>https://supa.streetfamily.net/functions/v1/manychat-estrazione-webhook</code>
+                </div>
+              )}
               <div className="mb-4">
                 <h3 style={{ ...heading, fontSize: 17 }}>Numeri venduti</h3>
                 <div className="sf-admin-number-strip">
-                  {selected.tickets.filter(ticket => ticket.status === 'active').map(ticket => <span key={ticket.id}>{String(ticket.selectedNumber).padStart(2, '0')}</span>)}
+                  {selected.tickets.filter(ticket => ticket.status === 'active').map(ticket => <span key={ticket.id} title={ticket.instagramUsername ? `@${ticket.instagramUsername}` : undefined}>{String(ticket.selectedNumber).padStart(2, '0')}</span>)}
                   {!selected.tickets.some(ticket => ticket.status === 'active') && <small style={muted}>Nessun biglietto venduto.</small>}
                 </div>
               </div>

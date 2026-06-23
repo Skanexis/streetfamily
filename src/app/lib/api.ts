@@ -8,6 +8,7 @@ import type {
   DashboardData,
   DemoInfo,
   Estrazione,
+  EstrazioneInstagramVerification,
   EstrazioneUserTicket,
   EstrazioneWinner,
   GamePlayResult,
@@ -90,6 +91,9 @@ function mapEstrazione(row: RecordValue | null): Estrazione | null {
     minCompletedOrders: Number(row.min_completed_orders ?? 0),
     maxTickets: Number(row.max_tickets ?? 0),
     winnersCount: Number(row.winners_count ?? 0),
+    instagramRequired: Boolean(row.instagram_required),
+    instagramTargetUsername: row.instagram_target_username ?? '',
+    instagramVerificationUrl: row.instagram_verification_url ?? '',
     scheduledAt: row.scheduled_at ?? null,
     publicToken: row.public_token,
     adminNotifiedAt: row.admin_notified_at ?? null,
@@ -101,6 +105,20 @@ function mapEstrazione(row: RecordValue | null): Estrazione | null {
     updatedAt: row.updated_at,
     soldCount: Number(row.sold_count ?? 0),
     remainingCount: Number(row.remaining_count ?? Math.max(Number(row.max_tickets ?? 0) - Number(row.sold_count ?? 0), 0)),
+  }
+}
+
+function mapEstrazioneInstagramVerification(row: RecordValue | null): EstrazioneInstagramVerification | null {
+  if (!row) return null
+  return {
+    required: Boolean(row.required),
+    targetUsername: row.target_username ?? '',
+    verificationUrl: row.verification_url ?? '',
+    instagramUsername: row.instagram_username ?? '',
+    verificationCode: row.verification_code ?? '',
+    verifiedAt: row.verified_at ?? null,
+    expiresAt: row.expires_at ?? null,
+    verified: Boolean(row.verified),
   }
 }
 
@@ -130,6 +148,7 @@ function mapCurrentEstrazione(row: RecordValue): CurrentEstrazione {
     soldNumbers: (row.sold_numbers ?? []).map((value: number | string) => Number(value)),
     userTicket: mapEstrazioneTicket(row.user_ticket),
     winners: (row.winners ?? []).map(mapEstrazioneWinner),
+    instagramVerification: mapEstrazioneInstagramVerification(row.instagram_verification),
     userCompletedOrders: Number(row.user_completed_orders ?? 0),
     userEligible: Boolean(row.user_eligible),
     userBalance: Number(row.user_balance ?? 0),
@@ -379,6 +398,17 @@ export async function buyEstrazioneTicket(estrazioneId: string, selectedNumber: 
   return mapCurrentEstrazione(unwrap(response) as RecordValue)
 }
 
+export async function ensureEstrazioneInstagramVerification(estrazioneId: string, instagramUsername: string): Promise<EstrazioneInstagramVerification> {
+  const db = requireSupabase()
+  const response = await db.rpc('ensure_estrazione_instagram_verification', {
+    p_estrazione_id: estrazioneId,
+    p_instagram_username: instagramUsername,
+  })
+  const result = mapEstrazioneInstagramVerification(unwrap(response) as RecordValue)
+  if (!result) throw new Error('Verifica Instagram non riuscita.')
+  return result
+}
+
 export async function getServiceAreas(): Promise<ServiceArea[]> {
   const db = requireSupabase()
   const { data, error } = await db.from('service_areas').select('id,scenario_type,city,minimum_units,requires_street').eq('active', true).order('sort_order')
@@ -498,12 +528,15 @@ function mapAdminEstrazione(row: RecordValue): AdminEstrazione {
       userId: ticket.user_id,
       username: ticket.username ?? null,
       telegramSubject: ticket.telegram_subject ?? null,
+      instagramUsername: ticket.instagram_username ?? null,
+      instagramVerifiedAt: ticket.instagram_verified_at ?? null,
       selectedNumber: Number(ticket.selected_number ?? 0),
       paidPoints: Number(ticket.paid_points ?? 0),
       status: ticket.status,
       purchasedAt: ticket.purchased_at,
     })),
     winners: (row.winners ?? []).map(mapEstrazioneWinner),
+    instagramVerifiedCount: Number(row.instagram_verified_count ?? 0),
     messageCounts: {
       adminSoldOut: Number(row.message_counts?.admin_sold_out ?? 0),
       reminder: Number(row.message_counts?.reminder ?? 0),
@@ -527,6 +560,9 @@ export async function adminSaveEstrazione(input: {
   minCompletedOrders: number
   maxTickets: number
   winnersCount: number
+  instagramRequired: boolean
+  instagramTargetUsername: string
+  instagramVerificationUrl: string
 }): Promise<AdminEstrazione[]> {
   return mapAdminEstrazioni(unwrap(await requireSupabase().rpc('admin_upsert_estrazione', {
     p_id: input.id,
@@ -535,6 +571,9 @@ export async function adminSaveEstrazione(input: {
     p_min_completed_orders: input.minCompletedOrders,
     p_max_tickets: input.maxTickets,
     p_winners_count: input.winnersCount,
+    p_instagram_required: input.instagramRequired,
+    p_instagram_target_username: input.instagramTargetUsername,
+    p_instagram_verification_url: input.instagramVerificationUrl,
   })))
 }
 

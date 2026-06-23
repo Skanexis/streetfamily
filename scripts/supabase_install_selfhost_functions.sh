@@ -29,7 +29,7 @@ ENV_FUNCTIONS="$SELFHOST_SUPABASE_DIR/.env.functions"
 OVERRIDE_FILE="$SELFHOST_SUPABASE_DIR/docker-compose.functions-env.yml"
 
 echo "Writing self-hosted Edge Functions env file..."
-grep -E '^(TELEGRAM_|KYC_PURGE_SECRET=|ESTRAZIONE_)' "$ENV_DEPLOY_FILE" > "$ENV_FUNCTIONS"
+grep -E '^(TELEGRAM_|KYC_PURGE_SECRET=|ESTRAZIONE_|MANYCHAT_)' "$ENV_DEPLOY_FILE" > "$ENV_FUNCTIONS"
 chmod 600 "$ENV_FUNCTIONS"
 
 cat > "$OVERRIDE_FILE" <<'EOF'
