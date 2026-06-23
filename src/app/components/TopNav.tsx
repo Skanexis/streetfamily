@@ -19,7 +19,6 @@ const NAV_LINKS: { label: string; page: Page }[] = [
   { label: 'Inizio', page: 'home' },
   { label: 'Catalogo', page: 'catalog' },
   { label: 'Giochi', page: 'games' },
-  { label: 'Estrazione', page: 'estrazione' },
   { label: 'Regolamento', page: 'info' },
   { label: 'Contatti', page: 'contacts' },
   { label: 'Profilo', page: 'profile' },

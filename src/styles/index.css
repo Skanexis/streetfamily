@@ -294,6 +294,7 @@ html.sf-scratching .sf-game-overlay {
 .sf-game-card-spin::after { background: #7e9ca8; }
 .sf-game-card-scratch::after { background: #d7fe55; }
 .sf-game-card-box::after { background: #7e9ca8; }
+.sf-game-card-estrazione::after { background: #b99361; }
 
 .sf-game-card:hover,
 .sf-game-card:focus-visible {
@@ -362,6 +363,12 @@ html.sf-scratching .sf-game-overlay {
   border-color: rgba(126, 156, 168, .22);
 }
 
+.sf-game-card-estrazione .sf-game-card-icon {
+  color: #f5f5f5;
+  background: linear-gradient(135deg, rgba(215, 254, 85, .18), rgba(185, 147, 97, .2));
+  border-color: rgba(215, 254, 85, .24);
+}
+
 .sf-game-card-title {
   position: relative;
   z-index: 1;
@@ -412,6 +419,26 @@ html.sf-scratching .sf-game-overlay {
   width: 86px;
   height: 106px;
   transform: translate(8px, 11px);
+}
+
+.sf-card-estrazione > div {
+  display: grid;
+  grid-template-columns: repeat(2, 42px);
+  gap: .45rem;
+  transform: rotate(-7deg);
+}
+
+.sf-card-estrazione span {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: rgba(215, 254, 85, .1);
+  border: 1px solid rgba(215, 254, 85, .28);
+  color: #d7fe55;
+  font: 800 .95rem 'Orbitron', sans-serif;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, .28);
 }
 
 .sf-card-wheel-disc {

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { useNavigate } from 'react-router-dom'
 import { motion, useReducedMotion } from 'motion/react'
 import confetti from 'canvas-confetti'
 import { ArrowLeft, ArrowRight, Coins, Fingerprint, LockKeyhole, RotateCw, ShieldCheck, Smartphone, Sparkles, Ticket, Trophy, X } from 'lucide-react'
@@ -20,6 +21,7 @@ const gameCards: Array<{ type: GameType; title: string; subtitle: string; tag: s
 ]
 
 export function GamesPage({ user, onPlay, onBuyTicket, onComplete }: Props) {
+  const navigate = useNavigate()
   const [games, setGames] = useState<PlayableGame[]>([])
   const [selected, setSelected] = useState<GameType | null>(null)
   const [loading, setLoading] = useState(true)
@@ -104,6 +106,34 @@ export function GamesPage({ user, onPlay, onBuyTicket, onComplete }: Props) {
                 </motion.button>
               )
             })}
+            <motion.button
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: gameCards.length * .08 }}
+              onClick={() => navigate('/estrazione')}
+              className="sf-game-card sf-game-card-estrazione text-left"
+              style={gameCard}
+            >
+              <div className="sf-game-card-noise" />
+              <div className="sf-game-card-head">
+                <span className="sf-game-tag">LIVE DRAW</span>
+                <span style={pill}><Ticket size={13} /> 1-99</span>
+              </div>
+              <div className="sf-card-layout">
+                <div>
+                  <div className="sf-game-card-icon"><Ticket size={32} /></div>
+                  <h2 className="sf-game-card-title">Estrazione</h2>
+                  <p className="sf-game-card-copy">Compra un biglietto, scegli il numero e segui il sorteggio live.</p>
+                  <p className="sf-game-card-price"><Coins size={13} /> Un biglietto per utente</p>
+                </div>
+                <div className="sf-card-art sf-card-estrazione">
+                  <div><span>1</span><span>99</span></div>
+                </div>
+              </div>
+              <div className="sf-game-card-status is-ready">
+                <span className="sf-live-dot" /> Apri Estrazione <ArrowRight size={15} />
+              </div>
+            </motion.button>
           </div>
         )}
       </div>
