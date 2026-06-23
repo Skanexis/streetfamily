@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, useReducedMotion } from 'motion/react'
 import confetti from 'canvas-confetti'
-import { ArrowLeft, ArrowRight, Coins, Fingerprint, Gift, LockKeyhole, RotateCw, ShieldCheck, Smartphone, Sparkles, Ticket, Trophy, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Coins, Fingerprint, LockKeyhole, RotateCw, ShieldCheck, Smartphone, Sparkles, Ticket, Trophy, X } from 'lucide-react'
 import type { GamePlayResult, GameType, PlayableGame, TicketPurchaseResult, User } from '../data'
 import { getPlayableGames } from '../lib/api'
 import { italianErrorMessage } from '../lib/errors'
@@ -17,7 +17,6 @@ interface Props {
 const gameCards: Array<{ type: GameType; title: string; subtitle: string; tag: string; Icon: typeof Ticket }> = [
   { type: 'spin', title: 'Ruota dei premi', subtitle: 'Gira e scopri il premio', tag: 'LIVE', Icon: RotateCw },
   { type: 'scratch', title: 'Scratch', subtitle: 'Gratta la carta misteriosa', tag: 'REVEAL', Icon: Sparkles },
-  { type: 'box', title: 'Mystery Box', subtitle: 'Apri la cassa fortunata', tag: 'DROP', Icon: Gift },
 ]
 
 export function GamesPage({ user, onPlay, onBuyTicket, onComplete }: Props) {
@@ -41,7 +40,7 @@ export function GamesPage({ user, onPlay, onBuyTicket, onComplete }: Props) {
 
   const available = (type: GameType) => games.find(game => game.gameType === type && game.options.length > 0)
   const tickets = (type: GameType) => type === 'spin' ? user.spinTickets : type === 'scratch' ? user.scratchTickets : user.boxTickets
-  const totalTickets = user.spinTickets + user.scratchTickets + user.boxTickets
+  const totalTickets = user.spinTickets + user.scratchTickets
   const current = selected ? available(selected) : undefined
   const refresh = async () => {
     await onComplete()
@@ -72,7 +71,6 @@ export function GamesPage({ user, onPlay, onBuyTicket, onComplete }: Props) {
             <div className="sf-pass-tickets">
               <MiniTicket label="Ruota" value={user.spinTickets} />
               <MiniTicket label="Scratch" value={user.scratchTickets} />
-              <MiniTicket label="Box" value={user.boxTickets} />
             </div>
           </div>
         </section>
@@ -117,9 +115,7 @@ export function GamesPage({ user, onPlay, onBuyTicket, onComplete }: Props) {
             <WheelGame user={user} game={current} onPlay={onPlay} onBuyTicket={onBuyTicket} onComplete={refresh} />
           ) : selected === 'scratch' ? (
             <ScratchGame user={user} game={current} onPlay={onPlay} onBuyTicket={onBuyTicket} onComplete={refresh} />
-          ) : (
-            <BoxGame user={user} game={current} onPlay={onPlay} onComplete={refresh} />
-          )}
+          ) : null}
         </GameOverlay>
       , document.body)}
     </div>
@@ -509,56 +505,6 @@ function ScratchGame({ user, game, onPlay, onBuyTicket, onComplete }: { user: Us
   )
 }
 
-function BoxGame({ user, game, onPlay, onComplete }: { user: User; game: PlayableGame; onPlay: Props['onPlay']; onComplete: () => Promise<void> }) {
-  const reducedMotion = useReducedMotion()
-  const viewportRef = useRef<HTMLDivElement>(null)
-  const [result, setResult] = useState<GamePlayResult | null>(null)
-  const [items, setItems] = useState<Array<{ label: string; color: string }>>([])
-  const [x, setX] = useState(0)
-  const [busy, setBusy] = useState(false)
-  const [finished, setFinished] = useState(false)
-  const [error, setError] = useState('')
-  const start = async () => {
-    setBusy(true); setFinished(false); setResult(null); setX(0); setError('')
-    try {
-      const played = await onPlay('box')
-      const line = Array.from({ length: 110 }, (_, index) => game.options[index % game.options.length])
-      line[played.boxStopIndex] = { code: played.code, label: played.label, color: played.rewardColor }
-      setItems(line)
-      setResult(played)
-      requestAnimationFrame(() => {
-        const width = viewportRef.current?.clientWidth ?? 330
-        setX(-(played.boxStopIndex * 128) + width / 2 - 59)
-      })
-    } catch (caught) {
-      setBusy(false)
-      setError(italianErrorMessage(caught, 'Mystery Box non disponibile.'))
-    }
-  }
-  return (
-    <div className="sf-game-stage w-full text-center p-5 sm:p-7 rounded-3xl" style={gamePanel}>
-      <TicketBalance value={user.boxTickets} />
-      <div ref={viewportRef} className="sf-box-viewport relative overflow-hidden my-9 py-5">
-        <div className="sf-box-marker" />
-        {!items.length ? <div className="sf-idle-state sf-idle-compact"><Gift size={34} /><strong>Cassa chiusa</strong><span>Apri la scatola per avviare l'estrazione.</span></div> : (
-          <motion.div className="sf-box-reel flex gap-[10px]" animate={{ x }}
-            transition={{ duration: reducedMotion ? .25 : 4.2, ease: [0.1, 0.7, 0.1, 1] }}
-            onAnimationComplete={() => { if (x !== 0) { setBusy(false); setFinished(true); if (!reducedMotion) confetti({ particleCount: 44, spread: 52, colors: ['#8B5CF6', '#22C55E'] }); void onComplete() } }}>
-            {items.map((item, index) => (
-              <div key={index} className="sf-box-item shrink-0 flex items-center justify-center rounded-xl px-2" style={{ width: 118, height: 82, borderColor: item.color }}>
-                <span style={{ fontSize: 12 }}>{item.label}</span>
-              </div>
-            ))}
-          </motion.div>
-        )}
-      </div>
-      {finished && result && <Reward result={result} />}
-      {!items.length && <GameButton disabled={busy || user.boxTickets < 1} onClick={start} label={busy ? 'Apertura...' : user.boxTickets ? 'Apri Mystery Box' : 'Nessun biglietto'} />}
-      {error && <StateMessage text={error} tone="error" />}
-    </div>
-  )
-}
-
 function Reward({ result, compact = false }: { result: GamePlayResult; compact?: boolean }) {
   return (
     <div className={compact ? 'sf-reward-compact' : 'sf-reward-card p-4 mb-5 rounded-xl'}>
@@ -609,7 +555,7 @@ function GameArtwork({ type }: { type: GameType }) {
   if (type === 'scratch') {
     return <div className="sf-card-art sf-card-scratch"><div><span>SF</span><strong>?</strong></div></div>
   }
-  return <div className="sf-card-art sf-card-box"><div className="sf-card-box-lid" /><div className="sf-card-box-body"><span /></div></div>
+  return null
 }
 function playTicks(duration: number) {
   try {

@@ -17,7 +17,7 @@ export function HomePage({ navigate, user, products, levels, onProductSelect }: 
   const nextLevel = levels.find(level => level.level === user.level + 1)
   if (!currentLevel) return null
   const progress = nextLevel ? ((user.xp - currentLevel.xpMin) / (nextLevel.xpMin - currentLevel.xpMin)) * 100 : 100
-  const totalTickets = user.spinTickets + user.scratchTickets + user.boxTickets
+  const totalTickets = user.spinTickets + user.scratchTickets
   return <div style={{ paddingTop: 64 }}>
     <section className="relative overflow-hidden px-4 md:px-8 py-16 md:py-24" style={{ minHeight: 'calc(100vh - 92px)' }}>
       <div className="relative max-w-6xl mx-auto grid gap-12 lg:grid-cols-[1.1fr_.9fr] items-center">
@@ -44,8 +44,9 @@ export function HomePage({ navigate, user, products, levels, onProductSelect }: 
       <div className="flex justify-between mb-7"><div><div className="sf-kicker mb-3">Catalogo</div><h2 style={title}>Collezioni</h2></div><button onClick={() => navigate('catalog')} style={{ color: '#D7FE55' }}>Vedi tutto</button></div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">{products.slice(0, 4).map(product => <button key={product.id} onClick={() => { onProductSelect(product.id); navigate('catalog') }} className="text-left overflow-hidden" style={panel}><ProductCardMedia product={product} height={150} /><div className="p-4"><strong>{product.name}</strong><div style={{ ...caption, marginTop: 8 }}>da EUR {formatPrice(product.startingPrice)} / 25 g</div></div></button>)}</div>
     </div></section>
-    <section className="px-4 md:px-8 py-14"><div className="max-w-6xl mx-auto grid md:grid-cols-3 gap-4">
+    <section className="px-4 md:px-8 py-14"><div className="max-w-6xl mx-auto grid md:grid-cols-4 gap-4">
       <Info Icon={Ticket} title="Mini giochi" body="Ruota e Scratch usano biglietti acquistabili con gettoni; la Ruota resta premiata ogni 5 ordini completati." onClick={() => navigate('games')} />
+      <Info Icon={Ticket} title="Estrazione" body="Scegli un numero, compra il biglietto e segui il sorteggio live quando tutti i posti sono venduti." onClick={() => navigate('estrazione')} />
       <Info Icon={MapPin} title="MEETUP" body="Selezione città e minimi in grammi visibili nel regolamento." onClick={() => navigate('info')} />
       <Info Icon={Truck} title="DELIVERY LOCALE / TUTTA ITALIA" body="Disponibilità e tariffe visibili nel regolamento." onClick={() => navigate('info')} />
     </div></section>

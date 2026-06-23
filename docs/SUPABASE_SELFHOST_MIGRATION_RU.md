@@ -78,7 +78,7 @@ export PLATFORM_S3_SECRET_ACCESS_KEY='YOUR_SECRET_ACCESS_KEY'
 Запустите бэкап:
 
 ```bash
-./scripts/supabase_cloud_backup.sh
+./scripts/supabase_cloud_backup.shX
 ```
 
 После завершения в `backups/supabase-cloud-...` должны быть:
@@ -151,10 +151,10 @@ sudo certbot --nginx -d supa.streetfamily.net
 export BACKUP_DIR='/opt/apps/streetfamily/backups/supabase-cloud-YYYYMMDDTHHMMSSZ'
 ```
 
-Для restore используйте прямой доступ к контейнеру `supabase-db`. Не восстанавливайте через pooler/внешний порт: на внутренних storage-таблицах может быть `permission denied`, например для `buckets_vectors`.
+Возьмите `POSTGRES_PASSWORD` и `POOLER_TENANT_ID` из `/opt/supabase-project/.env`, затем задайте self-hosted connection string:
 
 ```bash
-export SELFHOST_DB_CONTAINER=supabase-db
+export SELFHOST_DB_URL='postgres://postgres.POOLER_TENANT_ID:POSTGRES_PASSWORD@127.0.0.1:5432/postgres'
 ```
 
 Восстановление запускается только с явным подтверждением:
@@ -176,10 +176,10 @@ diff -u "$BACKUP_DIR/row-counts-before.tsv" "$BACKUP_DIR/row-counts-after.tsv" |
 Если старый Supabase Cloud еще доступен, копируйте напрямую S3 -> S3:
 
 ```bash
-export PLATFORM_S3_ENDPOINT='https://PROJECT_REF.storage.supabase.co/storage/v1/s3'
-export PLATFORM_S3_REGION='YOUR_REGION'
-export PLATFORM_S3_ACCESS_KEY_ID='YOUR_ACCESS_KEY_ID'
-export PLATFORM_S3_SECRET_ACCESS_KEY='YOUR_SECRET_ACCESS_KEY'
+export PLATFORM_S3_ENDPOINT='https://ukprevamuufeoxrsnyrr.storage.supabase.co/storage/v1/s3'
+export PLATFORM_S3_REGION='eu-central-1'
+export PLATFORM_S3_ACCESS_KEY_ID='f70d0b6d1f3662a6a345485c6289f968'
+export PLATFORM_S3_SECRET_ACCESS_KEY='490ac8e04d48f1943c076cf5b14607aca0cb1004a6256df18206beff11089226'
 
 export SELFHOST_S3_ENDPOINT='https://supa.streetfamily.net/storage/v1/s3'
 export SELFHOST_S3_REGION='stub'
@@ -274,54 +274,6 @@ curl "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getWebhookInfo"
 7. Тестовый заказ создает запись и уведомление в Telegram.
 
 Только после этого старый Supabase Cloud можно считать неактивным.
-
-## 9. Чистый self-host, сохранить только approved ID
-
-Если полная миграция Cloud -> self-host восстановилась криво, можно очистить self-host и оставить только список одобренных Telegram ID.
-
-Этот сценарий:
-
-- не трогает Supabase Cloud;
-- не удаляет старые self-host volumes, а переименовывает их с timestamp;
-- накатывает чистую схему из `supabase/migrations/*.sql`;
-- возвращает только `staging_allowlist` со статусом `approved`;
-- очищает `auth.users`, `profiles`, заказы, KYC, Storage-файлы и старые сессии.
-
-На VPS:
-
-```bash
-cd /opt/apps/streetfamily
-git pull origin main
-chmod +x scripts/*.sh
-
-CONFIRM_CLEAN_SELFHOST=yes ./scripts/supabase_clean_selfhost_keep_approved.sh
-```
-
-После успешного reset:
-
-```bash
-cd /opt/supabase-project
-docker compose up -d
-sleep 15
-
-cd /opt/apps/streetfamily
-export SELFHOST_SUPABASE_DIR=/opt/supabase-project
-export ENV_DEPLOY_FILE=/opt/apps/streetfamily/.env.deploy
-./scripts/supabase_install_selfhost_functions.sh
-
-sudo docker compose --env-file .env.deploy -p street-family build --no-cache web
-sudo docker compose --env-file .env.deploy -p street-family up -d --force-recreate web
-
-set -a
-source /opt/apps/streetfamily/.env.deploy
-set +a
-
-curl "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook?url=https://supa.streetfamily.net/functions/v1/telegram-bot-webhook&secret_token=${TELEGRAM_WEBHOOK_SECRET}"
-curl "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getWebhookInfo"
-curl http://127.0.0.1:18087/healthz
-```
-
-Пользователи должны заново зайти через `/start`. Если их Telegram ID был `approved`, они пройдут сразу, а `auth.users` и `profiles` создадутся заново чистыми.
 
 ## Источники
 

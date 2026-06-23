@@ -14,7 +14,7 @@ export function ProfilePage({ user, levels, orders, ledger, rewards, onChanged, 
   const [tab, setTab] = useState<Tab>('orders')
   const current = levels.find(level => level.level === user.level) ?? levels[0]
   if (!current) return null
-  const totalTickets = user.spinTickets + user.scratchTickets + user.boxTickets
+  const totalTickets = user.spinTickets + user.scratchTickets
   return <div className="min-h-screen px-4 md:px-8 py-10" style={{ paddingTop: 100 }}>
     <div className="max-w-2xl mx-auto">
       <div className="sf-kicker mb-5">Profilo</div>

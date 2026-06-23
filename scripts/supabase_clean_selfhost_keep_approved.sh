@@ -74,10 +74,19 @@ alter table public.staging_allowlist
   add column if not exists access_decided_at timestamptz;
 
 update public.staging_allowlist
-set access_status = case when enabled then 'approved' else 'rejected' end,
-    access_requested_at = coalesce(access_requested_at, created_at),
-    access_decided_at = case when enabled then coalesce(access_decided_at, created_at) else access_decided_at end
-where access_status is null or access_status = 'approved' or not enabled;
+set access_status = 'approved'
+where enabled is true;
+
+update public.staging_allowlist
+set access_status = 'rejected'
+where enabled is not true;
+
+update public.staging_allowlist
+set access_requested_at = coalesce(access_requested_at, created_at, now());
+
+update public.staging_allowlist
+set access_decided_at = coalesce(access_decided_at, created_at, now())
+where enabled is true;
 SQL
 
 docker exec -i "$DB_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 --csv -c "
@@ -207,19 +216,25 @@ move_aside "volumes/db/data"
 move_aside "volumes/storage"
 move_aside "volumes/functions"
 
-echo "Starting clean database..."
-docker compose up -d db
+echo "Starting clean Supabase stack..."
+docker compose up -d
 until docker exec "$DB_CONTAINER" pg_isready -U postgres >/dev/null 2>&1; do
   sleep 2
 done
 
-echo "Waiting for Supabase internal schemas..."
-for _ in $(seq 1 60); do
-  if docker exec -i "$DB_CONTAINER" psql -U postgres -d postgres -Atc "select to_regnamespace('auth') is not null and to_regnamespace('storage') is not null;" | grep -q '^t$'; then
+echo "Waiting for Supabase internal schemas and Storage tables..."
+for _ in $(seq 1 120); do
+  if docker exec -i "$DB_CONTAINER" psql -U postgres -d postgres -Atc "select to_regclass('auth.users') is not null and to_regclass('storage.buckets') is not null and to_regclass('storage.objects') is not null;" | grep -q '^t$'; then
     break
   fi
   sleep 2
 done
+
+if ! docker exec -i "$DB_CONTAINER" psql -U postgres -d postgres -Atc "select to_regclass('storage.buckets') is not null;" | grep -q '^t$'; then
+  echo "storage.buckets was not created by self-hosted Supabase. Check storage container logs:" >&2
+  echo "  cd $SELFHOST_SUPABASE_DIR && docker compose logs --tail=100 storage" >&2
+  exit 1
+fi
 
 echo "Applying local app migrations..."
 cd "$ROOT_DIR"

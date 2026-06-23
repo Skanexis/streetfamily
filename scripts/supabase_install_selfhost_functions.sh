@@ -29,7 +29,7 @@ ENV_FUNCTIONS="$SELFHOST_SUPABASE_DIR/.env.functions"
 OVERRIDE_FILE="$SELFHOST_SUPABASE_DIR/docker-compose.functions-env.yml"
 
 echo "Writing self-hosted Edge Functions env file..."
-grep -E '^(TELEGRAM_|KYC_PURGE_SECRET=)' "$ENV_DEPLOY_FILE" > "$ENV_FUNCTIONS"
+grep -E '^(TELEGRAM_|KYC_PURGE_SECRET=|ESTRAZIONE_)' "$ENV_DEPLOY_FILE" > "$ENV_FUNCTIONS"
 chmod 600 "$ENV_FUNCTIONS"
 
 cat > "$OVERRIDE_FILE" <<'EOF'
@@ -55,11 +55,56 @@ rsync -a \
   "$SELFHOST_SUPABASE_DIR/volumes/functions/"
 
 if [ ! -d "$SELFHOST_SUPABASE_DIR/volumes/functions/main" ]; then
-  cat >&2 <<'EOF'
-WARNING: volumes/functions/main is missing.
-The official self-hosted Supabase functions service expects this directory.
-Check the self-hosted Supabase installation before relying on Edge Functions.
+  mkdir -p "$SELFHOST_SUPABASE_DIR/volumes/functions/main"
+fi
+
+if [ ! -f "$SELFHOST_SUPABASE_DIR/volumes/functions/main/index.ts" ]; then
+  cat > "$SELFHOST_SUPABASE_DIR/volumes/functions/main/index.ts" <<'EOF'
+console.log('main function started')
+
+Deno.serve(async (req: Request) => {
+  const url = new URL(req.url)
+  const parts = url.pathname.split('/').filter(Boolean)
+  const serviceName = parts[0] === 'functions' && parts[1] === 'v1' ? parts[2] : parts[0]
+
+  if (!serviceName) {
+    return new Response(JSON.stringify({ error: 'missing function name in request' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
+  if (serviceName === 'main' || serviceName.startsWith('_')) {
+    return new Response(JSON.stringify({ error: 'function not found' }), {
+      status: 404,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
+  const servicePath = `/home/deno/functions/${serviceName}`
+  const env = Deno.env.toObject()
+  const envVars = Object.keys(env).map((key) => [key, env[key]])
+
+  try {
+    const worker = await EdgeRuntime.userWorkers.create({
+      servicePath,
+      memoryLimitMb: 150,
+      workerTimeoutMs: 60 * 1000,
+      noModuleCache: false,
+      importMapPath: null,
+      envVars,
+    })
+    return await worker.fetch(req)
+  } catch (caught) {
+    console.error(caught)
+    return new Response(JSON.stringify({ error: String(caught) }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+})
 EOF
+  echo "Created self-hosted Edge Functions main entrypoint."
 fi
 
 echo "Recreating functions container..."

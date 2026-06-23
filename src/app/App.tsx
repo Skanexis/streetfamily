@@ -6,6 +6,7 @@ import { BottomNav } from './components/BottomNav'
 import { HomePage } from './components/HomePage'
 import { CatalogPage } from './components/CatalogPage'
 import { GamesPage } from './components/GamesPage'
+import { EstrazioneLivePage, EstrazionePage } from './components/EstrazionePage'
 import { ProfilePage } from './components/ProfilePage'
 import { InfoPage } from './components/InfoPage'
 import { ContactsPage } from './components/ContactsPage'
@@ -19,7 +20,7 @@ import { requireSupabase } from './lib/supabase'
 import { italianErrorMessage } from './lib/errors'
 import '../styles/fonts.css'
 
-const PAGE_PATHS: Record<Page, string> = { home: '/', catalog: '/catalog', games: '/games', profile: '/profile', info: '/info', contacts: '/contacts' }
+const PAGE_PATHS: Record<Page, string> = { home: '/', catalog: '/catalog', games: '/games', estrazione: '/estrazione', profile: '/profile', info: '/info', contacts: '/contacts' }
 
 export default function App() {
   return (
@@ -157,6 +158,8 @@ function MemberApplication() {
     ? 'catalog'
     : location.pathname === '/games'
       ? 'games'
+      : location.pathname.startsWith('/estrazione')
+        ? 'estrazione'
     : location.pathname === '/profile'
         ? 'profile'
         : location.pathname === '/info'
@@ -199,6 +202,8 @@ function MemberApplication() {
             <Route path="/" element={<HomePage navigate={navigate} products={products} levels={levels} addToCart={addToCart} user={user} onProductSelect={(id) => { setSelectedProductId(id); navigate('catalog') }} />} />
             <Route path="/catalog" element={<CatalogPage products={products} categories={catalogCategories} feedback={feedback} addToCart={addToCart} selectedProductId={selectedProductId} onProductSelect={setSelectedProductId} />} />
             <Route path="/games" element={<GamesPage user={user} onPlay={playGame} onBuyTicket={buyGameTicket} onComplete={refreshAccount} />} />
+            <Route path="/estrazione" element={<EstrazionePage user={user} onComplete={refreshAccount} />} />
+            <Route path="/estrazione/live/:token" element={<EstrazioneLivePage />} />
             <Route path="/profile" element={<ProfilePage user={user} levels={levels} orders={orders} ledger={ledger} rewards={rewards} onChanged={refreshAccount} onAdmin={() => navigateRouter('/admin')} />} />
             <Route path="/info" element={<InfoPage serviceAreas={serviceAreas} />} />
             <Route path="/contacts" element={<ContactsPage />} />

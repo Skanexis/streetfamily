@@ -3,8 +3,13 @@ import { italianErrorMessage } from './errors'
 import type {
   Broadcast,
   CartItem,
+  AdminEstrazione,
+  CurrentEstrazione,
   DashboardData,
   DemoInfo,
+  Estrazione,
+  EstrazioneUserTicket,
+  EstrazioneWinner,
   GamePlayResult,
   Feedback,
   LedgerEntry,
@@ -71,6 +76,64 @@ function ledgerReason(reason: string) {
     .replace(/^Ticket ruota guadagnato$/, 'Biglietto ruota guadagnato')
     .replace(/^Biglietto ruota acquistato$/, 'Biglietto ruota acquistato')
     .replace(/^Biglietto Scratch acquistato$/, 'Biglietto Scratch acquistato')
+    .replace(/^Biglietto Estrazione/, 'Biglietto Estrazione')
+    .replace(/^Rimborso Estrazione$/, 'Rimborso Estrazione')
+}
+
+function mapEstrazione(row: RecordValue | null): Estrazione | null {
+  if (!row) return null
+  return {
+    id: row.id,
+    title: row.title,
+    status: row.status,
+    ticketPrice: Number(row.ticket_price ?? 0),
+    minCompletedOrders: Number(row.min_completed_orders ?? 0),
+    maxTickets: Number(row.max_tickets ?? 0),
+    winnersCount: Number(row.winners_count ?? 0),
+    scheduledAt: row.scheduled_at ?? null,
+    publicToken: row.public_token,
+    adminNotifiedAt: row.admin_notified_at ?? null,
+    reminderSentAt: row.reminder_sent_at ?? null,
+    drawStartedAt: row.draw_started_at ?? null,
+    completedAt: row.completed_at ?? null,
+    cancelledAt: row.cancelled_at ?? null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    soldCount: Number(row.sold_count ?? 0),
+    remainingCount: Number(row.remaining_count ?? Math.max(Number(row.max_tickets ?? 0) - Number(row.sold_count ?? 0), 0)),
+  }
+}
+
+function mapEstrazioneTicket(row: RecordValue | null): EstrazioneUserTicket | null {
+  if (!row) return null
+  return {
+    id: row.id,
+    selectedNumber: Number(row.selected_number ?? 0),
+    paidPoints: Number(row.paid_points ?? 0),
+    purchasedAt: row.purchased_at,
+  }
+}
+
+function mapEstrazioneWinner(row: RecordValue): EstrazioneWinner {
+  return {
+    place: Number(row.place ?? 0),
+    selectedNumber: Number(row.selected_number ?? 0),
+    username: row.username ?? null,
+    telegramSubject: row.telegram_subject ?? null,
+    ticketId: row.ticket_id,
+  }
+}
+
+function mapCurrentEstrazione(row: RecordValue): CurrentEstrazione {
+  return {
+    estrazione: mapEstrazione(row.estrazione),
+    soldNumbers: (row.sold_numbers ?? []).map((value: number | string) => Number(value)),
+    userTicket: mapEstrazioneTicket(row.user_ticket),
+    winners: (row.winners ?? []).map(mapEstrazioneWinner),
+    userCompletedOrders: Number(row.user_completed_orders ?? 0),
+    userEligible: Boolean(row.user_eligible),
+    userBalance: Number(row.user_balance ?? 0),
+  }
 }
 
 function mediaSort(left: RecordValue, right: RecordValue) {
@@ -250,7 +313,7 @@ export async function getPlayableGames(): Promise<PlayableGame[]> {
   const { data, error } = await db.from('game_configs')
     .select('game_type,title,cost,game_reward_options(code,label,color,active)')
     .eq('active', true)
-    .in('game_type', ['spin', 'scratch', 'box'])
+    .in('game_type', ['spin', 'scratch'])
   if (error) throw new Error(italianErrorMessage(error.message, 'Caricamento giochi non riuscito.'))
   return (data ?? []).map((game: RecordValue) => ({
     gameType: game.game_type,
@@ -299,6 +362,21 @@ export async function buyGameTicket(gameType: GameType): Promise<TicketPurchaseR
     scratchTickets: result.scratch_tickets,
     boxTickets: result.box_tickets,
   }
+}
+
+export async function getCurrentEstrazione(publicToken?: string): Promise<CurrentEstrazione> {
+  const db = requireSupabase()
+  const response = await db.rpc('get_current_estrazione', { p_public_token: publicToken ?? null })
+  return mapCurrentEstrazione(unwrap(response) as RecordValue)
+}
+
+export async function buyEstrazioneTicket(estrazioneId: string, selectedNumber: number): Promise<CurrentEstrazione> {
+  const db = requireSupabase()
+  const response = await db.rpc('buy_estrazione_ticket', {
+    p_estrazione_id: estrazioneId,
+    p_selected_number: selectedNumber,
+  })
+  return mapCurrentEstrazione(unwrap(response) as RecordValue)
 }
 
 export async function getServiceAreas(): Promise<ServiceArea[]> {
@@ -405,6 +483,78 @@ export async function adminSimulateGame(gameType: GameType, attempts: number): P
 export async function adminSetGameTicketPrice(price: number) {
   const { error } = await requireSupabase().rpc('admin_set_game_ticket_price', { p_price: price })
   if (error) throw new Error(italianErrorMessage(error.message))
+}
+
+function mapAdminEstrazione(row: RecordValue): AdminEstrazione {
+  const base = mapEstrazione({
+    ...row,
+    remaining_count: Math.max(Number(row.max_tickets ?? 0) - Number(row.sold_count ?? 0), 0),
+  })
+  if (!base) throw new Error('Estrazione non valida.')
+  return {
+    ...base,
+    tickets: (row.tickets ?? []).map((ticket: RecordValue) => ({
+      id: ticket.id,
+      userId: ticket.user_id,
+      username: ticket.username ?? null,
+      telegramSubject: ticket.telegram_subject ?? null,
+      selectedNumber: Number(ticket.selected_number ?? 0),
+      paidPoints: Number(ticket.paid_points ?? 0),
+      status: ticket.status,
+      purchasedAt: ticket.purchased_at,
+    })),
+    winners: (row.winners ?? []).map(mapEstrazioneWinner),
+    messageCounts: {
+      adminSoldOut: Number(row.message_counts?.admin_sold_out ?? 0),
+      reminder: Number(row.message_counts?.reminder ?? 0),
+      errors: Number(row.message_counts?.errors ?? 0),
+    },
+  }
+}
+
+function mapAdminEstrazioni(data: unknown): AdminEstrazione[] {
+  return ((data as RecordValue[]) ?? []).map(mapAdminEstrazione)
+}
+
+export async function adminListEstrazioni(): Promise<AdminEstrazione[]> {
+  return mapAdminEstrazioni(unwrap(await requireSupabase().rpc('admin_list_estrazioni')))
+}
+
+export async function adminSaveEstrazione(input: {
+  id: string | null
+  title: string
+  ticketPrice: number
+  minCompletedOrders: number
+  maxTickets: number
+  winnersCount: number
+}): Promise<AdminEstrazione[]> {
+  return mapAdminEstrazioni(unwrap(await requireSupabase().rpc('admin_upsert_estrazione', {
+    p_id: input.id,
+    p_title: input.title,
+    p_ticket_price: input.ticketPrice,
+    p_min_completed_orders: input.minCompletedOrders,
+    p_max_tickets: input.maxTickets,
+    p_winners_count: input.winnersCount,
+  })))
+}
+
+export async function adminOpenEstrazione(id: string): Promise<AdminEstrazione[]> {
+  return mapAdminEstrazioni(unwrap(await requireSupabase().rpc('admin_open_estrazione', { p_id: id })))
+}
+
+export async function adminScheduleEstrazione(id: string, scheduledAt: string): Promise<AdminEstrazione[]> {
+  return mapAdminEstrazioni(unwrap(await requireSupabase().rpc('admin_schedule_estrazione', {
+    p_id: id,
+    p_scheduled_at: scheduledAt,
+  })))
+}
+
+export async function adminCancelEstrazione(id: string): Promise<AdminEstrazione[]> {
+  return mapAdminEstrazioni(unwrap(await requireSupabase().rpc('admin_cancel_estrazione', { p_id: id })))
+}
+
+export async function adminRunEstrazione(id: string): Promise<AdminEstrazione[]> {
+  return mapAdminEstrazioni(unwrap(await requireSupabase().rpc('admin_run_estrazione', { p_id: id })))
 }
 
 export async function getKycStatus(): Promise<KycStatus> {

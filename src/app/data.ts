@@ -1,4 +1,4 @@
-export type Page = 'home' | 'catalog' | 'games' | 'profile' | 'info' | 'contacts'
+export type Page = 'home' | 'catalog' | 'games' | 'estrazione' | 'profile' | 'info' | 'contacts'
 export type GameType = 'spin' | 'scratch' | 'box'
 export type ScenarioType = 'meetup' | 'delivery_zone' | 'delivery_italia'
 
@@ -141,6 +141,71 @@ export interface TicketPurchaseResult {
   spinTickets: number
   scratchTickets: number
   boxTickets: number
+}
+
+export type EstrazioneStatus = 'draft' | 'open' | 'sold_out' | 'scheduled' | 'running' | 'completed' | 'cancelled'
+
+export interface Estrazione {
+  id: string
+  title: string
+  status: EstrazioneStatus
+  ticketPrice: number
+  minCompletedOrders: number
+  maxTickets: number
+  winnersCount: number
+  scheduledAt: string | null
+  publicToken: string
+  adminNotifiedAt: string | null
+  reminderSentAt: string | null
+  drawStartedAt: string | null
+  completedAt: string | null
+  cancelledAt: string | null
+  createdAt: string
+  updatedAt: string
+  soldCount: number
+  remainingCount: number
+}
+
+export interface EstrazioneUserTicket {
+  id: string
+  selectedNumber: number
+  paidPoints: number
+  purchasedAt: string
+}
+
+export interface EstrazioneWinner {
+  place: number
+  selectedNumber: number
+  username: string | null
+  telegramSubject: string | null
+  ticketId?: string
+}
+
+export interface CurrentEstrazione {
+  estrazione: Estrazione | null
+  soldNumbers: number[]
+  userTicket: EstrazioneUserTicket | null
+  winners: EstrazioneWinner[]
+  userCompletedOrders: number
+  userEligible: boolean
+  userBalance: number
+}
+
+export interface AdminEstrazioneTicket extends EstrazioneUserTicket {
+  userId: string
+  username: string | null
+  telegramSubject: string | null
+  status: 'active' | 'cancelled'
+}
+
+export interface AdminEstrazione extends Estrazione {
+  tickets: AdminEstrazioneTicket[]
+  winners: EstrazioneWinner[]
+  messageCounts: {
+    adminSoldOut: number
+    reminder: number
+    errors: number
+  }
 }
 
 export interface ScenarioSelection {

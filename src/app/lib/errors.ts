@@ -9,6 +9,25 @@ const exactMessages: Record<string, string> = {
   TICKET_BALANCE_REQUIRED: 'Gettoni insufficienti per acquistare il biglietto.',
   TICKET_PRICE_INVALID: 'Prezzo biglietto non valido.',
   REWARD_DISTRIBUTION_INVALID: 'Le probabilità attive devono totalizzare esattamente 100%.',
+  ESTR_NOT_OPEN: 'Questa Estrazione non è aperta.',
+  ESTR_NUMBER_INVALID: 'Seleziona un numero valido da 1 a 99.',
+  ESTR_NUMBER_TAKEN: 'Questo numero è già stato scelto.',
+  ESTR_TICKET_ALREADY_BOUGHT: 'Hai già acquistato un biglietto per questa Estrazione.',
+  ESTR_TICKET_BALANCE_REQUIRED: 'Gettoni insufficienti per acquistare il biglietto Estrazione.',
+  ESTR_SOLD_OUT: 'Biglietti esauriti.',
+  ESTR_TITLE_INVALID: 'Titolo Estrazione non valido.',
+  ESTR_PRICE_INVALID: 'Prezzo Estrazione non valido.',
+  ESTR_MIN_ORDERS_INVALID: 'Numero minimo ordini non valido.',
+  ESTR_MAX_TICKETS_INVALID: 'Numero massimo biglietti non valido.',
+  ESTR_WINNERS_INVALID: 'Numero vincitori non valido.',
+  ESTR_NOT_FOUND: 'Estrazione non trovata.',
+  ESTR_LOCKED: 'Questa Estrazione non può più essere modificata.',
+  ESTR_OPEN_INVALID_STATUS: 'Puoi aprire solo una Estrazione in bozza.',
+  ESTR_SCHEDULE_TOO_SOON: 'Programma l’Estrazione almeno 75 secondi nel futuro.',
+  ESTR_SCHEDULE_INVALID_STATUS: 'Puoi programmare solo una Estrazione sold out.',
+  ESTR_NOT_ENOUGH_TICKETS: 'Non ci sono abbastanza biglietti per i posti vincenti.',
+  ESTR_RUN_INVALID_STATUS: 'Questa Estrazione non può essere avviata.',
+  ESTR_NOT_DUE: 'L’orario dell’Estrazione non è ancora arrivato.',
   ONLY_EARNED_WHEEL_AVAILABLE: 'È disponibile solo la ruota dei premi.',
   'Reward configuration invalid': 'Configurazione premi non valida.',
   'Staging access denied': 'Accesso non autorizzato.',
@@ -40,6 +59,7 @@ export function italianErrorMessage(error: unknown, fallback = 'Operazione non r
   if (message.startsWith('STOCK_NOT_ENOUGH:')) return `Magazzino insufficiente: ${message.split(':').slice(1).join(':')}.`
   if (message.startsWith('MINIMUM_UNITS_REQUIRED:')) return `Sono necessari almeno ${message.split(':')[1]} g.`
   if (message.startsWith('MAXIMUM_UNITS_SUPPORTED:')) return `Sono supportati al massimo ${message.split(':')[1]} g.`
+  if (message.startsWith('ESTR_COMPLETED_ORDERS_REQUIRED:')) return `Servono almeno ${message.split(':')[1]} ordini completati per acquistare il biglietto.`
   if (/more than one relationship|could not embed|schema cache/i.test(message)) return 'Impossibile caricare i dati collegati. Aggiorna la pagina e riprova.'
   if (/duplicate key|already registered|already exists|unique constraint/i.test(message)) return 'Esiste già un elemento con questi dati.'
   if (/foreign key|still referenced|violates.*constraint/i.test(message)) return 'Operazione non possibile perché esistono dati collegati.'

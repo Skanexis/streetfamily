@@ -1,13 +1,13 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
-import { MapPin, Package, Tags, Users, Gamepad2, ClipboardList, Settings, Megaphone, MessageSquare, Minus, Plus, Trash2, Warehouse, Wallet } from 'lucide-react'
+import { MapPin, Package, Tags, Users, Gamepad2, ClipboardList, Settings, Megaphone, MessageSquare, Minus, Plus, Trash2, Warehouse, Wallet, Ticket } from 'lucide-react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { adminAdjustWallet, adminBroadcastAction, adminDeleteAccount, adminDeleteGameOption, adminReviewAccessRequest, adminSaveGameOptions, adminSendLowStockNotifications, adminSetGameActive, adminSetGameTicketPrice, adminSimulateGame, getAdminDashboard, getAdminKycDocuments, reviewKyc } from '../lib/api'
+import { adminAdjustWallet, adminBroadcastAction, adminCancelEstrazione, adminDeleteAccount, adminDeleteGameOption, adminListEstrazioni, adminOpenEstrazione, adminReviewAccessRequest, adminRunEstrazione, adminSaveEstrazione, adminSaveGameOptions, adminScheduleEstrazione, adminSendLowStockNotifications, adminSetGameActive, adminSetGameTicketPrice, adminSimulateGame, getAdminDashboard, getAdminKycDocuments, reviewKyc } from '../lib/api'
 import { requireSupabase } from '../lib/supabase'
 import { italianErrorMessage } from '../lib/errors'
-import type { Broadcast, DashboardData, GameType, KycReviewDocument } from '../data'
+import type { AdminEstrazione, Broadcast, DashboardData, GameType, KycReviewDocument } from '../data'
 import { VideoPreview } from './ProductCardMedia'
 
-type Tab = 'catalog' | 'categories' | 'inventory' | 'broadcasts' | 'users' | 'balance' | 'orders' | 'kyc' | 'economy' | 'feedback' | 'settings' | 'regolamentazione'
+type Tab = 'catalog' | 'categories' | 'inventory' | 'broadcasts' | 'users' | 'balance' | 'orders' | 'kyc' | 'economy' | 'estrazione' | 'feedback' | 'settings' | 'regolamentazione'
 type Row = Record<string, any>
 type NumericDraft = string | number
 const productPriceUnits = [25, 50, 100, 300, 500, 1000, 2000, 3000, 4000, 5000]
@@ -40,6 +40,7 @@ export function AdminPage() {
   const [feedback, setFeedback] = useState<Row[]>([])
   const [rewardOptions, setRewardOptions] = useState<Row[]>([])
   const [tokenTiers, setTokenTiers] = useState<Row[]>([])
+  const [estrazioni, setEstrazioni] = useState<AdminEstrazione[]>([])
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -50,7 +51,7 @@ export function AdminPage() {
   const load = async () => {
     try {
       const db = requireSupabase()
-      const [summary, productResult, inventoryResult, categoryResult, profileResult, accessResult, orderResult, gameResult, locationResult, settingsResult, broadcastResult, feedbackResult, optionsResult, tiersResult] = await Promise.all([
+      const [summary, productResult, inventoryResult, categoryResult, profileResult, accessResult, orderResult, gameResult, locationResult, settingsResult, broadcastResult, feedbackResult, optionsResult, tiersResult, estrazioneResult] = await Promise.all([
         getAdminDashboard(),
         db.from('products').select('id,category_id,name,badge,promo_tag,published,featured,categories(name),product_variants(id,label,price,unit_amount,token_award,inventory_status(available)),product_media(id,url,storage_path,media_type,upload_status,sort_order)').order('name'),
         db.from('product_inventory').select('product_id,stock_quantity,notify_threshold_quantity,updated_at,products(id,name,published,categories(name))').order('updated_at', { ascending: false }),
@@ -63,8 +64,9 @@ export function AdminPage() {
         db.from('app_settings').select('*'),
         db.from('broadcasts').select('id,kind,title,message,product_id,status,published_at,created_at').order('created_at', { ascending: false }),
         db.from('feedback').select('id,rating,message,status,created_at,profiles:profiles!feedback_user_id_fkey(username),orders(display_id)').order('created_at', { ascending: false }),
-        db.from('game_reward_options').select('*,reward_definitions(id,label,kind)').in('game_type', ['spin', 'scratch', 'box']).order('id'),
+        db.from('game_reward_options').select('*,reward_definitions(id,label,kind)').in('game_type', ['spin', 'scratch']).order('id'),
         db.from('token_reward_tiers').select('*').order('minimum_units'),
+        adminListEstrazioni(),
       ])
       for (const result of [productResult, inventoryResult, categoryResult, profileResult, accessResult, orderResult, gameResult, locationResult, settingsResult, broadcastResult, feedbackResult, optionsResult, tiersResult]) {
         if (result.error) throw new Error(italianErrorMessage(result.error.message, 'Impossibile caricare il pannello amministrazione.'))
@@ -82,6 +84,7 @@ export function AdminPage() {
       setFeedback(feedbackResult.data ?? [])
       setRewardOptions(optionsResult.data ?? [])
       setTokenTiers(tiersResult.data ?? [])
+      setEstrazioni(estrazioneResult)
       setBroadcasts((broadcastResult.data ?? []).map((broadcast: Row) => ({
         id: broadcast.id,
         kind: broadcast.kind,
@@ -126,6 +129,7 @@ export function AdminPage() {
           ['orders', ClipboardList, 'Ordini'],
           ['kyc', Users, 'KYC'],
           ['economy', Gamepad2, 'Economia'],
+          ['estrazione', Ticket, 'Estrazione'],
           ['feedback', MessageSquare, 'Recensioni'],
           ['settings', Settings, 'Impostazioni'],
           ['regolamentazione', MapPin, 'Regolamentazione'],
@@ -142,6 +146,7 @@ export function AdminPage() {
       {tab === 'orders' && <OrdersAdmin orders={orders} initialGroup={requestedOrdersGroup} reload={load} />}
       {tab === 'kyc' && <KycRequestsAdmin profiles={profiles} initialKycUserId={requestedKycUserId} initialGroup={requestedKycGroup} reload={load} />}
       {tab === 'economy' && <EconomyAdmin games={games} options={rewardOptions} reload={load} />}
+      {tab === 'estrazione' && <EstrazioneAdmin estrazioni={estrazioni} reload={load} />}
       {tab === 'feedback' && <FeedbackAdmin feedback={feedback} reload={load} />}
       {tab === 'settings' && <SettingsAdmin settings={settings} tokenTiers={tokenTiers} reload={load} />}
       {tab === 'regolamentazione' && <RegolamentazioneAdmin locations={locations} reload={load} />}
@@ -1293,7 +1298,7 @@ function EconomyAdmin({ games, options, reload }: { games: Row[]; options: Row[]
     <Section title="Giochi e premi" note="Configura probabilità e simula le estrazioni. Ogni gioco attivo richiede probabilità totali pari al 100%.">
       <div className="sf-admin-game-config">
       <div className="sf-admin-game-tabs flex gap-2 overflow-x-auto mb-4">
-        {([['spin', 'Ruota'], ['scratch', 'Scratch'], ['box', 'Mystery Box']] as Array<[GameType, string]>).map(([type, label]) => (
+        {([['spin', 'Ruota'], ['scratch', 'Scratch']] as Array<[GameType, string]>).map(([type, label]) => (
           <button key={type} className={selectedGame === type ? 'is-active' : ''} onClick={() => setSelectedGame(type)}>{label}</button>
         ))}
       </div>
@@ -1309,7 +1314,7 @@ function EconomyAdmin({ games, options, reload }: { games: Row[]; options: Row[]
         <div>
           <div className="sf-admin-game-label">PREZZO BIGLIETTO</div>
           <strong>Ruota / Scratch</strong>
-          <p style={muted}>Un prezzo comune per l'acquisto di 1 biglietto. Mystery Box non usa acquisto.</p>
+          <p style={muted}>Un prezzo comune per l'acquisto di 1 biglietto. Estrazione ha impostazioni separate.</p>
         </div>
         <label style={muted}>Gettoni
           <input
@@ -1430,6 +1435,185 @@ function EconomyAdmin({ games, options, reload }: { games: Row[]; options: Row[]
       </div>
     </Section>
   )
+}
+
+function EstrazioneAdmin({ estrazioni, reload }: { estrazioni: AdminEstrazione[]; reload: () => Promise<void> }) {
+  const [selectedId, setSelectedId] = useState<string>('new')
+  const selected = selectedId === 'new' ? null : estrazioni.find(item => item.id === selectedId) ?? null
+  const [titleDraft, setTitleDraft] = useState('Estrazione Street Family')
+  const [priceDraft, setPriceDraft] = useState('20')
+  const [minOrdersDraft, setMinOrdersDraft] = useState('0')
+  const [maxTicketsDraft, setMaxTicketsDraft] = useState('99')
+  const [winnersDraft, setWinnersDraft] = useState('1')
+  const [scheduleDraft, setScheduleDraft] = useState('')
+  const [message, setMessage] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    const active = estrazioni.find(item => ['draft', 'open', 'sold_out', 'scheduled', 'running'].includes(item.status))
+    if (active) setSelectedId(active.id)
+    else if (estrazioni[0]) setSelectedId(estrazioni[0].id)
+    else setSelectedId('new')
+  }, [estrazioni])
+
+  useEffect(() => {
+    if (!selected) {
+      setTitleDraft('Estrazione Street Family')
+      setPriceDraft('20')
+      setMinOrdersDraft('0')
+      setMaxTicketsDraft('99')
+      setWinnersDraft('1')
+      setScheduleDraft('')
+      return
+    }
+    setTitleDraft(selected.title)
+    setPriceDraft(String(selected.ticketPrice))
+    setMinOrdersDraft(String(selected.minCompletedOrders))
+    setMaxTicketsDraft(String(selected.maxTickets))
+    setWinnersDraft(String(selected.winnersCount))
+    setScheduleDraft(selected.scheduledAt ? datetimeLocal(selected.scheduledAt) : '')
+  }, [selected?.id])
+
+  const runAction = async (action: () => Promise<unknown>, success: string) => {
+    setMessage('')
+    setBusy(true)
+    try {
+      await action()
+      setMessage(success)
+      await reload()
+    } catch (caught) {
+      setMessage(italianErrorMessage(caught, 'Operazione Estrazione non riuscita.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const save = async () => {
+    const ticketPrice = parseOptionalInteger(priceDraft)
+    const minCompletedOrders = parseOptionalInteger(minOrdersDraft)
+    const maxTickets = parseOptionalInteger(maxTicketsDraft)
+    const winnersCount = parseOptionalInteger(winnersDraft)
+    if (ticketPrice === null || minCompletedOrders === null || maxTickets === null || winnersCount === null) {
+      setMessage('Inserisci valori numerici validi.')
+      return
+    }
+    await runAction(() => adminSaveEstrazione({
+      id: selected?.id ?? null,
+      title: titleDraft,
+      ticketPrice,
+      minCompletedOrders,
+      maxTickets,
+      winnersCount,
+    }), 'Estrazione salvata.')
+  }
+
+  const schedule = async () => {
+    if (!selected || !scheduleDraft) {
+      setMessage('Seleziona data e ora per programmare l’Estrazione.')
+      return
+    }
+    await runAction(() => adminScheduleEstrazione(selected.id, new Date(scheduleDraft).toISOString()), 'Estrazione programmata.')
+  }
+
+  const cancel = async () => {
+    if (!selected) return
+    if (!window.confirm('Annullare questa Estrazione? I biglietti attivi saranno rimborsati in gettoni.')) return
+    await runAction(() => adminCancelEstrazione(selected.id), 'Estrazione annullata.')
+  }
+
+  const liveUrl = selected ? `${window.location.origin}/estrazione/live/${selected.publicToken}` : ''
+  const canEdit = !selected || !['running', 'completed', 'cancelled'].includes(selected.status)
+  const canOpen = selected?.status === 'draft'
+  const canSchedule = selected?.status === 'sold_out'
+  const canRun = selected && ['sold_out', 'scheduled'].includes(selected.status)
+  const canCancel = selected && !['completed', 'cancelled'].includes(selected.status)
+
+  return (
+    <Section title="Estrazione" note="Gestisci il sorteggio con numeri 1-99. Un utente può comprare un solo biglietto per ogni Estrazione.">
+      <div className="grid lg:grid-cols-[1fr_.85fr] gap-4">
+        <div className="p-4 rounded-xl" style={panel}>
+          <div className="flex flex-wrap gap-2 mb-4">
+            <button type="button" style={{ ...smallButton, background: selectedId === 'new' ? '#7E9CA8' : '#11181B' }} onClick={() => setSelectedId('new')}>+ Nuova</button>
+            {estrazioni.map(item => (
+              <button key={item.id} type="button" style={{ ...smallButton, background: selectedId === item.id ? '#7E9CA8' : '#11181B' }} onClick={() => setSelectedId(item.id)}>
+                {item.title} / {estrazioneStatusLabel(item.status)}
+              </button>
+            ))}
+          </div>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <label style={muted}>Titolo
+              <input value={titleDraft} disabled={!canEdit} onChange={event => setTitleDraft(event.currentTarget.value)} style={{ ...input, display: 'block', width: '100%', marginTop: 5 }} />
+            </label>
+            <label style={muted}>Prezzo biglietto / gettoni
+              <input inputMode="numeric" value={priceDraft} disabled={!canEdit} onChange={event => setPriceDraft(integerDraft(event.currentTarget.value))} style={{ ...input, display: 'block', width: '100%', marginTop: 5 }} />
+            </label>
+            <label style={muted}>Ordini completati minimi
+              <input inputMode="numeric" value={minOrdersDraft} disabled={!canEdit} onChange={event => setMinOrdersDraft(integerDraft(event.currentTarget.value))} style={{ ...input, display: 'block', width: '100%', marginTop: 5 }} />
+            </label>
+            <label style={muted}>Biglietti massimi
+              <input inputMode="numeric" value={maxTicketsDraft} disabled={!canEdit} onChange={event => setMaxTicketsDraft(integerDraft(event.currentTarget.value))} style={{ ...input, display: 'block', width: '100%', marginTop: 5 }} />
+            </label>
+            <label style={muted}>Posti vincenti
+              <input inputMode="numeric" value={winnersDraft} disabled={!canEdit} onChange={event => setWinnersDraft(integerDraft(event.currentTarget.value))} style={{ ...input, display: 'block', width: '100%', marginTop: 5 }} />
+            </label>
+            <label style={muted}>Programma data/ora
+              <input type="datetime-local" value={scheduleDraft} disabled={!canSchedule} onChange={event => setScheduleDraft(event.currentTarget.value)} style={{ ...input, display: 'block', width: '100%', marginTop: 5 }} />
+            </label>
+          </div>
+          <div className="flex flex-wrap gap-2 mt-4">
+            <button type="button" disabled={busy || !canEdit} style={{ ...primary, opacity: busy || !canEdit ? .55 : 1 }} onClick={() => { void save() }}>{selected ? 'Salva' : 'Crea bozza'}</button>
+            {canOpen && <button type="button" disabled={busy} style={smallButton} onClick={() => { void runAction(() => adminOpenEstrazione(selected.id), 'Estrazione aperta.') }}>Apri vendita</button>}
+            {canSchedule && <button type="button" disabled={busy} style={smallButton} onClick={() => { void schedule() }}>Programma</button>}
+            {canRun && <button type="button" disabled={busy} style={smallButton} onClick={() => { void runAction(() => adminRunEstrazione(selected.id), 'Estrazione eseguita.') }}>Esegui ora</button>}
+            {canCancel && <button type="button" disabled={busy} style={dangerButton} onClick={() => { void cancel() }}>Annulla</button>}
+          </div>
+          {message && <p className="mt-4" style={{ color: message.includes('non riuscita') || message.includes('valori') ? '#EF4444' : '#D7FE55' }}>{message}</p>}
+          {selected && (
+            <div className="mt-4 p-3 rounded-xl" style={accent}>
+              <div style={muted}>Link live</div>
+              <a href={liveUrl} target="_blank" rel="noreferrer" style={{ color: '#D7FE55', wordBreak: 'break-all' }}>{liveUrl}</a>
+            </div>
+          )}
+        </div>
+        <div className="p-4 rounded-xl" style={panel}>
+          {!selected ? (
+            <p style={muted}>Crea una bozza, poi apri la vendita biglietti.</p>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-2 mb-4">
+                <EstrazioneMetric label="Stato" value={estrazioneStatusLabel(selected.status)} />
+                <EstrazioneMetric label="Venduti" value={`${selected.soldCount}/${selected.maxTickets}`} />
+                <EstrazioneMetric label="Reminder TG" value={selected.messageCounts.reminder} />
+                <EstrazioneMetric label="Errori TG" value={selected.messageCounts.errors} />
+              </div>
+              <div className="mb-4">
+                <h3 style={{ ...heading, fontSize: 17 }}>Numeri venduti</h3>
+                <div className="sf-admin-number-strip">
+                  {selected.tickets.filter(ticket => ticket.status === 'active').map(ticket => <span key={ticket.id}>{String(ticket.selectedNumber).padStart(2, '0')}</span>)}
+                  {!selected.tickets.some(ticket => ticket.status === 'active') && <small style={muted}>Nessun biglietto venduto.</small>}
+                </div>
+              </div>
+              {selected.winners.length > 0 && (
+                <div>
+                  <h3 style={{ ...heading, fontSize: 17 }}>Vincitori</h3>
+                  {selected.winners.map(winner => (
+                    <div key={winner.place} className="flex justify-between p-3 mb-2 rounded-xl" style={row}>
+                      <span>{winner.place}° posto / n. {String(winner.selectedNumber).padStart(2, '0')}</span>
+                      <strong>@{winner.username ?? winner.telegramSubject ?? 'utente'}</strong>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </Section>
+  )
+}
+
+function EstrazioneMetric({ label, value }: { label: string; value: string | number }) {
+  return <div className="p-3 rounded-xl" style={row}><div style={muted}>{label}</div><strong style={{ color: '#D7FE55' }}>{value}</strong></div>
 }
 
 function FeedbackAdmin({ feedback, reload }: { feedback: Row[]; reload: () => Promise<void> }) {
@@ -1727,6 +1911,24 @@ function formatWeightLabel(grams: number) {
 function formatItalianNumber(value: number, digits: number) {
   return value.toLocaleString('it-IT', { minimumFractionDigits: 0, maximumFractionDigits: digits })
 }
+function estrazioneStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    draft: 'Bozza',
+    open: 'Aperta',
+    sold_out: 'Sold out',
+    scheduled: 'Programmata',
+    running: 'In corso',
+    completed: 'Completata',
+    cancelled: 'Annullata',
+  }
+  return labels[status] ?? status
+}
+function datetimeLocal(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+  return local.toISOString().slice(0, 16)
+}
 function isTab(value: string | null): value is Tab {
   return value === 'catalog'
     || value === 'categories'
@@ -1737,6 +1939,7 @@ function isTab(value: string | null): value is Tab {
     || value === 'orders'
     || value === 'kyc'
     || value === 'economy'
+    || value === 'estrazione'
     || value === 'feedback'
     || value === 'settings'
     || value === 'regolamentazione'
