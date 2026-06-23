@@ -188,22 +188,16 @@ Deno.serve(async req => {
   }
   const generated = await db.auth.admin.generateLink({ type: 'magiclink', email, options: { data: metadata } })
   if (generated.error) return json({ error: publicErrorMessage(generated.error.message, 'Accesso Telegram non riuscito.') }, 500)
-  if (!profile) {
-    const userId = generated.data.user?.id
-    if (!userId) return json({ error: 'Creazione account non riuscita.' }, 500)
-    const repaired = await db.from('profiles').upsert({
-      id: userId,
-      telegram_subject: telegramId,
-      username: metadata.username,
-      role: isAdmin ? 'admin' : 'user',
-    }, { onConflict: 'id' })
-    if (repaired.error) return json({ error: publicErrorMessage(repaired.error.message, 'Creazione account non riuscita.') }, 500)
-    const wallet = await db.from('wallet_balances').upsert({ user_id: userId, points: 0 }, { onConflict: 'user_id', ignoreDuplicates: true })
-    if (wallet.error) return json({ error: publicErrorMessage(wallet.error.message, 'Creazione account non riuscita.') }, 500)
-  } else {
-    const updated = await db.from('profiles').update({ username: metadata.username, role: isAdmin ? 'admin' : 'user' }).eq('id', profile.id)
-    if (updated.error) return json({ error: publicErrorMessage(updated.error.message, 'Accesso Telegram non riuscito.') }, 500)
-  }
+  const userId = generated.data.user?.id
+  if (!userId) return json({ error: 'Creazione account non riuscita.' }, 500)
+  const repaired = await db.rpc('repair_auth_profile', {
+    p_user_id: userId,
+    p_telegram_subject: telegramId,
+    p_username: metadata.username,
+    p_avatar_url: null,
+    p_role: isAdmin ? 'admin' : 'user',
+  })
+  if (repaired.error) return json({ error: publicErrorMessage(repaired.error.message, 'Accesso Telegram non riuscito.') }, 500)
   const authTokenHash = generated.data.properties.hashed_token
   await db.from('telegram_login_challenges').update({
     telegram_id: telegramId,

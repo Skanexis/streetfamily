@@ -131,14 +131,26 @@ export function CallbackPage() {
 }
 
 export function AccessDeniedPage() {
-  const { logout } = useAuth()
+  const { logout, refreshProfile } = useAuth()
+  const [checking, setChecking] = useState(false)
+  const check = async () => {
+    setChecking(true)
+    try {
+      await refreshProfile()
+    } finally {
+      setChecking(false)
+    }
+  }
   return (
     <Centered>
       <div style={card}>
         <ShieldAlert size={36} style={{ color: '#F59E0B', marginBottom: 15 }} />
         <h1 style={{ fontFamily: 'Space Grotesk', fontWeight: 700 }}>Accesso non autorizzato</h1>
         <p style={{ color: 'rgba(245,245,245,.65)', margin: '12px 0 24px' }}>Il tuo account Telegram non è autorizzato.</p>
-        <button style={primaryButton} onClick={logout}>Esci</button>
+        <div className="grid gap-2">
+          <button style={primaryButton} onClick={check} disabled={checking}>{checking ? 'Verifica...' : 'Verifica stato'}</button>
+          <button style={{ ...primaryButton, background: '#11181B', border: '1px solid rgba(126,156,168,.25)' }} onClick={logout}>Esci</button>
+        </div>
       </div>
     </Centered>
   )
