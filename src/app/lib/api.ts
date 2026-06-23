@@ -93,6 +93,10 @@ function mapEstrazione(row: RecordValue | null): Estrazione | null {
     instagramRequired: Boolean(row.instagram_required),
     instagramTargetUsername: row.instagram_target_username ?? '',
     instagramVerificationUrl: row.instagram_verification_url ?? '',
+    instagramTagFriendsCount: Number(row.instagram_tag_friends_count ?? 1),
+    prizeFirstValue: Number(row.prize_first_value ?? 600),
+    prizeSecondValue: Number(row.prize_second_value ?? 300),
+    prizeThirdValue: Number(row.prize_third_value ?? 100),
     scheduledAt: row.scheduled_at ?? null,
     publicToken: row.public_token,
     adminNotifiedAt: row.admin_notified_at ?? null,
@@ -538,6 +542,10 @@ export async function adminSaveEstrazione(input: {
   instagramRequired: boolean
   instagramTargetUsername: string
   instagramVerificationUrl: string
+  instagramTagFriendsCount: number
+  prizeFirstValue: number
+  prizeSecondValue: number
+  prizeThirdValue: number
 }): Promise<AdminEstrazione[]> {
   return mapAdminEstrazioni(unwrap(await requireSupabase().rpc('admin_upsert_estrazione', {
     p_id: input.id,
@@ -549,6 +557,10 @@ export async function adminSaveEstrazione(input: {
     p_instagram_required: input.instagramRequired,
     p_instagram_target_username: input.instagramTargetUsername,
     p_instagram_verification_url: input.instagramVerificationUrl,
+    p_instagram_tag_friends_count: input.instagramTagFriendsCount,
+    p_prize_first_value: input.prizeFirstValue,
+    p_prize_second_value: input.prizeSecondValue,
+    p_prize_third_value: input.prizeThirdValue,
   })))
 }
 

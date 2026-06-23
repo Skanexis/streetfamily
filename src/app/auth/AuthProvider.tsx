@@ -158,13 +158,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!session) return
     const checkAccess = () => { void refreshProfile().catch(() => undefined) }
-    const timer = window.setInterval(checkAccess, 30000)
+    const timer = window.setInterval(checkAccess, accessStatus === 'pending' ? 5000 : 30000)
     window.addEventListener('focus', checkAccess)
     return () => {
       window.clearInterval(timer)
       window.removeEventListener('focus', checkAccess)
     }
-  }, [session])
+  }, [session, accessStatus])
 
   const value = useMemo<AuthValue>(() => ({
     configured: isSupabaseConfigured,

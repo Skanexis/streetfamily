@@ -668,25 +668,25 @@ function UsersAdmin({ profiles, accessRows, initialGroup, reload }: { profiles: 
   }
   const profilesWithAccess: Row[] = profiles.map(profile => ({
     ...profile,
-    access: accessRows.find(row => row.telegram_subject === profile.telegram_subject),
+    access: accessRows.find(row => sameTelegramSubject(row.telegram_subject, profile.telegram_subject)),
   }))
   const hasValidApprovedAccess = (profile: Row) => Boolean(profile.access && profile.access.enabled !== false && profile.access.access_status === 'approved')
   const pendingAccessRows: Row[] = accessRows
     .filter(access => access.access_status === 'pending')
     .map(access => ({
-      ...profiles.find(profile => profile.telegram_subject === access.telegram_subject),
+      ...profiles.find(profile => sameTelegramSubject(profile.telegram_subject, access.telegram_subject)),
       access,
       telegram_subject: access.telegram_subject,
-      username: profiles.find(profile => profile.telegram_subject === access.telegram_subject)?.username ?? access.access_username ?? 'utente',
+      username: profiles.find(profile => sameTelegramSubject(profile.telegram_subject, access.telegram_subject))?.username ?? access.access_username ?? 'utente',
       blocked: false,
     }))
   const rejectedAccessRows: Row[] = accessRows
     .filter(access => access.access_status === 'rejected')
     .map(access => ({
-      ...profiles.find(profile => profile.telegram_subject === access.telegram_subject),
+      ...profiles.find(profile => sameTelegramSubject(profile.telegram_subject, access.telegram_subject)),
       access,
       telegram_subject: access.telegram_subject,
-      username: profiles.find(profile => profile.telegram_subject === access.telegram_subject)?.username ?? access.access_username ?? 'utente',
+      username: profiles.find(profile => sameTelegramSubject(profile.telegram_subject, access.telegram_subject))?.username ?? access.access_username ?? 'utente',
       blocked: true,
     }))
   const visibleApprovedProfiles = profilesWithAccess
@@ -695,7 +695,7 @@ function UsersAdmin({ profiles, accessRows, initialGroup, reload }: { profiles: 
   const visiblePendingRows = pendingAccessRows.filter(entry => `${entry.username} ${entry.telegram_subject}`.toLowerCase().includes(query.toLowerCase()))
   const visibleRejectedRows = [
     ...profilesWithAccess.filter(profile => profile.blocked),
-    ...rejectedAccessRows.filter(entry => !profilesWithAccess.some(profile => profile.telegram_subject === entry.telegram_subject)),
+    ...rejectedAccessRows.filter(entry => !profilesWithAccess.some(profile => sameTelegramSubject(profile.telegram_subject, entry.telegram_subject))),
   ].filter(entry => `${entry.username} ${entry.telegram_subject}`.toLowerCase().includes(query.toLowerCase()))
   const visibleAccessIssueProfiles = profilesWithAccess
     .filter(profile => !profile.blocked)
@@ -1526,8 +1526,13 @@ function EstrazioneAdmin({ estrazioni, reload }: { estrazioni: AdminEstrazione[]
   const [minOrdersDraft, setMinOrdersDraft] = useState('0')
   const [maxTicketsDraft, setMaxTicketsDraft] = useState('99')
   const [winnersDraft, setWinnersDraft] = useState('1')
+  const [prizeFirstDraft, setPrizeFirstDraft] = useState('600')
+  const [prizeSecondDraft, setPrizeSecondDraft] = useState('300')
+  const [prizeThirdDraft, setPrizeThirdDraft] = useState('100')
   const [instagramRequiredDraft, setInstagramRequiredDraft] = useState(false)
   const [instagramTargetDraft, setInstagramTargetDraft] = useState('')
+  const [instagramPostUrlDraft, setInstagramPostUrlDraft] = useState('')
+  const [instagramTagFriendsDraft, setInstagramTagFriendsDraft] = useState('1')
   const [scheduleDraft, setScheduleDraft] = useState('')
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
@@ -1546,8 +1551,13 @@ function EstrazioneAdmin({ estrazioni, reload }: { estrazioni: AdminEstrazione[]
       setMinOrdersDraft('0')
       setMaxTicketsDraft('99')
       setWinnersDraft('1')
+      setPrizeFirstDraft('600')
+      setPrizeSecondDraft('300')
+      setPrizeThirdDraft('100')
       setInstagramRequiredDraft(false)
       setInstagramTargetDraft('')
+      setInstagramPostUrlDraft('')
+      setInstagramTagFriendsDraft('1')
       setScheduleDraft('')
       return
     }
@@ -1556,8 +1566,13 @@ function EstrazioneAdmin({ estrazioni, reload }: { estrazioni: AdminEstrazione[]
     setMinOrdersDraft(String(selected.minCompletedOrders))
     setMaxTicketsDraft(String(selected.maxTickets))
     setWinnersDraft(String(selected.winnersCount))
+    setPrizeFirstDraft(String(selected.prizeFirstValue || 600))
+    setPrizeSecondDraft(String(selected.prizeSecondValue || 300))
+    setPrizeThirdDraft(String(selected.prizeThirdValue || 100))
     setInstagramRequiredDraft(selected.instagramRequired)
     setInstagramTargetDraft(selected.instagramTargetUsername)
+    setInstagramPostUrlDraft(selected.instagramVerificationUrl)
+    setInstagramTagFriendsDraft(String(selected.instagramTagFriendsCount || 1))
     setScheduleDraft(selected.scheduledAt ? datetimeLocal(selected.scheduledAt) : '')
   }, [selected?.id])
 
@@ -1580,8 +1595,25 @@ function EstrazioneAdmin({ estrazioni, reload }: { estrazioni: AdminEstrazione[]
     const minCompletedOrders = parseOptionalInteger(minOrdersDraft)
     const maxTickets = parseOptionalInteger(maxTicketsDraft)
     const winnersCount = parseOptionalInteger(winnersDraft)
-    if (ticketPrice === null || minCompletedOrders === null || maxTickets === null || winnersCount === null) {
+    const prizeFirstValue = parseOptionalInteger(prizeFirstDraft)
+    const prizeSecondValue = parseOptionalInteger(prizeSecondDraft)
+    const prizeThirdValue = parseOptionalInteger(prizeThirdDraft)
+    const instagramTagFriendsCount = parseOptionalInteger(instagramTagFriendsDraft)
+    const instagramVerificationUrl = normalizeUrlDraft(instagramPostUrlDraft)
+    if (ticketPrice === null || minCompletedOrders === null || maxTickets === null || winnersCount === null || prizeFirstValue === null || prizeSecondValue === null || prizeThirdValue === null || instagramTagFriendsCount === null) {
       setMessage('Inserisci valori numerici validi.')
+      return
+    }
+    if (![prizeFirstValue, prizeSecondValue, prizeThirdValue].every(value => value >= 1 && value <= 100000)) {
+      setMessage('Inserisci valori premio tra 1 e 100000.')
+      return
+    }
+    if (instagramTagFriendsCount < 1 || instagramTagFriendsCount > 99) {
+      setMessage('Inserisci un numero amici da taggare tra 1 e 99.')
+      return
+    }
+    if (instagramVerificationUrl === null) {
+      setMessage('Inserisci un link post Instagram valido.')
       return
     }
     await runAction(() => adminSaveEstrazione({
@@ -1591,9 +1623,13 @@ function EstrazioneAdmin({ estrazioni, reload }: { estrazioni: AdminEstrazione[]
       minCompletedOrders,
       maxTickets,
       winnersCount,
+      prizeFirstValue,
+      prizeSecondValue,
+      prizeThirdValue,
       instagramRequired: instagramRequiredDraft,
       instagramTargetUsername: instagramTargetDraft,
-      instagramVerificationUrl: '',
+      instagramVerificationUrl,
+      instagramTagFriendsCount,
     }), 'Estrazione salvata.')
   }
 
@@ -1646,6 +1682,15 @@ function EstrazioneAdmin({ estrazioni, reload }: { estrazioni: AdminEstrazione[]
             <label style={muted}>Posti vincenti
               <input inputMode="numeric" value={winnersDraft} disabled={!canEdit} onChange={event => setWinnersDraft(integerDraft(event.currentTarget.value))} style={{ ...input, display: 'block', width: '100%', marginTop: 5 }} />
             </label>
+            <label style={muted}>Valore primo premio / €
+              <input inputMode="numeric" value={prizeFirstDraft} disabled={!canEdit} onChange={event => setPrizeFirstDraft(integerDraft(event.currentTarget.value))} style={{ ...input, display: 'block', width: '100%', marginTop: 5 }} />
+            </label>
+            <label style={muted}>Valore secondo premio / €
+              <input inputMode="numeric" value={prizeSecondDraft} disabled={!canEdit} onChange={event => setPrizeSecondDraft(integerDraft(event.currentTarget.value))} style={{ ...input, display: 'block', width: '100%', marginTop: 5 }} />
+            </label>
+            <label style={muted}>Valore terzo premio / €
+              <input inputMode="numeric" value={prizeThirdDraft} disabled={!canEdit} onChange={event => setPrizeThirdDraft(integerDraft(event.currentTarget.value))} style={{ ...input, display: 'block', width: '100%', marginTop: 5 }} />
+            </label>
             <label style={muted}>Programma data/ora
               <input type="datetime-local" value={scheduleDraft} disabled={!canSchedule} onChange={event => setScheduleDraft(event.currentTarget.value)} style={{ ...input, display: 'block', width: '100%', marginTop: 5 }} />
             </label>
@@ -1654,9 +1699,17 @@ function EstrazioneAdmin({ estrazioni, reload }: { estrazioni: AdminEstrazione[]
               Richiedi Instagram nel biglietto. Il controllo follow resta manuale in admin.
             </label>
             {instagramRequiredDraft && (
-              <label className="sm:col-span-2" style={muted}>Account Instagram da seguire
-                <input value={instagramTargetDraft} disabled={!canEdit} onChange={event => setInstagramTargetDraft(event.currentTarget.value)} placeholder="streetfamily" style={{ ...input, display: 'block', width: '100%', marginTop: 5 }} />
-              </label>
+              <>
+                <label className="sm:col-span-2" style={muted}>Account Instagram da seguire
+                  <input value={instagramTargetDraft} disabled={!canEdit} onChange={event => setInstagramTargetDraft(event.currentTarget.value)} placeholder="streetfamily" style={{ ...input, display: 'block', width: '100%', marginTop: 5 }} />
+                </label>
+                <label style={muted}>Amici reali da taggare
+                  <input inputMode="numeric" value={instagramTagFriendsDraft} disabled={!canEdit} onChange={event => setInstagramTagFriendsDraft(integerDraft(event.currentTarget.value))} style={{ ...input, display: 'block', width: '100%', marginTop: 5 }} />
+                </label>
+                <label style={muted}>Link post Instagram
+                  <input value={instagramPostUrlDraft} disabled={!canEdit} onChange={event => setInstagramPostUrlDraft(event.currentTarget.value)} placeholder="https://www.instagram.com/p/..." style={{ ...input, display: 'block', width: '100%', marginTop: 5 }} />
+                </label>
+              </>
             )}
           </div>
           <div className="flex flex-wrap gap-2 mt-4">
@@ -1666,7 +1719,7 @@ function EstrazioneAdmin({ estrazioni, reload }: { estrazioni: AdminEstrazione[]
             {canRun && <button type="button" disabled={busy} style={smallButton} onClick={() => { void runAction(() => adminRunEstrazione(selected.id), 'Estrazione eseguita.') }}>Esegui ora</button>}
             {canCancel && <button type="button" disabled={busy} style={dangerButton} onClick={() => { void cancel() }}>Annulla</button>}
           </div>
-          {message && <p className="mt-4" style={{ color: message.includes('non riuscita') || message.includes('valori') ? '#EF4444' : '#D7FE55' }}>{message}</p>}
+          {message && <p className="mt-4" style={{ color: message.includes('non riuscita') || message.includes('valori') || message.includes('numero') || message.includes('link') ? '#EF4444' : '#D7FE55' }}>{message}</p>}
           {selected && (
             <div className="mt-4 p-3 rounded-xl" style={accent}>
               <div style={muted}>Link live</div>
@@ -2012,6 +2065,17 @@ function parseOptionalInteger(value: NumericDraft) {
   const parsed = Number(text)
   return Number.isInteger(parsed) ? parsed : null
 }
+function normalizeUrlDraft(value: string) {
+  const text = value.trim()
+  if (!text) return ''
+  const withScheme = /^https?:\/\//i.test(text) ? text : `https://${text}`
+  try {
+    const parsed = new URL(withScheme)
+    return /^https?:$/i.test(parsed.protocol) ? parsed.toString() : null
+  } catch {
+    return null
+  }
+}
 function isIntegerAtLeast(value: NumericDraft, minimum: number) {
   const parsed = parseOptionalInteger(value)
   return parsed !== null && parsed >= minimum
@@ -2070,9 +2134,23 @@ function parseKycGroup(value: string | null): KycGroup | null {
 function parseUsersGroup(value: string | null): UsersGroup | null {
   return value === 'approved' || value === 'pending' || value === 'rejected' || value === 'issues' ? value : null
 }
+function normalizeTelegramSubject(value: unknown) {
+  const text = String(value ?? '').trim()
+  if (/^[0-9]+$/.test(text)) return text
+  const emailMatch = text.match(/^telegram_([0-9]+)@street-family\.invalid$/i)
+  if (emailMatch) return emailMatch[1]
+  const prefixedMatch = text.match(/^telegram_([0-9]+)$/i)
+  if (prefixedMatch) return prefixedMatch[1]
+  return text || null
+}
+function sameTelegramSubject(left: unknown, right: unknown) {
+  const normalizedLeft = normalizeTelegramSubject(left)
+  const normalizedRight = normalizeTelegramSubject(right)
+  return Boolean(normalizedLeft && normalizedRight && normalizedLeft === normalizedRight)
+}
 function countApprovedProfiles(profiles: Row[], accessRows: Row[]) {
   return profiles.filter(profile => {
-    const access = accessRows.find(row => row.telegram_subject === profile.telegram_subject)
+    const access = accessRows.find(row => sameTelegramSubject(row.telegram_subject, profile.telegram_subject))
     return Boolean(access && access.enabled !== false && access.access_status === 'approved' && !profile.blocked)
   }).length
 }

@@ -2,6 +2,7 @@ import { envAdminIds, sendTelegramMessageWithOptions } from './clients.ts'
 
 type DbClient = {
   from: (table: string) => any
+  rpc?: (name: string, args?: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>
 }
 
 type AccessRow = {
@@ -22,6 +23,13 @@ export async function ensureAccessRequest(
   username: string,
   isAdmin: boolean,
 ) {
+  const effective = db.rpc
+    ? await db.rpc('effective_access_row', { p_telegram_subject: telegramId })
+    : null
+  if (effective?.error && !/effective_access_row|schema cache|could not find/i.test(effective.error.message)) {
+    throw new Error(effective.error.message)
+  }
+  const effectiveRow = Array.isArray(effective?.data) ? effective.data[0] as AccessRow & { role?: 'user' | 'admin' } : null
   const existing = await db.from('staging_allowlist')
     .select('enabled,access_status,access_notified_at')
     .eq('telegram_subject', telegramId)
@@ -43,21 +51,22 @@ export async function ensureAccessRequest(
     return { status: 'approved' as const, notified: false }
   }
 
-  if (row?.access_status === 'approved') {
-    if (!row.enabled) {
-      const fixed = await db.from('staging_allowlist')
-        .update({
-          enabled: true,
-          access_decided_at: new Date().toISOString(),
-          note: 'Approved access normalized during Telegram login',
-        })
-        .eq('telegram_subject', telegramId)
-        .eq('access_status', 'approved')
+  if (row?.access_status === 'approved' || effectiveRow?.access_status === 'approved') {
+    if (row?.access_status !== 'approved' || row.enabled !== true) {
+      const fixed = await db.from('staging_allowlist').upsert({
+        telegram_subject: telegramId,
+        role: effectiveRow?.role === 'admin' ? 'admin' : 'user',
+        enabled: true,
+        access_status: 'approved',
+        access_decided_at: new Date().toISOString(),
+        access_username: username,
+        note: 'Approved access normalized during Telegram login',
+      }, { onConflict: 'telegram_subject' })
       if (fixed.error) throw new Error(fixed.error.message)
     }
     return { status: 'approved' as const, notified: false }
   }
-  if (row?.access_status === 'rejected') return { status: 'rejected' as const, notified: false }
+  if (row?.access_status === 'rejected' || effectiveRow?.access_status === 'rejected') return { status: 'rejected' as const, notified: false }
 
   if (!row) {
     const existingProfile = await db.from('profiles')

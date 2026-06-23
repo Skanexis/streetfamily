@@ -159,6 +159,12 @@ export function AccessDeniedPage() {
 export function AccessPendingPage() {
   const { logout, refreshProfile } = useAuth()
   const [checking, setChecking] = useState(false)
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void refreshProfile().catch(() => undefined)
+    }, 4000)
+    return () => window.clearInterval(timer)
+  }, [refreshProfile])
   const check = async () => {
     setChecking(true)
     try {

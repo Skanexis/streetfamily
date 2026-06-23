@@ -156,6 +156,10 @@ export interface Estrazione {
   instagramRequired: boolean
   instagramTargetUsername: string
   instagramVerificationUrl: string
+  instagramTagFriendsCount: number
+  prizeFirstValue: number
+  prizeSecondValue: number
+  prizeThirdValue: number
   scheduledAt: string | null
   publicToken: string
   adminNotifiedAt: string | null

@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { motion, useReducedMotion } from 'motion/react'
 import confetti from 'canvas-confetti'
-import { AtSign, CalendarClock, Check, Clock3, Coins, Hash, Loader2, RadioTower, ShieldCheck, Sparkles, Ticket, Trophy } from 'lucide-react'
+import { AtSign, CalendarClock, Check, Clock3, Coins, ExternalLink, Hash, Loader2, RadioTower, ShieldCheck, Sparkles, Ticket, Trophy } from 'lucide-react'
 import type { CurrentEstrazione, Estrazione, EstrazioneWinner, User } from '../data'
 import { buyEstrazioneTicket, getCurrentEstrazione } from '../lib/api'
 import { italianErrorMessage } from '../lib/errors'
@@ -90,6 +90,7 @@ export function EstrazionePage({ user, onComplete }: Props) {
           <EmptyEstrazione />
         ) : (
           <>
+            <RulesCard draw={draw} />
             <DrawSummary draw={draw} completedOrders={data?.userCompletedOrders ?? 0} eligible={Boolean(data?.userEligible)} ownNumber={ownNumber} />
             {data?.userTicket ? (
               <OwnedTicket number={data.userTicket.selectedNumber} instagramUsername={data.userTicket.instagramUsername} draw={draw} />
@@ -147,6 +148,70 @@ export function EstrazionePage({ user, onComplete }: Props) {
       </div>
     </div>
   )
+}
+
+function RulesCard({ draw }: { draw: Estrazione }) {
+  const visiblePrizes = [
+    { label: 'Valore primo premio', value: draw.prizeFirstValue },
+    { label: 'Valore secondo premio', value: draw.prizeSecondValue },
+    { label: 'Valore terzo premio', value: draw.prizeThirdValue },
+  ].slice(0, Math.min(draw.winnersCount, 3))
+  const tagFriendsLabel = draw.instagramTagFriendsCount === 1
+    ? '1 amico reale'
+    : `${draw.instagramTagFriendsCount} amici reali`
+  const ordersLabel = draw.minCompletedOrders <= 0
+    ? 'Nessun ordine minimo richiesto'
+    : `Effettuare almeno ${draw.minCompletedOrders} ${draw.minCompletedOrders === 1 ? 'ordine' : 'ordini'}`
+  const postUrl = draw.instagramVerificationUrl.trim()
+
+  return (
+    <section className="sf-rules-card" aria-label="Regole Estrazione">
+      <div className="sf-rules-head">
+        <div>
+          <span>Regole per attivare</span>
+          <h2>ESTRAZIONE</h2>
+        </div>
+        <div className="sf-rules-badges">
+          <strong>{draw.maxTickets} biglietti disponibili</strong>
+          <strong>Costo biglietto {formatEuro(draw.ticketPrice)} l’uno</strong>
+        </div>
+      </div>
+
+      <div className="sf-rules-prizes">
+        {visiblePrizes.map(prize => (
+          <div key={prize.label} className="sf-rules-prize">
+            <span>{prize.label}</span>
+            <strong>{formatEuro(prize.value)}</strong>
+          </div>
+        ))}
+      </div>
+
+      <div className="sf-rules-subtitle">Per sbloccare Estrazione dovete</div>
+      <ul className="sf-rules-list">
+        <RuleItem>Entrare sul sito</RuleItem>
+        <RuleItem>Effettuare verifica identità</RuleItem>
+        <RuleItem>{ordersLabel}</RuleItem>
+        {draw.instagramRequired && <RuleItem>Seguire pagina Instagram{draw.instagramTargetUsername ? ` @${draw.instagramTargetUsername}` : ''}</RuleItem>}
+        {draw.instagramRequired && (
+          <RuleItem>
+            <span>Taggare {tagFriendsLabel} sotto</span>
+            {postUrl ? (
+              <a className="sf-rules-post-link" href={postUrl} target="_blank" rel="noreferrer">
+                POST <ExternalLink size={13} />
+              </a>
+            ) : (
+              <strong className="sf-rules-post-text">POST</strong>
+            )}
+          </RuleItem>
+        )}
+        <RuleItem>Comprare biglietto costo {formatEuro(draw.ticketPrice)}</RuleItem>
+      </ul>
+    </section>
+  )
+}
+
+function RuleItem({ children }: { children: ReactNode }) {
+  return <li><Check size={15} /> <span className="sf-rules-item-content">{children}</span></li>
 }
 
 function InstagramGate({
@@ -385,4 +450,8 @@ function formatNumber(value: number) {
 
 function formatDate(value: string) {
   return new Date(value).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })
+}
+
+function formatEuro(value: number) {
+  return `${value}€`
 }
