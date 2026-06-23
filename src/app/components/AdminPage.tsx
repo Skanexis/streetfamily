@@ -1086,10 +1086,7 @@ function KycRequestsAdmin({ profiles, initialKycUserId, initialGroup, reload }: 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
               {documents.length === 0 && !kycError && <p style={muted}>Nessun documento caricato.</p>}
               {documents.map(document => (
-                <div key={document.id}>
-                  <div style={{ ...muted, marginBottom: 6 }}>{documentLabel[document.documentType]}</div>
-                  <img src={document.signedUrl} alt={documentLabel[document.documentType]} className="w-full rounded-xl" style={{ maxHeight: 340, objectFit: 'contain', background: '#080C0E' }} referrerPolicy="no-referrer" />
-                </div>
+                <KycDocumentPreview key={document.id} document={document} />
               ))}
             </div>
             {reviewUser.kyc_cases?.status === 'submitted' && (
@@ -1102,6 +1099,45 @@ function KycRequestsAdmin({ profiles, initialKycUserId, initialGroup, reload }: 
         </div>
       )}
     </Section>
+  )
+}
+
+function KycDocumentPreview({ document }: { document: KycReviewDocument }) {
+  const [loadError, setLoadError] = useState(false)
+  const label = documentLabel[document.documentType] ?? document.documentType
+  const meta = [
+    document.contentType,
+    document.byteSize ? `${Math.round(document.byteSize / 1024)} KB` : '',
+  ].filter(Boolean).join(' / ')
+  const error = document.error || (loadError ? 'Immagine non caricata dal browser. Apri il link in una nuova scheda.' : '')
+  return (
+    <div>
+      <div style={{ ...muted, marginBottom: 6 }}>{label}</div>
+      {meta && <div style={{ ...muted, marginBottom: 6, fontSize: 11 }}>{meta}</div>}
+      {document.signedUrl && !document.error ? (
+        <>
+          <a href={document.signedUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'block' }}>
+            <img
+              src={document.signedUrl}
+              alt={label}
+              className="w-full rounded-xl"
+              style={{ maxHeight: 340, objectFit: 'contain', background: '#080C0E' }}
+              referrerPolicy="no-referrer"
+              onError={() => setLoadError(true)}
+            />
+          </a>
+          <a href={document.signedUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#D7FE55', fontSize: 12, display: 'inline-block', marginTop: 7 }}>
+            Apri originale
+          </a>
+        </>
+      ) : null}
+      {error && (
+        <div className="rounded-xl p-3 mt-2" style={{ background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.25)', color: '#FCA5A5', fontSize: 12 }}>
+          {error}
+          {document.storagePath && <div className="break-all mt-2" style={{ color: 'rgba(245,245,245,.58)' }}>Path: {document.storagePath}</div>}
+        </div>
+      )}
+    </div>
   )
 }
 

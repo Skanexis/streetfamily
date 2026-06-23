@@ -294,4 +294,8 @@ export interface KycReviewDocument {
   documentType: KycDocumentType
   capturedAt: string
   signedUrl: string
+  storagePath?: string
+  contentType?: string
+  byteSize?: number
+  error?: string
 }
