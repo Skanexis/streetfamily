@@ -2037,7 +2037,7 @@ function parseUsersGroup(value: string | null): UsersGroup | null {
 function countApprovedProfiles(profiles: Row[], accessRows: Row[]) {
   return profiles.filter(profile => {
     const access = accessRows.find(row => row.telegram_subject === profile.telegram_subject)
-    return (access?.access_status ?? 'approved') === 'approved' && !profile.blocked
+    return Boolean(access && access.enabled !== false && access.access_status === 'approved' && !profile.blocked)
   }).length
 }
 const panel = { background: '#11181B', border: '1px solid rgba(126,156,168,.18)' }

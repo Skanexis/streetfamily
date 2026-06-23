@@ -37,7 +37,20 @@ export async function ensureAccessRequest(
     return { status: 'approved' as const, notified: false }
   }
 
-  if (row?.access_status === 'approved' && row.enabled) return { status: 'approved' as const, notified: false }
+  if (row?.access_status === 'approved') {
+    if (!row.enabled) {
+      const fixed = await db.from('staging_allowlist')
+        .update({
+          enabled: true,
+          access_decided_at: new Date().toISOString(),
+          note: 'Approved access normalized during Telegram login',
+        })
+        .eq('telegram_subject', telegramId)
+        .eq('access_status', 'approved')
+      if (fixed.error) throw new Error(fixed.error.message)
+    }
+    return { status: 'approved' as const, notified: false }
+  }
   if (row?.access_status === 'rejected') return { status: 'rejected' as const, notified: false }
 
   const now = new Date().toISOString()
