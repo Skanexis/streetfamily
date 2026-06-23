@@ -47,12 +47,17 @@ returns text language sql immutable as $$
   select lower(regexp_replace(regexp_replace(trim(coalesce(p_username, '')), '^@+', ''), '\s+', '', 'g'))
 $$;
 
-create or replace function public.estrazione_instagram_verification_payload(p_verification public.estrazione_instagram_verifications, p_draw public.estrazioni)
+create or replace function public.estrazione_instagram_verification_payload(
+  p_verification public.estrazione_instagram_verifications,
+  p_instagram_required boolean,
+  p_instagram_target_username text,
+  p_instagram_verification_url text
+)
 returns jsonb language sql stable as $$
   select jsonb_build_object(
-    'required', coalesce(p_draw.instagram_required, false),
-    'target_username', coalesce(p_draw.instagram_target_username, ''),
-    'verification_url', coalesce(nullif(p_draw.instagram_verification_url, ''), case when p_draw.instagram_target_username <> '' then 'https://ig.me/m/' || p_draw.instagram_target_username else '' end),
+    'required', coalesce(p_instagram_required, false),
+    'target_username', coalesce(p_instagram_target_username, ''),
+    'verification_url', coalesce(nullif(p_instagram_verification_url, ''), case when coalesce(p_instagram_target_username, '') <> '' then 'https://ig.me/m/' || p_instagram_target_username else '' end),
     'instagram_username', coalesce(p_verification.instagram_username, ''),
     'verification_code', coalesce(p_verification.verification_code, ''),
     'verified_at', p_verification.verified_at,
@@ -114,7 +119,12 @@ begin
       where id = v_existing.id
       returning * into v_existing;
     end if;
-    return public.estrazione_instagram_verification_payload(v_existing, v_draw);
+    return public.estrazione_instagram_verification_payload(
+      v_existing,
+      v_draw.instagram_required,
+      v_draw.instagram_target_username,
+      v_draw.instagram_verification_url
+    );
   end if;
 
   if found and v_existing.expires_at > now() then
@@ -123,7 +133,12 @@ begin
       telegram_subject = (select telegram_subject from public.profiles where id = auth.uid())
     where id = v_existing.id
     returning * into v_existing;
-    return public.estrazione_instagram_verification_payload(v_existing, v_draw);
+    return public.estrazione_instagram_verification_payload(
+      v_existing,
+      v_draw.instagram_required,
+      v_draw.instagram_target_username,
+      v_draw.instagram_verification_url
+    );
   end if;
 
   loop
@@ -159,7 +174,12 @@ begin
     expires_at = excluded.expires_at
   returning * into v_existing;
 
-  return public.estrazione_instagram_verification_payload(v_existing, v_draw);
+  return public.estrazione_instagram_verification_payload(
+    v_existing,
+    v_draw.instagram_required,
+    v_draw.instagram_target_username,
+    v_draw.instagram_verification_url
+  );
 end $$;
 
 create or replace function public.estrazione_payload(p_estrazione_id uuid)
@@ -228,7 +248,12 @@ returns jsonb language sql stable security definer set search_path = public as $
     ), '[]'::jsonb),
     'instagram_verification', case
       when draw.instagram_required then coalesce((
-        select public.estrazione_instagram_verification_payload(v, draw)
+        select public.estrazione_instagram_verification_payload(
+          v,
+          draw.instagram_required,
+          draw.instagram_target_username,
+          draw.instagram_verification_url
+        )
         from public.estrazione_instagram_verifications v
         where v.estrazione_id = draw.id
           and v.user_id = auth.uid()
