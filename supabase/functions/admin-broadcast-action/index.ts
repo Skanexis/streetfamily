@@ -72,6 +72,7 @@ Deno.serve(async req => {
     const allowedResult = await db.from('staging_allowlist')
       .select('telegram_subject')
       .eq('enabled', true)
+      .eq('access_status', 'approved')
     if (allowedResult.error) {
       return json({ error: publicErrorMessage(allowedResult.error.message, 'Lettura autorizzazioni Telegram non riuscita.') }, 500)
     }

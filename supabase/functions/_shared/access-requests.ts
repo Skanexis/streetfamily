@@ -10,6 +10,12 @@ type AccessRow = {
   access_notified_at?: string | null
 }
 
+type ProfileRow = {
+  role?: 'user' | 'admin'
+  blocked?: boolean
+  username?: string | null
+}
+
 export async function ensureAccessRequest(
   db: DbClient,
   telegramId: string,
@@ -52,6 +58,30 @@ export async function ensureAccessRequest(
     return { status: 'approved' as const, notified: false }
   }
   if (row?.access_status === 'rejected') return { status: 'rejected' as const, notified: false }
+
+  if (!row) {
+    const existingProfile = await db.from('profiles')
+      .select('role,blocked,username')
+      .eq('telegram_subject', telegramId)
+      .maybeSingle()
+    if (existingProfile.error) throw new Error(existingProfile.error.message)
+    const profile = existingProfile.data as ProfileRow | null
+    if (profile?.blocked) return { status: 'rejected' as const, notified: false }
+    if (profile) {
+      const restored = await db.from('staging_allowlist').upsert({
+        telegram_subject: telegramId,
+        role: profile.role === 'admin' ? 'admin' : 'user',
+        enabled: true,
+        access_status: 'approved',
+        access_requested_at: new Date().toISOString(),
+        access_decided_at: new Date().toISOString(),
+        access_username: profile.username ?? username,
+        note: 'Approved profile restored during Telegram login',
+      }, { onConflict: 'telegram_subject' })
+      if (restored.error) throw new Error(restored.error.message)
+      return { status: 'approved' as const, notified: false }
+    }
+  }
 
   const now = new Date().toISOString()
   const saved = await db.from('staging_allowlist').upsert({

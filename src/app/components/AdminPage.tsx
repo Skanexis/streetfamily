@@ -646,7 +646,7 @@ async function xhrStorageUpload(path: string, file: File, onProgress: (value: nu
   })
 }
 
-type UsersGroup = 'approved' | 'pending' | 'rejected'
+type UsersGroup = 'approved' | 'pending' | 'rejected' | 'issues'
 
 function UsersAdmin({ profiles, accessRows, initialGroup, reload }: { profiles: Row[]; accessRows: Row[]; initialGroup: string | null; reload: () => Promise<void> }) {
   const navigate = useNavigate()
@@ -670,6 +670,7 @@ function UsersAdmin({ profiles, accessRows, initialGroup, reload }: { profiles: 
     ...profile,
     access: accessRows.find(row => row.telegram_subject === profile.telegram_subject),
   }))
+  const hasValidApprovedAccess = (profile: Row) => Boolean(profile.access && profile.access.enabled !== false && profile.access.access_status === 'approved')
   const pendingAccessRows: Row[] = accessRows
     .filter(access => access.access_status === 'pending')
     .map(access => ({
@@ -689,13 +690,18 @@ function UsersAdmin({ profiles, accessRows, initialGroup, reload }: { profiles: 
       blocked: true,
     }))
   const visibleApprovedProfiles = profilesWithAccess
-    .filter(profile => (profile.access?.access_status ?? 'approved') === 'approved' && !profile.blocked)
+    .filter(profile => hasValidApprovedAccess(profile) && !profile.blocked)
     .filter(profile => `${profile.username} ${profile.telegram_subject}`.toLowerCase().includes(query.toLowerCase()))
   const visiblePendingRows = pendingAccessRows.filter(entry => `${entry.username} ${entry.telegram_subject}`.toLowerCase().includes(query.toLowerCase()))
   const visibleRejectedRows = [
     ...profilesWithAccess.filter(profile => profile.blocked),
     ...rejectedAccessRows.filter(entry => !profilesWithAccess.some(profile => profile.telegram_subject === entry.telegram_subject)),
   ].filter(entry => `${entry.username} ${entry.telegram_subject}`.toLowerCase().includes(query.toLowerCase()))
+  const visibleAccessIssueProfiles = profilesWithAccess
+    .filter(profile => !profile.blocked)
+    .filter(profile => profile.access?.access_status !== 'pending' && profile.access?.access_status !== 'rejected')
+    .filter(profile => !hasValidApprovedAccess(profile))
+    .filter(profile => `${profile.username} ${profile.telegram_subject}`.toLowerCase().includes(query.toLowerCase()))
   const decideAccess = async (telegramSubject: string, decision: 'approved' | 'rejected') => {
     setMessage('')
     setMessageError(false)
@@ -797,14 +803,38 @@ function UsersAdmin({ profiles, accessRows, initialGroup, reload }: { profiles: 
       )}
     </div>
   ))
+  const issueRows = (items: Row[]) => items.map(profile => {
+    const accessLabel = !profile.access
+      ? 'allowlist mancante'
+      : profile.access.access_status === 'approved' && profile.access.enabled === false
+        ? 'approved disabilitato'
+        : `accesso non valido: ${profile.access.access_status ?? 'sconosciuto'}`
+    return (
+      <div key={profile.id} className="flex flex-col lg:flex-row lg:items-center gap-3" style={row}>
+        <div className="flex-1 min-w-0">
+          <strong>@{profile.username}</strong>
+          <div className="break-all" style={muted}>Telegram ID: {profile.telegram_subject} / {accessLabel}</div>
+          <div style={muted}>Questo profilo non viene contato come autorizzato finché non ha allowlist approved + enabled.</div>
+        </div>
+        <span style={{ color: '#F59E0B' }}>DA VERIFICARE</span>
+        {profile.role !== 'admin' && (
+          <>
+            <button style={dangerButton} onClick={() => toggleBlocked(profile)}>Blocca</button>
+            <button style={dangerButton} onClick={() => removeAccount(profile)}>Elimina</button>
+          </>
+        )}
+      </div>
+    )
+  })
   return (
     <Section title="Utenti" note="Gestisci utenti approvati, richieste di accesso e account rifiutati o bloccati.">
       {message && <p className="mb-4" style={{ color: messageError || message === 'Utente bloccato.' ? '#FCA5A5' : '#D7FE55' }}>{message}</p>}
       <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Cerca username o Telegram ID" style={{ ...input, width: '100%', marginBottom: 12 }} />
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 mb-5">
         <MetricNavCard label="Approvati" value={visibleApprovedProfiles.length} active={activeGroup === 'approved'} onClick={() => openGroup('approved')} />
         <MetricNavCard label="In attesa" value={visiblePendingRows.length} active={activeGroup === 'pending'} onClick={() => openGroup('pending')} />
         <MetricNavCard label="Bloccati / rifiutati" value={visibleRejectedRows.length} active={activeGroup === 'rejected'} onClick={() => openGroup('rejected')} />
+        <MetricNavCard label="Da verificare" value={visibleAccessIssueProfiles.length} active={activeGroup === 'issues'} onClick={() => openGroup('issues')} />
       </div>
       {activeGroup === 'approved' && (
         <div>
@@ -822,6 +852,12 @@ function UsersAdmin({ profiles, accessRows, initialGroup, reload }: { profiles: 
         <div>
           <h3 className="mb-3">Bloccati o non approvati</h3>
           {visibleRejectedRows.length ? rejectedRows(visibleRejectedRows) : <p style={muted}>Nessun account bloccato o rifiutato.</p>}
+        </div>
+      )}
+      {activeGroup === 'issues' && (
+        <div>
+          <h3 className="mb-3">Profili da verificare</h3>
+          {visibleAccessIssueProfiles.length ? issueRows(visibleAccessIssueProfiles) : <p style={muted}>Nessun profilo con allowlist mancante o non valida.</p>}
         </div>
       )}
     </Section>
@@ -2032,7 +2068,7 @@ function parseKycGroup(value: string | null): KycGroup | null {
   return value === 'submitted' || value === 'approved' || value === 'rejected' ? value : null
 }
 function parseUsersGroup(value: string | null): UsersGroup | null {
-  return value === 'approved' || value === 'pending' || value === 'rejected' ? value : null
+  return value === 'approved' || value === 'pending' || value === 'rejected' || value === 'issues' ? value : null
 }
 function countApprovedProfiles(profiles: Row[], accessRows: Row[]) {
   return profiles.filter(profile => {
