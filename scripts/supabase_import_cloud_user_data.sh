@@ -231,7 +231,7 @@ on conflict (telegram_subject) do update set
 create temp table auth_map on commit drop as
 select
   old_profiles.old_id,
-  coalesce(existing_profiles.id, auth_users.id) as new_id,
+  coalesce(auth_users.id, existing_profiles.id) as new_id,
   old_profiles.telegram_subject
 from old_profiles
 left join public.profiles existing_profiles
