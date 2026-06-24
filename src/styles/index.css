@@ -1383,89 +1383,80 @@ html.sf-scratching .sf-game-overlay {
 }
 
 .sf-rules-card {
-  margin-bottom: .75rem;
-  padding: .8rem;
+  margin-bottom: .7rem;
+  padding: .72rem;
 }
 
-.sf-rules-head {
+.sf-rules-title {
   display: flex;
-  justify-content: space-between;
-  gap: .75rem;
-  align-items: flex-start;
-}
-
-.sf-rules-head span,
-.sf-rules-subtitle {
-  display: block;
-  color: rgba(245, 245, 245, .48);
-  font-size: .62rem;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: .08em;
-}
-
-.sf-rules-head h2 {
-  margin: .12rem 0 0;
+  justify-content: center;
+  align-items: center;
+  min-height: 30px;
   color: #f5f5f5;
-  font: 900 1.15rem/1 'Orbitron', sans-serif;
+  font: 900 1rem/1 'Orbitron', sans-serif;
+  text-align: center;
 }
 
-.sf-rules-badges {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+.sf-rules-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: .38rem;
+  margin-top: .55rem;
 }
 
-.sf-rules-badges strong {
-  padding: .36rem .52rem;
+.sf-rules-facts span {
+  padding: .42rem .52rem;
   border: 1px solid rgba(215, 254, 85, .18);
-  border-radius: 999px;
+  border-radius: .68rem;
   color: #d7fe55;
   background: rgba(215, 254, 85, .06);
-  font-size: .68rem;
-  white-space: nowrap;
+  font-size: .72rem;
+  font-weight: 900;
+  text-align: center;
 }
 
 .sf-rules-prizes {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: .45rem;
-  margin: .65rem 0;
+  gap: .38rem;
+  margin: .5rem 0;
 }
 
 .sf-rules-prize {
-  padding: .55rem .62rem;
+  display: grid;
+  gap: .18rem;
+  padding: .45rem .5rem;
   border: 1px solid rgba(126, 156, 168, .16);
-  border-radius: .72rem;
+  border-radius: .68rem;
   background: rgba(245, 245, 245, .035);
+  text-align: center;
 }
 
 .sf-rules-prize span {
   display: block;
   color: rgba(245, 245, 245, .48);
-  font-size: .6rem;
+  font-size: .62rem;
   font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: .06em;
 }
 
 .sf-rules-prize strong {
   display: block;
-  margin-top: .18rem;
   color: #f5f5f5;
-  font: 900 1rem/1 'Orbitron', sans-serif;
+  font: 900 .95rem/1 'Orbitron', sans-serif;
 }
 
 .sf-rules-subtitle {
-  margin-bottom: .42rem;
+  margin-bottom: .35rem;
   color: #d7fe55;
+  font-size: .72rem;
+  font-weight: 900;
+  text-align: center;
 }
 
 .sf-rules-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: .4rem;
+  gap: .32rem;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1474,19 +1465,20 @@ html.sf-scratching .sf-game-overlay {
 .sf-rules-list li {
   display: flex;
   align-items: center;
-  gap: .42rem;
-  min-height: 36px;
-  padding: .42rem .5rem;
-  border-radius: .62rem;
-  color: rgba(245, 245, 245, .74);
+  gap: .35rem;
+  min-height: 32px;
+  padding: .35rem .46rem;
+  border-radius: .58rem;
+  color: rgba(245, 245, 245, .78);
   background: rgba(8, 12, 14, .42);
-  font-size: .74rem;
-  line-height: 1.25;
+  font-size: .7rem;
+  line-height: 1.2;
 }
 
-.sf-rules-list svg {
+.sf-rules-check {
   flex: 0 0 auto;
-  color: #d7fe55;
+  font-size: .76rem;
+  line-height: 1;
 }
 
 .sf-rules-item-content {
@@ -1514,6 +1506,22 @@ html.sf-scratching .sf-game-overlay {
 .sf-rules-post-text {
   color: rgba(245, 245, 245, .76);
   background: rgba(245, 245, 245, .1);
+}
+
+.sf-rules-warnings {
+  display: grid;
+  gap: .28rem;
+  margin-top: .55rem;
+}
+
+.sf-rules-warnings p {
+  margin: 0;
+  padding: .38rem .48rem;
+  border-radius: .58rem;
+  color: rgba(245, 245, 245, .68);
+  background: rgba(251, 191, 36, .07);
+  font-size: .68rem;
+  line-height: 1.25;
 }
 
 .sf-number-panel {
@@ -2080,21 +2088,17 @@ html.sf-telegram-app .sf-bottom-nav {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .sf-rules-head {
-    display: grid;
-    grid-template-columns: 1fr;
+  .sf-rules-card {
+    padding: .62rem;
   }
 
-  .sf-rules-badges {
-    justify-content: flex-start;
+  .sf-rules-title {
+    font-size: .88rem;
   }
 
-  .sf-rules-prizes {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .sf-rules-list {
-    grid-template-columns: 1fr;
+  .sf-rules-facts span,
+  .sf-rules-list li {
+    font-size: .66rem;
   }
 
   .sf-number-grid {

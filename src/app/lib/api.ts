@@ -33,6 +33,22 @@ type RecordValue = Record<string, any>
 
 export type AccountAccessStatus = 'pending' | 'approved' | 'rejected'
 
+export interface AdminAccessRow {
+  telegramSubject: string
+  accessStatus: AccountAccessStatus
+  enabled: boolean
+  role: 'user' | 'admin'
+  profileId: string | null
+  username: string | null
+  blocked: boolean
+  hasProfile: boolean
+  accessUsername: string | null
+  accessRequestedAt: string | null
+  accessDecidedAt: string | null
+  accessNotifiedAt: string | null
+  note: string | null
+}
+
 export async function getAccountAccessState(): Promise<{ blocked: boolean; accessStatus: AccountAccessStatus }> {
   const db = requireSupabase()
   const { data, error } = await db.rpc('get_my_access_state')
@@ -454,6 +470,26 @@ export async function getAdminDashboard(): Promise<DashboardData> {
     gamePlays: row.game_plays,
     issuedPoints: row.issued_points,
   }
+}
+
+export async function adminAccessOverview(): Promise<AdminAccessRow[]> {
+  const db = requireSupabase()
+  const rows = unwrap(await db.rpc('admin_access_overview')) as RecordValue[]
+  return rows.map(row => ({
+    telegramSubject: String(row.telegram_subject ?? ''),
+    accessStatus: row.access_status === 'approved' || row.access_status === 'rejected' ? row.access_status : 'pending',
+    enabled: Boolean(row.enabled),
+    role: row.role === 'admin' ? 'admin' : 'user',
+    profileId: row.profile_id ?? null,
+    username: row.username ?? null,
+    blocked: Boolean(row.blocked),
+    hasProfile: Boolean(row.has_profile),
+    accessUsername: row.access_username ?? null,
+    accessRequestedAt: row.access_requested_at ?? null,
+    accessDecidedAt: row.access_decided_at ?? null,
+    accessNotifiedAt: row.access_notified_at ?? null,
+    note: row.note ?? null,
+  }))
 }
 
 export async function adminAdjustWallet(userId: string, points: number, xp: number, spinTickets: number, scratchTickets: number, boxTickets: number, reason: string) {

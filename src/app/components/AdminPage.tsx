@@ -1,7 +1,8 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { MapPin, Package, Tags, Users, Gamepad2, ClipboardList, Settings, Megaphone, MessageSquare, Minus, Plus, Trash2, Warehouse, Wallet, Ticket } from 'lucide-react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { adminAdjustWallet, adminBroadcastAction, adminCancelEstrazione, adminDeleteAccount, adminDeleteGameOption, adminListEstrazioni, adminOpenEstrazione, adminReviewAccessRequest, adminRunEstrazione, adminSaveEstrazione, adminSaveGameOptions, adminScheduleEstrazione, adminSendLowStockNotifications, adminSetGameActive, adminSetGameTicketPrice, adminSimulateGame, getAdminDashboard, getAdminKycDocuments, reviewKyc } from '../lib/api'
+import { adminAccessOverview, adminAdjustWallet, adminBroadcastAction, adminCancelEstrazione, adminDeleteAccount, adminDeleteGameOption, adminListEstrazioni, adminOpenEstrazione, adminReviewAccessRequest, adminRunEstrazione, adminSaveEstrazione, adminSaveGameOptions, adminScheduleEstrazione, adminSendLowStockNotifications, adminSetGameActive, adminSetGameTicketPrice, adminSimulateGame, getAdminDashboard, getAdminKycDocuments, reviewKyc } from '../lib/api'
+import type { AdminAccessRow } from '../lib/api'
 import { requireSupabase } from '../lib/supabase'
 import { italianErrorMessage } from '../lib/errors'
 import type { AdminEstrazione, Broadcast, DashboardData, GameType, KycReviewDocument } from '../data'
@@ -31,7 +32,7 @@ export function AdminPage() {
   const [inventory, setInventory] = useState<Row[]>([])
   const [categories, setCategories] = useState<Row[]>([])
   const [profiles, setProfiles] = useState<Row[]>([])
-  const [accessRows, setAccessRows] = useState<Row[]>([])
+  const [accessRows, setAccessRows] = useState<AdminAccessRow[]>([])
   const [orders, setOrders] = useState<Row[]>([])
   const [games, setGames] = useState<Row[]>([])
   const [locations, setLocations] = useState<Row[]>([])
@@ -42,6 +43,7 @@ export function AdminPage() {
   const [tokenTiers, setTokenTiers] = useState<Row[]>([])
   const [estrazioni, setEstrazioni] = useState<AdminEstrazione[]>([])
   const [error, setError] = useState('')
+  const [estrazioneError, setEstrazioneError] = useState('')
 
   useEffect(() => {
     if (isTab(requestedTab)) setTab(requestedTab)
@@ -51,13 +53,16 @@ export function AdminPage() {
   const load = async () => {
     try {
       const db = requireSupabase()
+      const estrazioneRequest = adminListEstrazioni()
+        .then(data => ({ data, error: '' }))
+        .catch(caught => ({ data: [] as AdminEstrazione[], error: italianErrorMessage(caught, 'Caricamento Estrazione non riuscito.') }))
       const [summary, productResult, inventoryResult, categoryResult, profileResult, accessResult, orderResult, gameResult, locationResult, settingsResult, broadcastResult, feedbackResult, optionsResult, tiersResult, estrazioneResult] = await Promise.all([
         getAdminDashboard(),
         db.from('products').select('id,category_id,name,badge,promo_tag,published,featured,categories(name),product_variants(id,label,price,unit_amount,token_award,inventory_status(available)),product_media(id,url,storage_path,media_type,upload_status,sort_order)').order('name'),
         db.from('product_inventory').select('product_id,stock_quantity,notify_threshold_quantity,updated_at,products(id,name,published,categories(name))').order('updated_at', { ascending: false }),
         db.from('categories').select('*').order('sort_order'),
         db.from('profiles').select('id,username,telegram_subject,role,blocked,wallet_balances(points,xp,spin_tickets,scratch_tickets,box_tickets),kyc_cases:kyc_cases!kyc_cases_user_id_fkey(status,submitted_at,rejection_reason,retain_until),orders(status),feedback:feedback!feedback_user_id_fkey(status)').order('created_at', { ascending: false }),
-        db.from('staging_allowlist').select('telegram_subject,enabled,access_status,access_username,access_requested_at,access_decided_at'),
+        adminAccessOverview(),
         db.from('orders').select('id,display_id,status,total,total_units,tokens_reserved,scenario_type,scenario_city,scenario_street,points_awarded,xp_awarded,created_at,profiles(username),redeemed_rewards:user_rewards!user_rewards_order_fk(id,state,reward_definitions(label,kind))').in('status', ['submitted', 'processing']).order('created_at', { ascending: false }),
         db.from('game_configs').select('*').order('game_type'),
         db.from('service_areas').select('*').order('sort_order'),
@@ -66,9 +71,9 @@ export function AdminPage() {
         db.from('feedback').select('id,rating,message,status,created_at,profiles:profiles!feedback_user_id_fkey(username),orders(display_id)').order('created_at', { ascending: false }),
         db.from('game_reward_options').select('*,reward_definitions(id,label,kind)').in('game_type', ['spin', 'scratch']).order('id'),
         db.from('token_reward_tiers').select('*').order('minimum_units'),
-        adminListEstrazioni(),
+        estrazioneRequest,
       ])
-      for (const result of [productResult, inventoryResult, categoryResult, profileResult, accessResult, orderResult, gameResult, locationResult, settingsResult, broadcastResult, feedbackResult, optionsResult, tiersResult]) {
+      for (const result of [productResult, inventoryResult, categoryResult, profileResult, orderResult, gameResult, locationResult, settingsResult, broadcastResult, feedbackResult, optionsResult, tiersResult]) {
         if (result.error) throw new Error(italianErrorMessage(result.error.message, 'Impossibile caricare il pannello amministrazione.'))
       }
       setDashboard(summary)
@@ -76,7 +81,7 @@ export function AdminPage() {
       setInventory(inventoryResult.data ?? [])
       setCategories(categoryResult.data ?? [])
       setProfiles(profileResult.data ?? [])
-      setAccessRows(accessResult.data ?? [])
+      setAccessRows(accessResult)
       setOrders(orderResult.data ?? [])
       setGames(gameResult.data ?? [])
       setLocations(locationResult.data ?? [])
@@ -84,7 +89,8 @@ export function AdminPage() {
       setFeedback(feedbackResult.data ?? [])
       setRewardOptions(optionsResult.data ?? [])
       setTokenTiers(tiersResult.data ?? [])
-      setEstrazioni(estrazioneResult)
+      setEstrazioni(estrazioneResult.data)
+      setEstrazioneError(estrazioneResult.error)
       setBroadcasts((broadcastResult.data ?? []).map((broadcast: Row) => ({
         id: broadcast.id,
         kind: broadcast.kind,
@@ -101,7 +107,7 @@ export function AdminPage() {
   }
 
   useEffect(() => { load() }, [])
-  const allowlistedUsers = countApprovedProfiles(profiles, accessRows)
+  const allowlistedUsers = accessRows.length ? countApprovedAccessRows(accessRows) : dashboard?.allowlistedUsers ?? 0
 
   return (
     <AdminFrame>
@@ -146,7 +152,7 @@ export function AdminPage() {
       {tab === 'orders' && <OrdersAdmin orders={orders} initialGroup={requestedOrdersGroup} reload={load} />}
       {tab === 'kyc' && <KycRequestsAdmin profiles={profiles} initialKycUserId={requestedKycUserId} initialGroup={requestedKycGroup} reload={load} />}
       {tab === 'economy' && <EconomyAdmin games={games} options={rewardOptions} reload={load} />}
-      {tab === 'estrazione' && <EstrazioneAdmin estrazioni={estrazioni} reload={load} />}
+      {tab === 'estrazione' && <EstrazioneAdmin estrazioni={estrazioni} error={estrazioneError} reload={load} />}
       {tab === 'feedback' && <FeedbackAdmin feedback={feedback} reload={load} />}
       {tab === 'settings' && <SettingsAdmin settings={settings} tokenTiers={tokenTiers} reload={load} />}
       {tab === 'regolamentazione' && <RegolamentazioneAdmin locations={locations} reload={load} />}
@@ -648,7 +654,7 @@ async function xhrStorageUpload(path: string, file: File, onProgress: (value: nu
 
 type UsersGroup = 'approved' | 'pending' | 'rejected' | 'issues'
 
-function UsersAdmin({ profiles, accessRows, initialGroup, reload }: { profiles: Row[]; accessRows: Row[]; initialGroup: string | null; reload: () => Promise<void> }) {
+function UsersAdmin({ profiles, accessRows, initialGroup, reload }: { profiles: Row[]; accessRows: AdminAccessRow[]; initialGroup: string | null; reload: () => Promise<void> }) {
   const navigate = useNavigate()
   const location = useLocation()
   const [query, setQuery] = useState('')
@@ -666,42 +672,57 @@ function UsersAdmin({ profiles, accessRows, initialGroup, reload }: { profiles: 
     params.set('usersGroup', group)
     navigate({ search: `?${params.toString()}` })
   }
-  const profilesWithAccess: Row[] = profiles.map(profile => ({
-    ...profile,
-    access: accessRows.find(row => sameTelegramSubject(row.telegram_subject, profile.telegram_subject)),
-  }))
-  const hasValidApprovedAccess = (profile: Row) => Boolean(profile.access && profile.access.enabled !== false && profile.access.access_status === 'approved')
-  const pendingAccessRows: Row[] = accessRows
-    .filter(access => access.access_status === 'pending')
-    .map(access => ({
-      ...profiles.find(profile => sameTelegramSubject(profile.telegram_subject, access.telegram_subject)),
+  const profilesById = new Map(profiles.map(profile => [profile.id, profile]))
+  const profilesBySubject = new Map(
+    profiles
+      .map(profile => [normalizeTelegramSubject(profile.telegram_subject), profile] as const)
+      .filter(([subject]) => Boolean(subject)),
+  )
+  const accessDisplayRows: Row[] = accessRows.map(access => {
+    const profile = (access.profileId ? profilesById.get(access.profileId) : undefined) ?? profilesBySubject.get(normalizeTelegramSubject(access.telegramSubject))
+    return {
+      ...profile,
+      profileId: access.profileId ?? profile?.id ?? null,
+      username: profile?.username ?? access.username ?? access.accessUsername ?? 'utente',
+      telegram_subject: access.telegramSubject,
+      role: access.role,
+      blocked: Boolean(access.blocked || profile?.blocked),
+      has_profile: Boolean(access.hasProfile || profile),
       access,
-      telegram_subject: access.telegram_subject,
-      username: profiles.find(profile => sameTelegramSubject(profile.telegram_subject, access.telegram_subject))?.username ?? access.access_username ?? 'utente',
-      blocked: false,
+      orders: profile?.orders ?? [],
+      feedback: profile?.feedback ?? [],
+      kyc_cases: profile?.kyc_cases,
+    }
+  })
+  const accessSubjects = new Set(accessRows.map(access => normalizeTelegramSubject(access.telegramSubject)).filter(Boolean))
+  const profileOnlyRows: Row[] = profiles
+    .filter(profile => {
+      const subject = normalizeTelegramSubject(profile.telegram_subject)
+      return Boolean(subject && !accessSubjects.has(subject))
+    })
+    .map(profile => ({
+      ...profile,
+      profileId: profile.id,
+      has_profile: true,
+      access: null,
     }))
-  const rejectedAccessRows: Row[] = accessRows
-    .filter(access => access.access_status === 'rejected')
-    .map(access => ({
-      ...profiles.find(profile => sameTelegramSubject(profile.telegram_subject, access.telegram_subject)),
-      access,
-      telegram_subject: access.telegram_subject,
-      username: profiles.find(profile => sameTelegramSubject(profile.telegram_subject, access.telegram_subject))?.username ?? access.access_username ?? 'utente',
-      blocked: true,
-    }))
-  const visibleApprovedProfiles = profilesWithAccess
-    .filter(profile => hasValidApprovedAccess(profile) && !profile.blocked)
-    .filter(profile => `${profile.username} ${profile.telegram_subject}`.toLowerCase().includes(query.toLowerCase()))
-  const visiblePendingRows = pendingAccessRows.filter(entry => `${entry.username} ${entry.telegram_subject}`.toLowerCase().includes(query.toLowerCase()))
-  const visibleRejectedRows = [
-    ...profilesWithAccess.filter(profile => profile.blocked),
-    ...rejectedAccessRows.filter(entry => !profilesWithAccess.some(profile => sameTelegramSubject(profile.telegram_subject, entry.telegram_subject))),
-  ].filter(entry => `${entry.username} ${entry.telegram_subject}`.toLowerCase().includes(query.toLowerCase()))
-  const visibleAccessIssueProfiles = profilesWithAccess
-    .filter(profile => !profile.blocked)
-    .filter(profile => profile.access?.access_status !== 'pending' && profile.access?.access_status !== 'rejected')
-    .filter(profile => !hasValidApprovedAccess(profile))
-    .filter(profile => `${profile.username} ${profile.telegram_subject}`.toLowerCase().includes(query.toLowerCase()))
+  const rows = [...accessDisplayRows, ...profileOnlyRows]
+  const hasValidApprovedAccess = (entry: Row) => Boolean(entry.access?.enabled && entry.access?.accessStatus === 'approved')
+  const matchesQuery = (entry: Row) => `${entry.username} ${entry.telegram_subject}`.toLowerCase().includes(query.toLowerCase())
+  const visibleApprovedProfiles = rows
+    .filter(entry => hasValidApprovedAccess(entry) && !entry.blocked)
+    .filter(matchesQuery)
+  const visiblePendingRows = rows
+    .filter(entry => !entry.blocked && entry.access?.accessStatus === 'pending')
+    .filter(matchesQuery)
+  const visibleRejectedRows = rows
+    .filter(entry => entry.blocked || entry.access?.accessStatus === 'rejected')
+    .filter(matchesQuery)
+  const visibleAccessIssueProfiles = rows
+    .filter(entry => !entry.blocked)
+    .filter(entry => entry.access?.accessStatus !== 'pending' && entry.access?.accessStatus !== 'rejected')
+    .filter(entry => !hasValidApprovedAccess(entry))
+    .filter(matchesQuery)
   const decideAccess = async (telegramSubject: string, decision: 'approved' | 'rejected') => {
     setMessage('')
     setMessageError(false)
@@ -717,9 +738,15 @@ function UsersAdmin({ profiles, accessRows, initialGroup, reload }: { profiles: 
   const toggleBlocked = async (profile: Row) => {
     setMessage('')
     setMessageError(false)
+    const profileId = profile.profileId ?? profile.id
+    if (!profileId) {
+      setMessageError(true)
+      setMessage('Profilo non ancora creato. Puoi rifiutare l’accesso dalla allowlist.')
+      return
+    }
     const nextBlocked = !profile.blocked
     const { error } = await requireSupabase().rpc('admin_set_profile_blocked', {
-      p_user_id: profile.id,
+      p_user_id: profileId,
       p_blocked: nextBlocked,
     })
     if (error) {
@@ -732,19 +759,26 @@ function UsersAdmin({ profiles, accessRows, initialGroup, reload }: { profiles: 
   }
   const openKycDocuments = (profile: Row) => {
     const group = parseKycGroup(profile.kyc_cases?.status ?? null)
-    if (!profile.id || !group) return
+    const profileId = profile.profileId ?? profile.id
+    if (!profileId || !group) return
     const params = new URLSearchParams(location.search)
     params.set('tab', 'kyc')
-    params.set('kyc', profile.id)
+    params.set('kyc', profileId)
     params.set('kycGroup', group)
     navigate({ search: `?${params.toString()}` })
   }
   const removeAccount = async (profile: Row) => {
+    const profileId = profile.profileId ?? profile.id
+    if (!profileId) {
+      setMessageError(true)
+      setMessage('Profilo non ancora creato. Puoi rifiutare l’accesso dalla allowlist.')
+      return
+    }
     if (!window.confirm(`Eliminare definitivamente l'account @${profile.username}? Tutti i dati associati verranno rimossi.`)) return
     setMessage('')
     setMessageError(false)
     try {
-      await adminDeleteAccount(profile.id)
+      await adminDeleteAccount(profileId)
       setMessage('Account eliminato definitivamente.')
       await reload()
     } catch (caught) {
@@ -752,35 +786,47 @@ function UsersAdmin({ profiles, accessRows, initialGroup, reload }: { profiles: 
       setMessage(italianErrorMessage(caught, 'Eliminazione account non riuscita.'))
     }
   }
-  const userRows = (items: Row[]) => items.map(profile => (
-    <div key={profile.id} className="flex flex-col lg:flex-row lg:items-center gap-3" style={row}>
-      <div className="flex-1 min-w-0">
-        <strong>@{profile.username}</strong>
-        <div className="break-all" style={muted}>Telegram ID: {profile.telegram_subject} / {profile.role === 'admin' ? 'amministratore' : 'utente'} / accesso: {profile.access?.access_status ?? 'pending'}</div>
-        <div style={muted}>
-          {(profile.orders ?? []).filter((order: Row) => order.status === 'completed').length} completate / {(profile.feedback ?? []).length} recensioni
-          {profile.kyc_cases?.retain_until ? ` / documenti fino a ${new Date(profile.kyc_cases.retain_until).toLocaleDateString('it-IT')}` : ''}
+  const userRows = (items: Row[]) => items.map(profile => {
+    const profileId = profile.profileId ?? profile.id
+    const hasProfile = Boolean(profile.has_profile || profileId)
+    return (
+      <div key={profileId ?? profile.telegram_subject} className="flex flex-col lg:flex-row lg:items-center gap-3" style={row}>
+        <div className="flex-1 min-w-0">
+          <strong>@{profile.username}</strong>
+          <div className="break-all" style={muted}>Telegram ID: {profile.telegram_subject} / {profile.role === 'admin' ? 'amministratore' : 'utente'} / accesso: {profile.access?.accessStatus ?? 'pending'}</div>
+          {hasProfile ? (
+            <div style={muted}>
+              {(profile.orders ?? []).filter((order: Row) => order.status === 'completed').length} completate / {(profile.feedback ?? []).length} recensioni
+              {profile.kyc_cases?.retain_until ? ` / documenti fino a ${new Date(profile.kyc_cases.retain_until).toLocaleDateString('it-IT')}` : ''}
+            </div>
+          ) : (
+            <div style={muted}>Profilo non ancora creato: verra creato al prossimo accesso Telegram.</div>
+          )}
         </div>
+        {profile.blocked && <span style={{ color: '#FCA5A5' }}>BLOCCATO</span>}
+        {hasProfile && <span style={{ color: profile.kyc_cases?.status === 'approved' ? '#D7FE55' : '#F59E0B' }}>KYC: {kycStatusLabel[profile.kyc_cases?.status ?? 'not_started']}</span>}
+        {hasProfile && parseKycGroup(profile.kyc_cases?.status ?? null) && <button style={smallButton} onClick={() => openKycDocuments(profile)}>Documenti KYC</button>}
+        {profile.role !== 'admin' && (
+          hasProfile ? (
+            <>
+              <button style={profile.blocked ? smallButton : dangerButton} onClick={() => toggleBlocked(profile)}>
+                {profile.blocked ? 'Sblocca' : 'Blocca'}
+              </button>
+              <button style={dangerButton} onClick={() => removeAccount(profile)}>Elimina</button>
+            </>
+          ) : (
+            <button style={dangerButton} onClick={() => decideAccess(profile.telegram_subject, 'rejected')}>RIFIUTA</button>
+          )
+        )}
       </div>
-      {profile.blocked && <span style={{ color: '#FCA5A5' }}>BLOCCATO</span>}
-      <span style={{ color: profile.kyc_cases?.status === 'approved' ? '#D7FE55' : '#F59E0B' }}>KYC: {kycStatusLabel[profile.kyc_cases?.status ?? 'not_started']}</span>
-      {parseKycGroup(profile.kyc_cases?.status ?? null) && <button style={smallButton} onClick={() => openKycDocuments(profile)}>Documenti KYC</button>}
-      {profile.role !== 'admin' && (
-        <>
-          <button style={profile.blocked ? smallButton : dangerButton} onClick={() => toggleBlocked(profile)}>
-            {profile.blocked ? 'Sblocca' : 'Blocca'}
-          </button>
-          <button style={dangerButton} onClick={() => removeAccount(profile)}>Elimina</button>
-        </>
-      )}
-    </div>
-  ))
+    )
+  })
   const pendingRows = (items: Row[]) => items.map(entry => (
     <div key={entry.telegram_subject} className="flex flex-col sm:flex-row sm:items-center gap-3" style={row}>
       <div className="flex-1 min-w-0">
         <strong>@{entry.username}</strong>
         <div className="break-all" style={muted}>Telegram ID: {entry.telegram_subject}</div>
-        {entry.access?.access_requested_at && <div style={muted}>Richiesta: {new Date(entry.access.access_requested_at).toLocaleString('it-IT')}</div>}
+        {entry.access?.accessRequestedAt && <div style={muted}>Richiesta: {new Date(entry.access.accessRequestedAt).toLocaleString('it-IT')}</div>}
       </div>
       <div className="flex flex-col sm:flex-row gap-2">
         <button style={{ ...primary, background: '#10B981' }} onClick={() => decideAccess(entry.telegram_subject, 'approved')}>ACCETTA</button>
@@ -789,35 +835,36 @@ function UsersAdmin({ profiles, accessRows, initialGroup, reload }: { profiles: 
     </div>
   ))
   const rejectedRows = (items: Row[]) => items.map(entry => (
-    <div key={entry.id ?? entry.telegram_subject} className="flex flex-col sm:flex-row sm:items-center gap-3" style={row}>
+    <div key={entry.profileId ?? entry.id ?? entry.telegram_subject} className="flex flex-col sm:flex-row sm:items-center gap-3" style={row}>
       <div className="flex-1 min-w-0">
         <strong>@{entry.username}</strong>
-        <div className="break-all" style={muted}>Telegram ID: {entry.telegram_subject} / {entry.access?.access_status === 'rejected' ? 'rifiutato' : 'bloccato'}</div>
+        <div className="break-all" style={muted}>Telegram ID: {entry.telegram_subject} / {entry.access?.accessStatus === 'rejected' ? 'rifiutato' : 'bloccato'}</div>
       </div>
-      <span style={{ color: '#FCA5A5' }}>{entry.access?.access_status === 'rejected' ? 'RIFIUTATO' : 'BLOCCATO'}</span>
-      {entry.id && entry.role !== 'admin' && (
+      <span style={{ color: '#FCA5A5' }}>{entry.access?.accessStatus === 'rejected' ? 'RIFIUTATO' : 'BLOCCATO'}</span>
+      {(entry.profileId ?? entry.id) && entry.role !== 'admin' && (
         <>
           <button style={smallButton} onClick={() => toggleBlocked(entry)}>Sblocca</button>
           <button style={dangerButton} onClick={() => removeAccount(entry)}>Elimina</button>
         </>
       )}
+      {!(entry.profileId ?? entry.id) && <button style={{ ...primary, background: '#10B981' }} onClick={() => decideAccess(entry.telegram_subject, 'approved')}>ACCETTA</button>}
     </div>
   ))
   const issueRows = (items: Row[]) => items.map(profile => {
     const accessLabel = !profile.access
       ? 'allowlist mancante'
-      : profile.access.access_status === 'approved' && profile.access.enabled === false
+      : profile.access.accessStatus === 'approved' && profile.access.enabled === false
         ? 'approved disabilitato'
-        : `accesso non valido: ${profile.access.access_status ?? 'sconosciuto'}`
+        : `accesso non valido: ${profile.access.accessStatus ?? 'sconosciuto'}`
     return (
-      <div key={profile.id} className="flex flex-col lg:flex-row lg:items-center gap-3" style={row}>
+      <div key={profile.profileId ?? profile.id ?? profile.telegram_subject} className="flex flex-col lg:flex-row lg:items-center gap-3" style={row}>
         <div className="flex-1 min-w-0">
           <strong>@{profile.username}</strong>
           <div className="break-all" style={muted}>Telegram ID: {profile.telegram_subject} / {accessLabel}</div>
-          <div style={muted}>Questo profilo non viene contato come autorizzato finché non ha allowlist approved + enabled.</div>
+          <div style={muted}>Questo profilo non viene contato come autorizzato finche non ha allowlist approved + enabled.</div>
         </div>
         <span style={{ color: '#F59E0B' }}>DA VERIFICARE</span>
-        {profile.role !== 'admin' && (
+        {profile.role !== 'admin' && (profile.profileId ?? profile.id) && (
           <>
             <button style={dangerButton} onClick={() => toggleBlocked(profile)}>Blocca</button>
             <button style={dangerButton} onClick={() => removeAccount(profile)}>Elimina</button>
@@ -1518,7 +1565,7 @@ function EconomyAdmin({ games, options, reload }: { games: Row[]; options: Row[]
   )
 }
 
-function EstrazioneAdmin({ estrazioni, reload }: { estrazioni: AdminEstrazione[]; reload: () => Promise<void> }) {
+function EstrazioneAdmin({ estrazioni, error, reload }: { estrazioni: AdminEstrazione[]; error: string; reload: () => Promise<void> }) {
   const [selectedId, setSelectedId] = useState<string>('new')
   const selected = selectedId === 'new' ? null : estrazioni.find(item => item.id === selectedId) ?? null
   const [titleDraft, setTitleDraft] = useState('Estrazione Street Family')
@@ -1656,6 +1703,7 @@ function EstrazioneAdmin({ estrazioni, reload }: { estrazioni: AdminEstrazione[]
 
   return (
     <Section title="Estrazione" note="Gestisci il sorteggio con numeri 1-99. Un utente può comprare un solo biglietto per ogni Estrazione.">
+      {error && <div className="p-3 mb-4 rounded-xl" style={{ color: '#EF4444', background: 'rgba(239,68,68,.12)' }}>{error}</div>}
       <div className="grid lg:grid-cols-[1fr_.85fr] gap-4">
         <div className="p-4 rounded-xl" style={panel}>
           <div className="flex flex-wrap gap-2 mb-4">
@@ -2148,11 +2196,8 @@ function sameTelegramSubject(left: unknown, right: unknown) {
   const normalizedRight = normalizeTelegramSubject(right)
   return Boolean(normalizedLeft && normalizedRight && normalizedLeft === normalizedRight)
 }
-function countApprovedProfiles(profiles: Row[], accessRows: Row[]) {
-  return profiles.filter(profile => {
-    const access = accessRows.find(row => sameTelegramSubject(row.telegram_subject, profile.telegram_subject))
-    return Boolean(access && access.enabled !== false && access.access_status === 'approved' && !profile.blocked)
-  }).length
+function countApprovedAccessRows(accessRows: AdminAccessRow[]) {
+  return accessRows.filter(access => access.enabled && access.accessStatus === 'approved' && !access.blocked).length
 }
 const panel = { background: '#11181B', border: '1px solid rgba(126,156,168,.18)' }
 const row = { padding: 12, marginBottom: 8, background: 'rgba(245,245,245,.035)', borderRadius: 10, minWidth: 0 }
