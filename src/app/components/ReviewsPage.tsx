@@ -84,7 +84,6 @@ function ReviewCard({ review, onProductSelect, compact = false }: { review: Revi
             {(review.username ?? 'S').slice(0, 1).toUpperCase()}
           </div>
           <div className="min-w-0">
-            <strong style={{ display: 'block' }}>@{review.username ?? 'membro'}</strong>
             <div className="flex gap-1 mt-1" aria-label={`${review.rating} stelle`}>
             {Array.from({ length: 5 }, (_, index) => (
               <Star key={index} size={14} fill={index < review.rating ? '#D7FE55' : 'transparent'} style={{ color: index < review.rating ? '#D7FE55' : 'rgba(245,245,245,.28)' }} />
@@ -109,7 +108,7 @@ function ReviewCard({ review, onProductSelect, compact = false }: { review: Revi
       </div>
       <div className="grid grid-cols-2 gap-2 mt-4">
         <OrderFact label="Ordine" value={review.order.displayId} />
-        <OrderFact label="Totale" value={`EUR ${formatMoney(review.order.total)}`} />
+        <OrderFact label="Quantità" value={`${review.order.totalUnits} g`} />
       </div>
     </article>
   )
@@ -168,10 +167,6 @@ function OrderFact({ label, value }: { label: string; value: string }) {
 
 function formatDate(value: string) {
   return value ? new Date(value).toLocaleDateString('it-IT') : ''
-}
-
-function formatMoney(value: number) {
-  return value.toLocaleString('it-IT', { maximumFractionDigits: 0 })
 }
 
 const panel = { background: '#11181B', border: '1px solid rgba(126,156,168,.18)', borderRadius: 8 }
