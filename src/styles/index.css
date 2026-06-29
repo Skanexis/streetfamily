@@ -1574,6 +1574,20 @@ html.sf-scratching .sf-game-overlay {
   font-size: .76rem;
 }
 
+.sf-instagram-target-link {
+  display: inline-flex;
+  align-items: center;
+  gap: .28rem;
+  min-height: 30px;
+  padding: 0 .55rem;
+  border-radius: .58rem;
+  color: #080c0e;
+  background: #d7fe55;
+  font-size: .72rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
 .sf-instagram-gate-row {
   align-items: end;
 }

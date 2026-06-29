@@ -26,6 +26,8 @@ const exactMessages: Record<string, string> = {
   ESTR_INSTAGRAM_TARGET_REQUIRED: 'Configura l’account Instagram richiesto.',
   ESTR_INSTAGRAM_URL_INVALID: 'Inserisci un link Instagram valido.',
   ESTR_INSTAGRAM_TAGS_INVALID: 'Numero amici da taggare non valido.',
+  ESTR_VIBER_URL_REQUIRED: 'Inserisci il link del canale Viber.',
+  ESTR_VIBER_URL_INVALID: 'Inserisci un link Viber valido.',
   ESTR_PRIZE_VALUE_INVALID: 'Valore premio non valido.',
   ESTR_INSTAGRAM_CODE_NOT_FOUND: 'Codice Instagram non trovato. Generane uno nuovo.',
   ESTR_INSTAGRAM_CODE_EXPIRED: 'Codice Instagram scaduto. Generane uno nuovo.',

@@ -1611,6 +1611,8 @@ function EstrazioneAdmin({ estrazioni, error, reload }: { estrazioni: AdminEstra
   const [prizeThirdDraft, setPrizeThirdDraft] = useState('100')
   const [instagramRequiredDraft, setInstagramRequiredDraft] = useState(false)
   const [instagramTargetDraft, setInstagramTargetDraft] = useState('')
+  const [viberRequiredDraft, setViberRequiredDraft] = useState(false)
+  const [viberUrlDraft, setViberUrlDraft] = useState('')
   const [scheduleDraft, setScheduleDraft] = useState('')
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
@@ -1634,6 +1636,8 @@ function EstrazioneAdmin({ estrazioni, error, reload }: { estrazioni: AdminEstra
       setPrizeThirdDraft('100')
       setInstagramRequiredDraft(false)
       setInstagramTargetDraft('')
+      setViberRequiredDraft(false)
+      setViberUrlDraft('')
       setScheduleDraft('')
       return
     }
@@ -1647,6 +1651,8 @@ function EstrazioneAdmin({ estrazioni, error, reload }: { estrazioni: AdminEstra
     setPrizeThirdDraft(String(selected.prizeThirdValue || 100))
     setInstagramRequiredDraft(selected.instagramRequired)
     setInstagramTargetDraft(selected.instagramTargetUsername)
+    setViberRequiredDraft(selected.viberRequired)
+    setViberUrlDraft(selected.viberChannelUrl)
     setScheduleDraft(selected.scheduledAt ? datetimeLocal(selected.scheduledAt) : '')
   }, [selected?.id])
 
@@ -1680,6 +1686,15 @@ function EstrazioneAdmin({ estrazioni, error, reload }: { estrazioni: AdminEstra
       setMessage('Inserisci valori premio tra 1 e 100000.')
       return
     }
+    const viberChannelUrl = normalizeUrlDraft(viberUrlDraft)
+    if (viberChannelUrl === null) {
+      setMessage('Inserisci un link Viber valido.')
+      return
+    }
+    if (viberRequiredDraft && !viberChannelUrl) {
+      setMessage('Inserisci il link del canale Viber.')
+      return
+    }
     await runAction(() => adminSaveEstrazione({
       id: selected?.id ?? null,
       title: titleDraft,
@@ -1694,6 +1709,8 @@ function EstrazioneAdmin({ estrazioni, error, reload }: { estrazioni: AdminEstra
       instagramTargetUsername: instagramTargetDraft,
       instagramVerificationUrl: '',
       instagramTagFriendsCount: 1,
+      viberRequired: viberRequiredDraft,
+      viberChannelUrl,
     }), 'Estrazione salvata.')
   }
 
@@ -1770,6 +1787,15 @@ function EstrazioneAdmin({ estrazioni, error, reload }: { estrazioni: AdminEstra
                 </label>
               </>
             )}
+            <label className="sm:col-span-2" style={{ ...muted, display: 'flex', gap: 10, alignItems: 'center' }}>
+              <input type="checkbox" checked={viberRequiredDraft} disabled={!canEdit} onChange={event => setViberRequiredDraft(event.currentTarget.checked)} style={{ width: 18, height: 18, accentColor: '#D7FE55' }} />
+              Richiedi iscrizione al canale Viber. Il link verrà mostrato come pulsante nelle regole.
+            </label>
+            {viberRequiredDraft && (
+              <label className="sm:col-span-2" style={muted}>Link canale Viber
+                <input value={viberUrlDraft} disabled={!canEdit} onChange={event => setViberUrlDraft(event.currentTarget.value)} placeholder="https://invite.viber.com/..." style={{ ...input, display: 'block', width: '100%', marginTop: 5 }} />
+              </label>
+            )}
           </div>
           <div className="flex flex-wrap gap-2 mt-4">
             <button type="button" disabled={busy || !canEdit} style={{ ...primary, opacity: busy || !canEdit ? .55 : 1 }} onClick={() => { void save() }}>{selected ? 'Salva' : 'Crea bozza'}</button>
@@ -1795,6 +1821,7 @@ function EstrazioneAdmin({ estrazioni, error, reload }: { estrazioni: AdminEstra
                 <EstrazioneMetric label="Stato" value={estrazioneStatusLabel(selected.status)} />
                 <EstrazioneMetric label="Venduti" value={`${selected.soldCount}/${selected.maxTickets}`} />
                 <EstrazioneMetric label="Instagram" value={selected.instagramRequired ? selected.instagramCount : 'Off'} />
+                <EstrazioneMetric label="Viber" value={selected.viberRequired ? 'On' : 'Off'} />
                 <EstrazioneMetric label="Reminder TG" value={selected.messageCounts.reminder} />
                 <EstrazioneMetric label="Errori TG" value={selected.messageCounts.errors} />
               </div>
@@ -2234,6 +2261,16 @@ function parseOptionalInteger(value: NumericDraft) {
   if (!text || text === '-') return null
   const parsed = Number(text)
   return Number.isInteger(parsed) ? parsed : null
+}
+function normalizeUrlDraft(value: string) {
+  const text = value.trim()
+  if (!text) return ''
+  const withScheme = /^https?:\/\//i.test(text) ? text : `https://${text}`
+  try {
+    return new URL(withScheme).toString()
+  } catch {
+    return null
+  }
 }
 function broadcastTitleFromMessage(value: string) {
   const firstLine = value.split(/\r?\n/).map(line => line.trim()).find(Boolean) ?? 'Notizia'

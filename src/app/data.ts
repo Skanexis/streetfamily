@@ -157,6 +157,8 @@ export interface Estrazione {
   instagramTargetUsername: string
   instagramVerificationUrl: string
   instagramTagFriendsCount: number
+  viberRequired: boolean
+  viberChannelUrl: string
   prizeFirstValue: number
   prizeSecondValue: number
   prizeThirdValue: number

@@ -2,7 +2,7 @@ import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } fro
 import { useParams } from 'react-router-dom'
 import { motion, useReducedMotion } from 'motion/react'
 import confetti from 'canvas-confetti'
-import { AtSign, CalendarClock, Clock3, Coins, Hash, Loader2, RadioTower, ShieldCheck, Sparkles, Ticket, Trophy } from 'lucide-react'
+import { AtSign, CalendarClock, Clock3, Coins, ExternalLink, Hash, Loader2, RadioTower, ShieldCheck, Sparkles, Ticket, Trophy } from 'lucide-react'
 import type { CurrentEstrazione, Estrazione, EstrazioneWinner, User } from '../data'
 import { buyEstrazioneTicket, getCurrentEstrazione } from '../lib/api'
 import { italianErrorMessage } from '../lib/errors'
@@ -157,6 +157,7 @@ function RulesCard({ draw }: { draw: Estrazione }) {
   const ordersLabel = draw.minCompletedOrders <= 0
     ? 'Nessun ordine minimo richiesto'
     : `Effettuare almeno ${draw.minCompletedOrders} ${draw.minCompletedOrders === 1 ? 'ordine' : 'ordini'}`
+  const instagramUrl = draw.instagramTargetUsername ? instagramProfileUrl(draw.instagramTargetUsername) : ''
 
   return (
     <section className="sf-rules-card" aria-label="Regole Estrazione">
@@ -181,7 +182,30 @@ function RulesCard({ draw }: { draw: Estrazione }) {
         <RuleItem>Registrarsi sul sito</RuleItem>
         <RuleItem>Completare la verifica dell’identità</RuleItem>
         <RuleItem>{ordersLabel}</RuleItem>
-        {draw.instagramRequired && <RuleItem>Seguire pagina Instagram{draw.instagramTargetUsername ? ` @${draw.instagramTargetUsername}` : ''}</RuleItem>}
+        {draw.instagramRequired && (
+          <RuleItem>
+            <span>Seguire pagina Instagram</span>
+            {instagramUrl ? (
+              <a className="sf-rules-post-link" href={instagramUrl} target="_blank" rel="noreferrer">
+                Apri Instagram <ExternalLink size={12} />
+              </a>
+            ) : (
+              <span className="sf-rules-post-text">Controllo manuale</span>
+            )}
+          </RuleItem>
+        )}
+        {draw.viberRequired && (
+          <RuleItem>
+            <span>Iscriversi al canale Viber</span>
+            {draw.viberChannelUrl ? (
+              <a className="sf-rules-post-link" href={draw.viberChannelUrl} target="_blank" rel="noreferrer">
+                Apri Viber <ExternalLink size={12} />
+              </a>
+            ) : (
+              <span className="sf-rules-post-text">Link in arrivo</span>
+            )}
+          </RuleItem>
+        )}
         <RuleItem>Acquistare il biglietto ({formatGettoni(draw.ticketPrice)})</RuleItem>
       </ul>
 
@@ -207,12 +231,19 @@ function InstagramGate({
   onUsernameChange: (value: string) => void
 }) {
   const target = draw.instagramTargetUsername
+  const targetUrl = target ? instagramProfileUrl(target) : ''
   const valid = isValidInstagramUsername(username)
   return (
     <div className={`sf-instagram-gate ${valid ? 'is-verified' : ''}`}>
       <div className="sf-instagram-gate-head">
         <div><AtSign size={18} /><span>Instagram richiesto</span></div>
-        <strong>{target ? `Follow @${target}` : 'Controllo manuale'}</strong>
+        {targetUrl ? (
+          <a className="sf-instagram-target-link" href={targetUrl} target="_blank" rel="noreferrer">
+            Apri Instagram <ExternalLink size={13} />
+          </a>
+        ) : (
+          <strong>Controllo manuale</strong>
+        )}
       </div>
       <div className="sf-instagram-gate-row">
         <label>
@@ -420,6 +451,11 @@ function winnerName(winner: EstrazioneWinner) {
   const profile = winner.username ? `@${winner.username}` : winner.telegramSubject ? `Telegram ${winner.telegramSubject}` : 'Utente Street Family'
   if (winner.instagramUsername) return `${profile} / IG @${winner.instagramUsername}`
   return profile
+}
+
+function instagramProfileUrl(username: string) {
+  const normalized = username.trim().replace(/^@+/, '').replace(/^https?:\/\/(www\.)?instagram\.com\//i, '').split(/[/?#]/)[0]
+  return `https://www.instagram.com/${normalized}/`
 }
 
 function isValidInstagramUsername(value: string) {

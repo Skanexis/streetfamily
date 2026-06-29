@@ -114,6 +114,8 @@ function mapEstrazione(row: RecordValue | null): Estrazione | null {
     instagramTargetUsername: row.instagram_target_username ?? '',
     instagramVerificationUrl: row.instagram_verification_url ?? '',
     instagramTagFriendsCount: Number(row.instagram_tag_friends_count ?? 1),
+    viberRequired: Boolean(row.viber_required),
+    viberChannelUrl: row.viber_channel_url ?? '',
     prizeFirstValue: Number(row.prize_first_value ?? 600),
     prizeSecondValue: Number(row.prize_second_value ?? 300),
     prizeThirdValue: Number(row.prize_third_value ?? 100),
@@ -637,6 +639,8 @@ export async function adminSaveEstrazione(input: {
   instagramTargetUsername: string
   instagramVerificationUrl: string
   instagramTagFriendsCount: number
+  viberRequired: boolean
+  viberChannelUrl: string
   prizeFirstValue: number
   prizeSecondValue: number
   prizeThirdValue: number
@@ -652,6 +656,8 @@ export async function adminSaveEstrazione(input: {
     p_instagram_target_username: input.instagramTargetUsername,
     p_instagram_verification_url: input.instagramVerificationUrl,
     p_instagram_tag_friends_count: input.instagramTagFriendsCount,
+    p_viber_required: input.viberRequired,
+    p_viber_channel_url: input.viberChannelUrl,
     p_prize_first_value: input.prizeFirstValue,
     p_prize_second_value: input.prizeSecondValue,
     p_prize_third_value: input.prizeThirdValue,
