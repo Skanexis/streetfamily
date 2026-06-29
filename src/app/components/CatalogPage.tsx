@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { ShoppingCart, Star, X } from 'lucide-react'
-import type { CartItem, Feedback, Product, ProductVariant } from '../data'
+import type { CartItem, Product, ProductVariant, ReviewFeedback } from '../data'
 import { ProductCardMedia, VideoPreview } from './ProductCardMedia'
 
 type AddFn = (item: Omit<CartItem, 'id'>) => void
-interface Props { products: Product[]; categories: string[]; feedback: Feedback[]; addToCart: AddFn; selectedProductId: string | null; onProductSelect: (id: string | null) => void }
+interface Props { products: Product[]; categories: string[]; feedback: ReviewFeedback[]; addToCart: AddFn; selectedProductId: string | null; onProductSelect: (id: string | null) => void }
 const minimumGrams = 25
 const gramStep = 25
 const maximumCustomGrams = 5000
@@ -37,7 +37,7 @@ function Card({ product, onClick }: { product: Product; onClick: () => void }) {
   </motion.button>
 }
 
-function Detail({ product, feedback, onClose, addToCart }: { product?: Product; feedback: Feedback[]; onClose: () => void; addToCart: AddFn }) {
+function Detail({ product, feedback, onClose, addToCart }: { product?: Product; feedback: ReviewFeedback[]; onClose: () => void; addToCart: AddFn }) {
   const initialGrams = product?.variants.find(item => item.available && item.unitAmount >= minimumGrams)?.unitAmount ?? minimumGrams
   const [customGrams, setCustomGrams] = useState(String(initialGrams))
   const [selectedMediaId, setSelectedMediaId] = useState(product?.media[0]?.id ?? '')
@@ -66,6 +66,7 @@ function Detail({ product, feedback, onClose, addToCart }: { product?: Product; 
   if (highestAvailableGrams < minimumGrams) return null
   const media = product.media.filter(item => item.url).slice(0, 8)
   const activeMedia = media.find(item => item.id === selectedMediaId) ?? media[0]
+  const productFeedback = feedback.filter(item => item.products.some(reviewProduct => reviewProduct.id === product.id))
   const add = () => {
     if (!validWeight || price === null || !pricingVariant) return
     addToCart({ productId: product.id, variantId: pricingVariant.id, name: product.name, variantLabel: `${grams} g`, unitAmount: grams, tokenAward, price, img: product.img })
@@ -103,8 +104,14 @@ function Detail({ product, feedback, onClose, addToCart }: { product?: Product; 
       <div className="px-3 py-2 mb-3" style={{ background: 'rgba(215,254,85,.06)', color: '#D7FE55', fontSize: 13 }}>+{tokenAward} gettoni dopo un ordine completato</div>
       <button onClick={add} disabled={!validWeight} className="w-full py-3 flex justify-center gap-2" style={{ background: '#D7FE55', color: '#080C0E', fontWeight: 700, opacity: validWeight ? 1 : .5 }}><ShoppingCart size={18} />{added ? 'Aggiunto' : 'Aggiungi al carrello'}</button>
       <h3 style={{ fontFamily: 'Space Grotesk', fontSize: 19, fontWeight: 700, margin: '22px 0 12px' }}>Recensioni pubblicate dalla community</h3>
-      {feedback.length === 0 && <p style={{ color: 'rgba(245,245,245,.5)' }}>Nessuna recensione pubblicata.</p>}
-      {feedback.map(item => <div key={item.id} className="p-3 mb-2" style={{ background: '#080C0E' }}><div className="flex gap-1 mb-2">{Array.from({ length: item.rating }, (_, index) => <Star key={index} size={12} fill="#D7FE55" style={{ color: '#D7FE55' }} />)}</div><p style={{ fontSize: 13 }}>{item.message}</p></div>)}
+      {productFeedback.length === 0 && <p style={{ color: 'rgba(245,245,245,.5)' }}>Nessuna recensione pubblicata per questo prodotto.</p>}
+      {productFeedback.map(item => <div key={item.id} className="p-3 mb-2" style={{ background: '#080C0E' }}>
+        <div className="flex items-center justify-between gap-3 mb-2">
+          <div className="flex gap-1">{Array.from({ length: item.rating }, (_, index) => <Star key={index} size={12} fill="#D7FE55" style={{ color: '#D7FE55' }} />)}</div>
+          <span style={{ color: 'rgba(245,245,245,.45)', fontSize: 11 }}>{item.order.displayId} / {item.order.totalUnits} g</span>
+        </div>
+        <p style={{ fontSize: 13, lineHeight: 1.55 }}>{item.message}</p>
+      </div>)}
     </motion.div>
   </motion.div>
 }

@@ -10,7 +10,8 @@ import {
 
 type Action = 'publish' | 'archive' | 'delete'
 
-function broadcastText(title: string, message: string) {
+function broadcastText(kind: string, title: string, message: string) {
+  if (kind !== 'product_new') return message
   return `${title}\n\n${message}`
 }
 
@@ -32,7 +33,7 @@ Deno.serve(async req => {
 
     const db = adminClient()
     const broadcast = await db.from('broadcasts')
-      .select('id,title,message,status,published_at')
+      .select('id,kind,title,message,status,published_at')
       .eq('id', broadcastId)
       .maybeSingle()
     if (broadcast.error) return json({ error: publicErrorMessage(broadcast.error.message, 'Lettura della notizia non riuscita.') }, 500)
@@ -94,7 +95,7 @@ Deno.serve(async req => {
         && !alreadySent.has(value)
       ))
 
-    const text = broadcastText(broadcast.data.title, broadcast.data.message)
+    const text = broadcastText(broadcast.data.kind, broadcast.data.title, broadcast.data.message)
     const appUrl = Deno.env.get('TELEGRAM_MINI_APP_URL')
     const keyboard = appUrl
       ? { inline_keyboard: [[{ text: 'Apri Street Family', web_app: { url: appUrl } }]] }

@@ -22,6 +22,10 @@ import type {
   PlayableGame,
   Product,
   Profile,
+  ReviewFeedback,
+  ReviewProduct,
+  ReviewsWallData,
+  ReviewScreenshot,
   ScenarioSelection,
   ServiceArea,
   TestOrder,
@@ -333,6 +337,59 @@ export async function getProfileActivity(userId: string) {
   return { orders, ledger, rewards, feedback }
 }
 
+function mapReviewProduct(row: RecordValue | null): ReviewProduct | null {
+  if (!row?.id) return null
+  return {
+    id: row.id,
+    name: row.name ?? '',
+    category: row.category ?? '',
+    variantLabels: row.variant_labels ?? [],
+  }
+}
+
+function mapReviewFeedback(row: RecordValue): ReviewFeedback {
+  return {
+    id: row.id,
+    rating: Number(row.rating ?? 0),
+    message: row.message ?? '',
+    createdAt: row.created_at,
+    username: row.username ?? null,
+    avatarUrl: row.avatar_url ?? null,
+    order: {
+      id: row.order?.id ?? '',
+      displayId: row.order?.display_id ?? '',
+      createdAt: row.order?.created_at ?? row.created_at,
+      total: Number(row.order?.total ?? 0),
+      totalUnits: Number(row.order?.total_units ?? 0),
+    },
+    products: ((row.products ?? []) as RecordValue[]).map(mapReviewProduct).filter(Boolean) as ReviewProduct[],
+  }
+}
+
+export async function getReviewsWall(): Promise<ReviewsWallData> {
+  const db = requireSupabase()
+  const payload = unwrap(await db.rpc('get_reviews_wall')) as RecordValue
+  const feedback = ((payload.feedback ?? []) as RecordValue[]).map(mapReviewFeedback)
+  const screenshots = await Promise.all(((payload.screenshots ?? []) as RecordValue[]).map(async (row): Promise<ReviewScreenshot> => {
+    let imageUrl = row.image_url ?? ''
+    if (row.storage_path) {
+      const signed = await db.storage.from('review-screenshots').createSignedUrl(row.storage_path, 3600)
+      imageUrl = signed.data?.signedUrl ?? ''
+    }
+    return {
+      id: row.id,
+      imageUrl,
+      storagePath: row.storage_path ?? '',
+      customerLabel: row.customer_label ?? '',
+      orderLabel: row.order_label ?? '',
+      message: row.message ?? '',
+      createdAt: row.created_at,
+      product: mapReviewProduct(row.product ?? null),
+    }
+  }))
+  return { feedback, screenshots }
+}
+
 export async function getPlayableGames(): Promise<PlayableGame[]> {
   const db = requireSupabase()
   const { data, error } = await db.from('game_configs')
@@ -421,6 +478,7 @@ export async function getDemoInfo(): Promise<DemoInfo> {
   return {
     disclaimer: '',
     instagram: result.links?.instagram ?? '',
+    telegram: result.links?.telegram ?? null,
     viber: result.links?.viber ?? '',
     signal: result.links?.signal ?? null,
   }

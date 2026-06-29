@@ -1,5 +1,6 @@
 const exactMessages: Record<string, string> = {
   FEEDBACK_INVALID: 'La recensione non è valida.',
+  BROADCAST_MESSAGE_INVALID: 'Il messaggio della notizia deve contenere tra 1 e 3500 caratteri.',
   COMPLETED_ORDER_REQUIRED: 'Puoi lasciare una recensione solo dopo un ordine completato.',
   SPIN_TICKET_REQUIRED: 'Non hai biglietti disponibili per la ruota.',
   SCRATCH_TICKET_REQUIRED: 'Non hai biglietti disponibili per Scratch.',

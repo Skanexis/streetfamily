@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import type { Broadcast, CartItem, Feedback, KycStatus, LedgerEntry, Level, Page, Product, ServiceArea, TestOrder, UserReward } from './data'
+import type { Broadcast, CartItem, KycStatus, LedgerEntry, Level, Page, Product, ReviewsWallData, ServiceArea, TestOrder, UserReward } from './data'
 import { TopNav } from './components/TopNav'
 import { BottomNav } from './components/BottomNav'
 import { HomePage } from './components/HomePage'
@@ -10,17 +10,19 @@ import { EstrazioneLivePage, EstrazionePage } from './components/EstrazionePage'
 import { ProfilePage } from './components/ProfilePage'
 import { InfoPage } from './components/InfoPage'
 import { ContactsPage } from './components/ContactsPage'
+import { ReviewsPage } from './components/ReviewsPage'
 import { CartDrawer } from './components/CartDrawer'
 import { AdminPage } from './components/AdminPage'
 import { AccessDeniedPage, AccessPendingPage, BlockedPage, CallbackPage, LoginPage, RequireAdmin, RequireMember } from './components/AuthPages'
 
 import { useAuth } from './auth/AuthProvider'
-import { buyGameTicket, getBroadcasts, getCatalog, getCatalogCategories, getKycStatus, getLevels, getProfileActivity, getServiceAreas, playGame, submitTestOrder } from './lib/api'
+import { buyGameTicket, getBroadcasts, getCatalog, getCatalogCategories, getKycStatus, getLevels, getProfileActivity, getReviewsWall, getServiceAreas, playGame, submitTestOrder } from './lib/api'
 import { requireSupabase } from './lib/supabase'
 import { italianErrorMessage } from './lib/errors'
 import '../styles/fonts.css'
 
-const PAGE_PATHS: Record<Page, string> = { home: '/', catalog: '/catalog', games: '/games', estrazione: '/estrazione', profile: '/profile', info: '/info', contacts: '/contacts' }
+const emptyReviews: ReviewsWallData = { feedback: [], screenshots: [] }
+const PAGE_PATHS: Record<Page, string> = { home: '/', catalog: '/catalog', games: '/games', estrazione: '/estrazione', reviews: '/reviews', profile: '/profile', info: '/info', contacts: '/contacts' }
 
 export default function App() {
   return (
@@ -55,7 +57,7 @@ function MemberApplication() {
   const [orders, setOrders] = useState<TestOrder[]>([])
   const [ledger, setLedger] = useState<LedgerEntry[]>([])
   const [rewards, setRewards] = useState<UserReward[]>([])
-  const [feedback, setFeedback] = useState<Feedback[]>([])
+  const [reviews, setReviews] = useState<ReviewsWallData>(emptyReviews)
   const [serviceAreas, setServiceAreas] = useState<ServiceArea[]>([])
   const [kycStatus, setKycStatus] = useState<KycStatus>({ status: 'not_started', documents: [], submittedAt: null, rejectionReason: null })
   const [loading, setLoading] = useState(true)
@@ -109,7 +111,7 @@ function MemberApplication() {
 
   const loadData = useCallback(async () => {
     try {
-      const [catalog, categories, availableLevels, activity, currentKyc, publishedBroadcasts, areas] = await Promise.all([
+      const [catalog, categories, availableLevels, activity, currentKyc, publishedBroadcasts, areas, reviewWall] = await Promise.all([
         getCatalog(),
         getCatalogCategories(),
         getLevels(),
@@ -117,6 +119,7 @@ function MemberApplication() {
         getKycStatus(),
         getBroadcasts(),
         getServiceAreas(),
+        getReviewsWall(),
       ])
       setProducts(catalog)
       setCatalogCategories(categories)
@@ -124,7 +127,7 @@ function MemberApplication() {
       setOrders(activity.orders)
       setLedger(activity.ledger)
       setRewards(activity.rewards)
-      setFeedback(activity.feedback)
+      setReviews(reviewWall)
       setServiceAreas(areas)
       setKycStatus(currentKyc)
       setBroadcasts(publishedBroadcasts)
@@ -160,13 +163,15 @@ function MemberApplication() {
       ? 'games'
       : location.pathname.startsWith('/estrazione')
         ? 'estrazione'
-    : location.pathname === '/profile'
-        ? 'profile'
-        : location.pathname === '/info'
-          ? 'info'
-        : location.pathname === '/contacts'
-          ? 'contacts'
-        : 'home'
+        : location.pathname === '/reviews'
+          ? 'reviews'
+          : location.pathname === '/profile'
+            ? 'profile'
+            : location.pathname === '/info'
+              ? 'info'
+              : location.pathname === '/contacts'
+                ? 'contacts'
+                : 'home'
   const navigate = (destination: Page) => {
     navigateRouter(PAGE_PATHS[destination])
     window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -200,10 +205,11 @@ function MemberApplication() {
         <main className="sf-mobile-nav-space" style={{ paddingTop: 28 }}>
           <Routes>
             <Route path="/" element={<HomePage navigate={navigate} products={products} levels={levels} addToCart={addToCart} user={user} onProductSelect={(id) => { setSelectedProductId(id); navigate('catalog') }} />} />
-            <Route path="/catalog" element={<CatalogPage products={products} categories={catalogCategories} feedback={feedback} addToCart={addToCart} selectedProductId={selectedProductId} onProductSelect={setSelectedProductId} />} />
+            <Route path="/catalog" element={<CatalogPage products={products} categories={catalogCategories} feedback={reviews.feedback} addToCart={addToCart} selectedProductId={selectedProductId} onProductSelect={setSelectedProductId} />} />
             <Route path="/games" element={<GamesPage user={user} onPlay={playGame} onBuyTicket={buyGameTicket} onComplete={refreshAccount} />} />
             <Route path="/estrazione" element={<EstrazionePage user={user} onComplete={refreshAccount} />} />
             <Route path="/estrazione/live/:token" element={<EstrazioneLivePage />} />
+            <Route path="/reviews" element={<ReviewsPage reviews={reviews} onProductSelect={(id) => { setSelectedProductId(id); navigate('catalog') }} />} />
             <Route path="/profile" element={<ProfilePage user={user} levels={levels} orders={orders} ledger={ledger} rewards={rewards} onChanged={refreshAccount} onAdmin={() => navigateRouter('/admin')} />} />
             <Route path="/info" element={<InfoPage serviceAreas={serviceAreas} />} />
             <Route path="/contacts" element={<ContactsPage />} />
@@ -213,7 +219,7 @@ function MemberApplication() {
         </main>
       )}
       {location.pathname !== '/admin' && !cartOpen && !selectedProductId && (
-        <BottomNav page={page} navigate={navigate} cartCount={cart.length} onCartOpen={() => setCartOpen(true)} />
+        <BottomNav page={page} navigate={navigate} />
       )}
       <CartDrawer
         open={cartOpen}

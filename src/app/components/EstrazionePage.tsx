@@ -2,7 +2,7 @@ import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } fro
 import { useParams } from 'react-router-dom'
 import { motion, useReducedMotion } from 'motion/react'
 import confetti from 'canvas-confetti'
-import { AtSign, CalendarClock, Clock3, Coins, ExternalLink, Hash, Loader2, RadioTower, ShieldCheck, Sparkles, Ticket, Trophy } from 'lucide-react'
+import { AtSign, CalendarClock, Clock3, Coins, Hash, Loader2, RadioTower, ShieldCheck, Sparkles, Ticket, Trophy } from 'lucide-react'
 import type { CurrentEstrazione, Estrazione, EstrazioneWinner, User } from '../data'
 import { buyEstrazioneTicket, getCurrentEstrazione } from '../lib/api'
 import { italianErrorMessage } from '../lib/errors'
@@ -154,13 +154,9 @@ function RulesCard({ draw }: { draw: Estrazione }) {
     { badge: '🥈', label: '2° Premio', value: draw.prizeSecondValue },
     { badge: '🥉', label: '3° Premio', value: draw.prizeThirdValue },
   ].slice(0, Math.min(draw.winnersCount, 3))
-  const tagFriendsLabel = draw.instagramTagFriendsCount === 1
-    ? '1 amico reale'
-    : `${draw.instagramTagFriendsCount} amici reali`
   const ordersLabel = draw.minCompletedOrders <= 0
     ? 'Nessun ordine minimo richiesto'
     : `Effettuare almeno ${draw.minCompletedOrders} ${draw.minCompletedOrders === 1 ? 'ordine' : 'ordini'}`
-  const postUrl = draw.instagramVerificationUrl.trim()
 
   return (
     <section className="sf-rules-card" aria-label="Regole Estrazione">
@@ -186,18 +182,6 @@ function RulesCard({ draw }: { draw: Estrazione }) {
         <RuleItem>Completare la verifica dell’identità</RuleItem>
         <RuleItem>{ordersLabel}</RuleItem>
         {draw.instagramRequired && <RuleItem>Seguire pagina Instagram{draw.instagramTargetUsername ? ` @${draw.instagramTargetUsername}` : ''}</RuleItem>}
-        {draw.instagramRequired && (
-          <RuleItem>
-            <span>Taggare {tagFriendsLabel} sotto il</span>
-            {postUrl ? (
-              <a className="sf-rules-post-link" href={postUrl} target="_blank" rel="noreferrer">
-                post dedicato <ExternalLink size={13} />
-              </a>
-            ) : (
-              <strong className="sf-rules-post-text">post dedicato</strong>
-            )}
-          </RuleItem>
-        )}
         <RuleItem>Acquistare il biglietto ({formatGettoni(draw.ticketPrice)})</RuleItem>
       </ul>
 

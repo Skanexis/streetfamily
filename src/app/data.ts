@@ -1,4 +1,4 @@
-export type Page = 'home' | 'catalog' | 'games' | 'estrazione' | 'profile' | 'info' | 'contacts'
+export type Page = 'home' | 'catalog' | 'games' | 'estrazione' | 'reviews' | 'profile' | 'info' | 'contacts'
 export type GameType = 'spin' | 'scratch' | 'box'
 export type ScenarioType = 'meetup' | 'delivery_zone' | 'delivery_italia'
 
@@ -237,6 +237,7 @@ export interface ServiceArea {
 export interface DemoInfo {
   disclaimer: string
   instagram: string
+  telegram: string | null
   viber: string
   signal: string | null
 }
@@ -288,6 +289,48 @@ export interface Feedback {
   message: string
   status: FeedbackStatus
   createdAt: string
+}
+
+export interface ReviewProduct {
+  id: string
+  name: string
+  category: string
+  variantLabels: string[]
+}
+
+export interface ReviewOrder {
+  id: string
+  displayId: string
+  createdAt: string
+  total: number
+  totalUnits: number
+}
+
+export interface ReviewFeedback {
+  id: string
+  rating: number
+  message: string
+  createdAt: string
+  username: string | null
+  avatarUrl: string | null
+  order: ReviewOrder
+  products: ReviewProduct[]
+}
+
+export interface ReviewScreenshot {
+  id: string
+  imageUrl: string
+  storagePath: string
+  customerLabel: string
+  orderLabel: string
+  message: string
+  createdAt: string
+  product: ReviewProduct | null
+}
+
+export interface ReviewsWallData {
+  feedback: ReviewFeedback[]
+  screenshots: ReviewScreenshot[]
 }
 
 export type KycDocumentType = 'document_front' | 'document_back' | 'selfie_with_document'

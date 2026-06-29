@@ -18,6 +18,7 @@ interface TopNavProps {
 const NAV_LINKS: { label: string; page: Page }[] = [
   { label: 'Inizio', page: 'home' },
   { label: 'Catalogo', page: 'catalog' },
+  { label: 'Recensioni', page: 'reviews' },
   { label: 'Giochi', page: 'games' },
   { label: 'Regolamento', page: 'info' },
   { label: 'Contatti', page: 'contacts' },
@@ -179,8 +180,8 @@ export function TopNav({ page, navigate, cartCount, onCartOpen, tokens, isAdmin,
               <div style={{ color: broadcast.kind === 'product_new' ? '#D7FE55' : '#60A5FA', fontSize: 10, fontWeight: 700, marginBottom: 5 }}>
                 {broadcast.kind === 'product_new' ? 'NUOVO PRODOTTO' : 'ANNUNCIO'}
               </div>
-              <strong style={{ display: 'block', fontSize: 14 }}>{broadcast.title}</strong>
-              <p style={{ color: 'rgba(245,245,245,.67)', fontSize: 13, marginTop: 5 }}>{broadcast.message}</p>
+              {broadcast.kind === 'product_new' && <strong style={{ display: 'block', fontSize: 14 }}>{broadcast.title}</strong>}
+              <p style={{ color: 'rgba(245,245,245,.67)', fontSize: 13, marginTop: 5, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{broadcast.message}</p>
               {broadcast.productId && (
                 <button
                   onClick={() => { onBroadcastProduct?.(broadcast.productId!); setBroadcastOpen(false) }}

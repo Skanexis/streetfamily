@@ -4,7 +4,7 @@ import type { DemoInfo } from '../data'
 import { getDemoInfo } from '../lib/api'
 import { italianErrorMessage } from '../lib/errors'
 
-const emptyContacts: DemoInfo = { disclaimer: '', instagram: '', viber: '', signal: null }
+const emptyContacts: DemoInfo = { disclaimer: '', instagram: '', telegram: null, viber: '', signal: null }
 
 export function ContactsPage() {
   const [contacts, setContacts] = useState<DemoInfo>(emptyContacts)
@@ -38,8 +38,9 @@ export function ContactsPage() {
           {!loading && !error && (
             <div className="grid gap-3 mt-7">
               <ContactLink Icon={Instagram} label="Instagram" href={contacts.instagram} />
+              <ContactLink Icon={Send} label="Telegram" href={contacts.telegram} />
               <ContactLink Icon={MessageCircle} label="Viber" href={contacts.viber} />
-              <ContactLink Icon={Send} label="Signal" href={contacts.signal} />
+              <ContactLink Icon={MessageCircle} label="Signal" href={contacts.signal} />
             </div>
           )}
         </section>

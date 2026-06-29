@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
-import { MapPin, Package, Tags, Users, Gamepad2, ClipboardList, Settings, Megaphone, MessageSquare, Minus, Plus, Trash2, Warehouse, Wallet, Ticket } from 'lucide-react'
+import { Copy, MapPin, Package, Tags, Users, Gamepad2, ClipboardList, Settings, Megaphone, MessageSquare, Minus, Plus, Trash2, Warehouse, Wallet, Ticket } from 'lucide-react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { adminAccessOverview, adminAdjustWallet, adminBroadcastAction, adminCancelEstrazione, adminDeleteAccount, adminDeleteGameOption, adminListEstrazioni, adminOpenEstrazione, adminReviewAccessRequest, adminRunEstrazione, adminSaveEstrazione, adminSaveGameOptions, adminScheduleEstrazione, adminSendLowStockNotifications, adminSetGameActive, adminSetGameTicketPrice, adminSimulateGame, getAdminDashboard, getAdminKycDocuments, reviewKyc } from '../lib/api'
 import type { AdminAccessRow } from '../lib/api'
@@ -39,6 +39,7 @@ export function AdminPage() {
   const [settings, setSettings] = useState<Row[]>([])
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([])
   const [feedback, setFeedback] = useState<Row[]>([])
+  const [reviewScreenshots, setReviewScreenshots] = useState<Row[]>([])
   const [rewardOptions, setRewardOptions] = useState<Row[]>([])
   const [tokenTiers, setTokenTiers] = useState<Row[]>([])
   const [estrazioni, setEstrazioni] = useState<AdminEstrazione[]>([])
@@ -56,7 +57,7 @@ export function AdminPage() {
       const estrazioneRequest = adminListEstrazioni()
         .then(data => ({ data, error: '' }))
         .catch(caught => ({ data: [] as AdminEstrazione[], error: italianErrorMessage(caught, 'Caricamento Estrazione non riuscito.') }))
-      const [summary, productResult, inventoryResult, categoryResult, profileResult, accessResult, orderResult, gameResult, locationResult, settingsResult, broadcastResult, feedbackResult, optionsResult, tiersResult, estrazioneResult] = await Promise.all([
+      const [summary, productResult, inventoryResult, categoryResult, profileResult, accessResult, orderResult, gameResult, locationResult, settingsResult, broadcastResult, feedbackResult, reviewScreenshotResult, optionsResult, tiersResult, estrazioneResult] = await Promise.all([
         getAdminDashboard(),
         db.from('products').select('id,category_id,name,badge,promo_tag,published,featured,categories(name),product_variants(id,label,price,unit_amount,token_award,inventory_status(available)),product_media(id,url,storage_path,media_type,upload_status,sort_order)').order('name'),
         db.from('product_inventory').select('product_id,stock_quantity,notify_threshold_quantity,updated_at,products(id,name,published,categories(name))').order('updated_at', { ascending: false }),
@@ -68,12 +69,13 @@ export function AdminPage() {
         db.from('service_areas').select('*').order('sort_order'),
         db.from('app_settings').select('*'),
         db.from('broadcasts').select('id,kind,title,message,product_id,status,published_at,created_at').order('created_at', { ascending: false }),
-        db.from('feedback').select('id,rating,message,status,created_at,profiles:profiles!feedback_user_id_fkey(username),orders(display_id)').order('created_at', { ascending: false }),
+        db.from('feedback').select('id,rating,message,status,created_at,profiles:profiles!feedback_user_id_fkey(username),orders(display_id,total,total_units,created_at,order_items(name_snapshot,variant_label))').order('created_at', { ascending: false }),
+        db.from('feedback_chat_screenshots').select('id,product_id,customer_label,order_label,message,storage_path,status,created_at,products(name,categories(name))').order('created_at', { ascending: false }),
         db.from('game_reward_options').select('*,reward_definitions(id,label,kind)').in('game_type', ['spin', 'scratch']).order('id'),
         db.from('token_reward_tiers').select('*').order('minimum_units'),
         estrazioneRequest,
       ])
-      for (const result of [productResult, inventoryResult, categoryResult, profileResult, orderResult, gameResult, locationResult, settingsResult, broadcastResult, feedbackResult, optionsResult, tiersResult]) {
+      for (const result of [productResult, inventoryResult, categoryResult, profileResult, orderResult, gameResult, locationResult, settingsResult, broadcastResult, feedbackResult, reviewScreenshotResult, optionsResult, tiersResult]) {
         if (result.error) throw new Error(italianErrorMessage(result.error.message, 'Impossibile caricare il pannello amministrazione.'))
       }
       setDashboard(summary)
@@ -87,6 +89,7 @@ export function AdminPage() {
       setLocations(locationResult.data ?? [])
       setSettings(settingsResult.data ?? [])
       setFeedback(feedbackResult.data ?? [])
+      setReviewScreenshots(reviewScreenshotResult.data ?? [])
       setRewardOptions(optionsResult.data ?? [])
       setTokenTiers(tiersResult.data ?? [])
       setEstrazioni(estrazioneResult.data)
@@ -153,7 +156,7 @@ export function AdminPage() {
       {tab === 'kyc' && <KycRequestsAdmin profiles={profiles} initialKycUserId={requestedKycUserId} initialGroup={requestedKycGroup} reload={load} />}
       {tab === 'economy' && <EconomyAdmin games={games} options={rewardOptions} reload={load} />}
       {tab === 'estrazione' && <EstrazioneAdmin estrazioni={estrazioni} error={estrazioneError} reload={load} />}
-      {tab === 'feedback' && <FeedbackAdmin feedback={feedback} reload={load} />}
+      {tab === 'feedback' && <FeedbackAdmin feedback={feedback} screenshots={reviewScreenshots} products={products} reload={load} />}
       {tab === 'settings' && <SettingsAdmin settings={settings} tokenTiers={tokenTiers} reload={load} />}
       {tab === 'regolamentazione' && <RegolamentazioneAdmin locations={locations} reload={load} />}
     </AdminFrame>
@@ -424,13 +427,19 @@ function InventoryAdmin({ products, inventory, reload }: { products: Row[]; inve
 function BroadcastAdmin({ broadcasts, reload }: { broadcasts: Broadcast[]; reload: () => Promise<void> }) {
   const [message, setMessage] = useState('')
   const [busyId, setBusyId] = useState('')
+  const [copiedId, setCopiedId] = useState('')
   const create = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setMessage('')
     const values = new FormData(event.currentTarget)
+    const messageText = String(values.get('message') ?? '').trim()
+    if (!messageText) {
+      setMessage('Inserisci il messaggio della notizia.')
+      return
+    }
     const { data: createdBroadcastId, error } = await requireSupabase().rpc('admin_create_broadcast', {
-      p_title: values.get('title'),
-      p_message: values.get('message'),
+      p_title: broadcastTitleFromMessage(messageText),
+      p_message: messageText,
       p_publish: false,
     })
     if (error) {
@@ -471,22 +480,46 @@ function BroadcastAdmin({ broadcasts, reload }: { broadcasts: Broadcast[]; reloa
     if (!window.confirm(`Eliminare la notizia "${broadcast.title}"? Il bot proverà a cancellare anche i messaggi Telegram inviati.`)) return
     await runBroadcastAction(broadcast.id, 'delete')
   }
+  const copyBroadcast = async (broadcast: Broadcast) => {
+    try {
+      await copyTextToClipboard(broadcast.message)
+      setCopiedId(broadcast.id)
+      window.setTimeout(() => setCopiedId(current => current === broadcast.id ? '' : current), 1800)
+    } catch (caught) {
+      setMessage(italianErrorMessage(caught, 'Copia del messaggio non riuscita.'))
+    }
+  }
   return (
     <Section title="Notizie" note="Pubblica comunicazioni visibili nell'app e inviate anche via Telegram agli utenti autorizzati.">
-      <form onSubmit={create} className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-6">
-        <input className="w-full" name="title" maxLength={120} required placeholder="Titolo" style={input} />
-        <input className="w-full" name="message" maxLength={500} required placeholder="Messaggio" style={input} />
-        <label className="flex items-center gap-2" style={muted}><input type="checkbox" name="publish" /> Pubblica subito</label>
-        <button style={primary}>Crea notizia</button>
+      <form onSubmit={create} className="grid grid-cols-1 gap-3 mb-6">
+        <label style={{ ...muted, display: 'grid', gap: 8 }}>
+          Messaggio
+          <textarea
+            name="message"
+            maxLength={3500}
+            required
+            rows={6}
+            placeholder="Scrivi qui la notizia..."
+            style={broadcastTextarea}
+          />
+        </label>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <label className="flex items-center gap-2" style={muted}><input type="checkbox" name="publish" /> Pubblica subito</label>
+          <button style={{ ...primary, width: 'fit-content' }}>Crea notizia</button>
+        </div>
       </form>
-      {message && <p className="mb-4" style={{ color: message.includes('errori') || message.includes('non riuscit') ? '#EF4444' : '#D7FE55' }}>{message}</p>}
+      {message && <p className="mb-4" style={{ color: message.includes('errori') || message.includes('non riuscit') || message.includes('Inserisci') ? '#EF4444' : '#D7FE55' }}>{message}</p>}
       {broadcasts.map(broadcast => (
         <div key={broadcast.id} className="flex flex-col sm:flex-row sm:items-center gap-3" style={row}>
           <div className="flex-1 min-w-0">
-            <strong>{broadcast.title}</strong>
+            {broadcast.kind === 'product_new' && <strong>{broadcast.title}</strong>}
             <div style={muted}>{broadcast.kind === 'product_new' ? 'Nuovo prodotto' : 'Annuncio'} / {broadcastStatusLabel[broadcast.status]} / {new Date(broadcast.createdAt).toLocaleDateString('it-IT')}</div>
-            <div style={{ ...muted, marginTop: 4 }}>{broadcast.message}</div>
+            <div style={broadcastMessagePreview}>{broadcast.message}</div>
           </div>
+          <button type="button" disabled={busyId === broadcast.id} style={smallButton} onClick={() => { void copyBroadcast(broadcast) }}>
+            <Copy size={15} />
+            {copiedId === broadcast.id ? 'Copiato' : 'Copia'}
+          </button>
           {broadcast.status !== 'published' && <button disabled={busyId === broadcast.id} style={smallButton} onClick={() => runBroadcastAction(broadcast.id, 'publish')}>{busyId === broadcast.id ? 'Invio...' : 'Pubblica'}</button>}
           {broadcast.status !== 'archived' && <button disabled={busyId === broadcast.id} style={smallButton} onClick={() => runBroadcastAction(broadcast.id, 'archive')}>Archivia</button>}
           <button disabled={busyId === broadcast.id} style={dangerButton} onClick={() => removeBroadcast(broadcast)}>Elimina</button>
@@ -547,7 +580,7 @@ function MediaUploader({ product, reload }: { product: Row; reload: () => Promis
     const mediaId = inserted.data.id
     setUploads(current => ({ ...current, [mediaId]: { progress: 0, status: 'uploading' } }))
     try {
-      await xhrStorageUpload(storagePath, file, progress => {
+      await xhrStorageUpload('product-media', storagePath, file, progress => {
         setUploads(current => ({ ...current, [mediaId]: { progress, status: 'uploading' } }))
       })
       const ready = await db.from('product_media').update({ upload_status: 'ready' }).eq('id', mediaId)
@@ -635,9 +668,9 @@ function AdminMediaPreview({ media }: { media: Row }) {
     : <img src={src} alt={media.alt ?? ''} className="shrink-0 object-cover" style={{ width: 54, height: 44, background: '#11181B' }} />
 }
 
-async function xhrStorageUpload(path: string, file: File, onProgress: (value: number) => void) {
+async function xhrStorageUpload(bucket: string, path: string, file: File, onProgress: (value: number) => void) {
   const { data } = await requireSupabase().auth.getSession()
-  const endpoint = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/product-media/${path.split('/').map(encodeURIComponent).join('/')}`
+  const endpoint = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/${bucket}/${path.split('/').map(encodeURIComponent).join('/')}`
   return new Promise<void>((resolve, reject) => {
     const request = new XMLHttpRequest()
     request.open('POST', endpoint)
@@ -1578,8 +1611,6 @@ function EstrazioneAdmin({ estrazioni, error, reload }: { estrazioni: AdminEstra
   const [prizeThirdDraft, setPrizeThirdDraft] = useState('100')
   const [instagramRequiredDraft, setInstagramRequiredDraft] = useState(false)
   const [instagramTargetDraft, setInstagramTargetDraft] = useState('')
-  const [instagramPostUrlDraft, setInstagramPostUrlDraft] = useState('')
-  const [instagramTagFriendsDraft, setInstagramTagFriendsDraft] = useState('1')
   const [scheduleDraft, setScheduleDraft] = useState('')
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
@@ -1603,8 +1634,6 @@ function EstrazioneAdmin({ estrazioni, error, reload }: { estrazioni: AdminEstra
       setPrizeThirdDraft('100')
       setInstagramRequiredDraft(false)
       setInstagramTargetDraft('')
-      setInstagramPostUrlDraft('')
-      setInstagramTagFriendsDraft('1')
       setScheduleDraft('')
       return
     }
@@ -1618,8 +1647,6 @@ function EstrazioneAdmin({ estrazioni, error, reload }: { estrazioni: AdminEstra
     setPrizeThirdDraft(String(selected.prizeThirdValue || 100))
     setInstagramRequiredDraft(selected.instagramRequired)
     setInstagramTargetDraft(selected.instagramTargetUsername)
-    setInstagramPostUrlDraft(selected.instagramVerificationUrl)
-    setInstagramTagFriendsDraft(String(selected.instagramTagFriendsCount || 1))
     setScheduleDraft(selected.scheduledAt ? datetimeLocal(selected.scheduledAt) : '')
   }, [selected?.id])
 
@@ -1645,22 +1672,12 @@ function EstrazioneAdmin({ estrazioni, error, reload }: { estrazioni: AdminEstra
     const prizeFirstValue = parseOptionalInteger(prizeFirstDraft)
     const prizeSecondValue = parseOptionalInteger(prizeSecondDraft)
     const prizeThirdValue = parseOptionalInteger(prizeThirdDraft)
-    const instagramTagFriendsCount = parseOptionalInteger(instagramTagFriendsDraft)
-    const instagramVerificationUrl = normalizeUrlDraft(instagramPostUrlDraft)
-    if (ticketPrice === null || minCompletedOrders === null || maxTickets === null || winnersCount === null || prizeFirstValue === null || prizeSecondValue === null || prizeThirdValue === null || instagramTagFriendsCount === null) {
+    if (ticketPrice === null || minCompletedOrders === null || maxTickets === null || winnersCount === null || prizeFirstValue === null || prizeSecondValue === null || prizeThirdValue === null) {
       setMessage('Inserisci valori numerici validi.')
       return
     }
     if (![prizeFirstValue, prizeSecondValue, prizeThirdValue].every(value => value >= 1 && value <= 100000)) {
       setMessage('Inserisci valori premio tra 1 e 100000.')
-      return
-    }
-    if (instagramTagFriendsCount < 1 || instagramTagFriendsCount > 99) {
-      setMessage('Inserisci un numero amici da taggare tra 1 e 99.')
-      return
-    }
-    if (instagramVerificationUrl === null) {
-      setMessage('Inserisci un link post Instagram valido.')
       return
     }
     await runAction(() => adminSaveEstrazione({
@@ -1675,8 +1692,8 @@ function EstrazioneAdmin({ estrazioni, error, reload }: { estrazioni: AdminEstra
       prizeThirdValue,
       instagramRequired: instagramRequiredDraft,
       instagramTargetUsername: instagramTargetDraft,
-      instagramVerificationUrl,
-      instagramTagFriendsCount,
+      instagramVerificationUrl: '',
+      instagramTagFriendsCount: 1,
     }), 'Estrazione salvata.')
   }
 
@@ -1750,12 +1767,6 @@ function EstrazioneAdmin({ estrazioni, error, reload }: { estrazioni: AdminEstra
               <>
                 <label className="sm:col-span-2" style={muted}>Account Instagram da seguire
                   <input value={instagramTargetDraft} disabled={!canEdit} onChange={event => setInstagramTargetDraft(event.currentTarget.value)} placeholder="streetfamily" style={{ ...input, display: 'block', width: '100%', marginTop: 5 }} />
-                </label>
-                <label style={muted}>Amici reali da taggare
-                  <input inputMode="numeric" value={instagramTagFriendsDraft} disabled={!canEdit} onChange={event => setInstagramTagFriendsDraft(integerDraft(event.currentTarget.value))} style={{ ...input, display: 'block', width: '100%', marginTop: 5 }} />
-                </label>
-                <label style={muted}>Link post Instagram
-                  <input value={instagramPostUrlDraft} disabled={!canEdit} onChange={event => setInstagramPostUrlDraft(event.currentTarget.value)} placeholder="https://www.instagram.com/p/..." style={{ ...input, display: 'block', width: '100%', marginTop: 5 }} />
                 </label>
               </>
             )}
@@ -1834,25 +1845,135 @@ function EstrazioneMetric({ label, value }: { label: string; value: string | num
   return <div className="p-3 rounded-xl" style={row}><div style={muted}>{label}</div><strong style={{ color: '#D7FE55' }}>{value}</strong></div>
 }
 
-function FeedbackAdmin({ feedback, reload }: { feedback: Row[]; reload: () => Promise<void> }) {
+function FeedbackAdmin({ feedback, screenshots, products, reload }: { feedback: Row[]; screenshots: Row[]; products: Row[]; reload: () => Promise<void> }) {
+  const [message, setMessage] = useState('')
+  const [uploading, setUploading] = useState(false)
   const moderate = async (id: string, status: 'published' | 'hidden') => {
     const { error } = await requireSupabase().rpc('admin_moderate_feedback', { p_feedback_id: id, p_status: status })
     if (error) throw new Error(italianErrorMessage(error.message, 'Moderazione della recensione non riuscita.'))
     await reload()
   }
+  const uploadScreenshot = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setMessage('')
+    setUploading(true)
+    const form = event.currentTarget
+    const values = new FormData(form)
+    const file = values.get('screenshot')
+    try {
+      if (!(file instanceof File) || file.size === 0) throw new Error('Seleziona uno screenshot.')
+      if (!file.type.startsWith('image/')) throw new Error('Carica un file immagine.')
+      const db = requireSupabase()
+      const storagePath = `chat/${crypto.randomUUID()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
+      await xhrStorageUpload('review-screenshots', storagePath, file, () => undefined)
+      const productId = String(values.get('productId') ?? '')
+      const { error } = await db.from('feedback_chat_screenshots').insert({
+        product_id: productId || null,
+        customer_label: String(values.get('customerLabel') ?? '').trim(),
+        order_label: String(values.get('orderLabel') ?? '').trim(),
+        message: String(values.get('message') ?? '').trim(),
+        storage_path: storagePath,
+        status: values.get('publish') === 'on' ? 'published' : 'pending',
+      })
+      if (error) throw new Error(italianErrorMessage(error.message, 'Salvataggio dello screenshot non riuscito.'))
+      form.reset()
+      setMessage('Screenshot chat salvato.')
+      await reload()
+    } catch (caught) {
+      setMessage(italianErrorMessage(caught, 'Caricamento screenshot non riuscito.'))
+    } finally {
+      setUploading(false)
+    }
+  }
+  const moderateScreenshot = async (id: string, status: 'published' | 'hidden') => {
+    const { error } = await requireSupabase().from('feedback_chat_screenshots').update({ status }).eq('id', id)
+    if (error) throw new Error(italianErrorMessage(error.message, 'Aggiornamento screenshot non riuscito.'))
+    await reload()
+  }
+  const deleteScreenshot = async (item: Row) => {
+    if (!window.confirm('Eliminare questo screenshot chat?')) return
+    const db = requireSupabase()
+    if (item.storage_path) {
+      const removed = await db.storage.from('review-screenshots').remove([item.storage_path])
+      if (removed.error) throw new Error(italianErrorMessage(removed.error.message, 'Eliminazione file non riuscita.'))
+    }
+    const deleted = await db.from('feedback_chat_screenshots').delete().eq('id', item.id)
+    if (deleted.error) throw new Error(italianErrorMessage(deleted.error.message, 'Eliminazione screenshot non riuscita.'))
+    await reload()
+  }
   return (
-    <Section title="Recensioni" note="Pubblica o nascondi le recensioni degli utenti.">
-      {feedback.map(item => <div key={item.id} className="flex flex-col sm:flex-row sm:items-start gap-3 p-4 mb-3" style={row}>
-        <div className="flex-1 min-w-0">
-          <strong>@{item.profiles?.username ?? 'membro'} / {item.rating} stelle</strong>
-          <div style={muted}>{item.orders?.display_id} / {feedbackStatusLabel[item.status]}</div>
-          <p style={{ marginTop: 7 }}>{item.message}</p>
+    <Section title="Recensioni" note="Modera le recensioni utenti e carica screenshot reali dalle chat clienti.">
+      <form onSubmit={uploadScreenshot} className="grid md:grid-cols-2 gap-2 mb-6 p-3 rounded-xl" style={row}>
+        <select name="productId" style={input} defaultValue="">
+          <option value="">Prodotto collegato (opzionale)</option>
+          {products.map(product => <option key={product.id} value={product.id}>{product.name}</option>)}
+        </select>
+        <input name="customerLabel" placeholder="Cliente / username" style={input} />
+        <input name="orderLabel" placeholder="Ordine o ultimo acquisto" style={input} />
+        <input name="message" placeholder="Nota breve visibile nella pagina" style={input} />
+        <label style={{ ...smallButton, cursor: 'pointer', justifyContent: 'center' }}>
+          Screenshot chat
+          <input hidden name="screenshot" type="file" accept="image/*" />
+        </label>
+        <label className="flex items-center gap-2" style={muted}><input type="checkbox" name="publish" defaultChecked /> Pubblica subito</label>
+        <button disabled={uploading} style={{ ...primary, opacity: uploading ? .65 : 1 }}>{uploading ? 'Caricamento...' : 'Salva screenshot'}</button>
+      </form>
+      {message && <p className="mb-4" style={{ color: message.includes('non riuscit') || message.includes('Seleziona') || message.includes('Carica') ? '#EF4444' : '#D7FE55' }}>{message}</p>}
+
+      <h3 style={{ ...heading, fontSize: 18, marginBottom: 10 }}>Recensioni utenti</h3>
+      {feedback.map(item => {
+        const order = Array.isArray(item.orders) ? item.orders[0] : item.orders
+        const orderItems = order?.order_items ?? []
+        return <div key={item.id} className="flex flex-col sm:flex-row sm:items-start gap-3 p-4 mb-3" style={row}>
+          <div className="flex-1 min-w-0">
+            <strong>@{item.profiles?.username ?? 'membro'} / {item.rating} stelle</strong>
+            <div style={muted}>{order?.display_id} / {order?.total_units ?? 0} g / {feedbackStatusLabel[item.status]}</div>
+            {orderItems.length > 0 && <div className="flex flex-wrap gap-1 mt-2">{orderItems.map((orderItem: Row, index: number) => <span key={`${orderItem.name_snapshot}-${index}`} style={adminTag}>{orderItem.name_snapshot} {orderItem.variant_label}</span>)}</div>}
+            <p style={{ marginTop: 7 }}>{item.message}</p>
+          </div>
+          {item.status !== 'published' && <button style={smallButton} onClick={() => moderate(item.id, 'published')}>Pubblica</button>}
+          {item.status !== 'hidden' && <button style={smallButton} onClick={() => moderate(item.id, 'hidden')}>Nascondi</button>}
         </div>
-        {item.status !== 'published' && <button style={smallButton} onClick={() => moderate(item.id, 'published')}>Pubblica</button>}
-        {item.status !== 'hidden' && <button style={smallButton} onClick={() => moderate(item.id, 'hidden')}>Nascondi</button>}
-      </div>)}
+      })}
+
+      <h3 style={{ ...heading, fontSize: 18, margin: '22px 0 10px' }}>Screenshot chat</h3>
+      <div className="grid md:grid-cols-2 gap-3">
+        {screenshots.map(item => <div key={item.id} className="p-3 rounded-xl" style={row}>
+          <div className="grid grid-cols-[92px_1fr] gap-3">
+            <ReviewScreenshotPreview storagePath={item.storage_path} />
+            <div className="min-w-0">
+              <strong>{item.customer_label || 'Cliente'}</strong>
+              <div style={muted}>{item.order_label || 'Ordine non indicato'} / {feedbackStatusLabel[item.status]}</div>
+              <div style={muted}>{item.products?.name ?? 'Prodotto non collegato'}{item.products?.categories?.name ? ` / ${item.products.categories.name}` : ''}</div>
+              {item.message && <p style={{ marginTop: 7 }}>{item.message}</p>}
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2 mt-3">
+            {item.status !== 'published' && <button type="button" style={smallButton} onClick={() => { void moderateScreenshot(item.id, 'published') }}>Pubblica</button>}
+            {item.status !== 'hidden' && <button type="button" style={smallButton} onClick={() => { void moderateScreenshot(item.id, 'hidden') }}>Nascondi</button>}
+            <button type="button" style={dangerButton} onClick={() => { void deleteScreenshot(item) }}>Elimina</button>
+          </div>
+        </div>)}
+      </div>
     </Section>
   )
+}
+
+function ReviewScreenshotPreview({ storagePath }: { storagePath: string }) {
+  const [src, setSrc] = useState('')
+  useEffect(() => {
+    let active = true
+    const load = async () => {
+      if (!storagePath) return
+      const signed = await requireSupabase().storage.from('review-screenshots').createSignedUrl(storagePath, 3600)
+      if (active) setSrc(signed.data?.signedUrl ?? '')
+    }
+    void load()
+    return () => { active = false }
+  }, [storagePath])
+  return src
+    ? <img src={src} alt="" className="object-cover rounded-lg" style={{ width: 92, height: 116, background: '#080C0E' }} />
+    : <div className="flex items-center justify-center rounded-lg" style={{ width: 92, height: 116, background: '#080C0E', color: 'rgba(245,245,245,.45)', fontSize: 11 }}>SCREEN</div>
 }
 
 function RegolamentazioneAdmin({ locations, reload }: { locations: Row[]; reload: () => Promise<void> }) {
@@ -1998,7 +2119,7 @@ function RegolamentazioneAdmin({ locations, reload }: { locations: Row[]; reload
 
 function SettingsAdmin({ settings, tokenTiers, reload }: { settings: Row[]; tokenTiers: Row[]; reload: () => Promise<void> }) {
   const retention = settings.find(setting => setting.key === 'kyc_retention')?.value ?? { approved_days: 365 }
-  const links = settings.find(setting => setting.key === 'community_links')?.value ?? { instagram: '', viber: '', signal: null }
+  const links = settings.find(setting => setting.key === 'community_links')?.value ?? { instagram: '', telegram: null, viber: '', signal: null }
   const updateRetention = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const values = new FormData(event.currentTarget)
@@ -2023,7 +2144,9 @@ function SettingsAdmin({ settings, tokenTiers, reload }: { settings: Row[]; toke
     const db = requireSupabase()
     const results = await Promise.all([
       db.from('app_settings').upsert({ key: 'community_links', value: {
-        instagram: String(values.get('instagram')), viber: String(values.get('viber')),
+        instagram: String(values.get('instagram')),
+        telegram: String(values.get('telegram') ?? '').trim() || null,
+        viber: String(values.get('viber')),
         signal: String(values.get('signal') ?? '').trim() || null,
       } }),
     ])
@@ -2036,6 +2159,7 @@ function SettingsAdmin({ settings, tokenTiers, reload }: { settings: Row[]; toke
       <form onSubmit={updatePublicInfo} className="grid gap-2 mb-6">
         <h3>Link pubblici</h3>
         <input className="w-full" name="instagram" defaultValue={links.instagram} placeholder="URL Instagram" style={input} />
+        <input className="w-full" name="telegram" defaultValue={links.telegram ?? ''} placeholder="URL Telegram" style={input} />
         <input className="w-full" name="viber" defaultValue={links.viber} placeholder="URL Viber" style={input} />
         <input className="w-full" name="signal" defaultValue={links.signal ?? ''} placeholder="URL Signal (opzionale)" style={input} />
         <button style={primary}>Salva link</button>
@@ -2113,16 +2237,32 @@ function parseOptionalInteger(value: NumericDraft) {
   const parsed = Number(text)
   return Number.isInteger(parsed) ? parsed : null
 }
-function normalizeUrlDraft(value: string) {
-  const text = value.trim()
-  if (!text) return ''
-  const withScheme = /^https?:\/\//i.test(text) ? text : `https://${text}`
-  try {
-    const parsed = new URL(withScheme)
-    return /^https?:$/i.test(parsed.protocol) ? parsed.toString() : null
-  } catch {
-    return null
+function broadcastTitleFromMessage(value: string) {
+  const firstLine = value.split(/\r?\n/).map(line => line.trim()).find(Boolean) ?? 'Notizia'
+  const normalized = firstLine.replace(/\s+/g, ' ')
+  return Array.from(normalized).slice(0, 120).join('') || 'Notizia'
+}
+async function copyTextToClipboard(value: string) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(value)
+      return
+    } catch {
+      // WebViews can expose Clipboard API but reject it outside a secure context.
+    }
   }
+  const textarea = document.createElement('textarea')
+  textarea.value = value
+  textarea.readOnly = true
+  textarea.style.position = 'fixed'
+  textarea.style.left = '-9999px'
+  textarea.style.top = '0'
+  document.body.appendChild(textarea)
+  textarea.focus()
+  textarea.select()
+  const copied = document.execCommand('copy')
+  document.body.removeChild(textarea)
+  if (!copied) throw new Error('COPY_FAILED')
 }
 function isIntegerAtLeast(value: NumericDraft, minimum: number) {
   const parsed = parseOptionalInteger(value)
@@ -2205,6 +2345,9 @@ const heading = { fontFamily: 'Space Grotesk', fontWeight: 700, fontSize: 'clamp
 const muted = { color: 'rgba(245,245,245,.55)', fontSize: 13 }
 const accent = { color: '#D7FE55', background: 'rgba(215,254,85,.06)', border: '1px solid rgba(215,254,85,.18)' }
 const input = { minWidth: 0, maxWidth: '100%', boxSizing: 'border-box' as const, padding: '9px 12px', background: '#080C0E', border: '1px solid rgba(245,245,245,.18)', color: '#F5F5F5', borderRadius: 8 }
+const broadcastTextarea = { ...input, width: '100%', minHeight: 150, resize: 'vertical' as const, lineHeight: 1.45, padding: '13px 14px', whiteSpace: 'pre-wrap' as const }
+const broadcastMessagePreview = { ...muted, marginTop: 6, whiteSpace: 'pre-wrap' as const, overflowWrap: 'anywhere' as const, userSelect: 'text' as const }
+const adminTag = { background: 'rgba(126,156,168,.12)', border: '1px solid rgba(126,156,168,.14)', borderRadius: 8, padding: '4px 7px', fontSize: 11, color: 'rgba(245,245,245,.72)' }
 const primary = { ...input, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#7E9CA8', fontWeight: 700 }
 const smallButton = { display: 'inline-flex', alignItems: 'center', gap: 5, padding: '9px 12px', borderRadius: 8, border: '1px solid rgba(126,156,168,.25)', background: '#11181B', color: '#F5F5F5' }
 const metricCard = { ...panel, transition: 'border-color .18s ease, box-shadow .18s ease' }
