@@ -292,7 +292,7 @@ export interface Feedback {
 }
 
 export interface ReviewProduct {
-  id: string
+  id: string | null
   name: string
   category: string
   variantLabels: string[]

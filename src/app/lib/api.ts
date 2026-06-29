@@ -338,9 +338,9 @@ export async function getProfileActivity(userId: string) {
 }
 
 function mapReviewProduct(row: RecordValue | null): ReviewProduct | null {
-  if (!row?.id) return null
+  if (!row || (!row.id && !row.name)) return null
   return {
-    id: row.id,
+    id: row.id ?? null,
     name: row.name ?? '',
     category: row.category ?? '',
     variantLabels: row.variant_labels ?? [],

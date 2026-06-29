@@ -1,4 +1,4 @@
-import { Camera, MessageSquareText, PackageCheck, Star, TicketCheck } from 'lucide-react'
+import { Camera, MessageSquareText, PackageCheck, Quote, Star, TicketCheck } from 'lucide-react'
 import type { ReviewFeedback, ReviewProduct, ReviewScreenshot, ReviewsWallData } from '../data'
 
 interface Props {
@@ -19,6 +19,9 @@ export function ReviewsPage({ reviews, onProductSelect }: Props) {
         <div className="sf-kicker mb-4">Recensioni</div>
         <section className="grid lg:grid-cols-[1.15fr_.85fr] gap-4 mb-6">
           <div className="p-5 md:p-7" style={heroPanel}>
+            <div className="inline-flex items-center gap-2 px-3 py-2 mb-5" style={heroBadge}>
+              <Star size={14} fill="#D7FE55" /> Community verificata
+            </div>
             <h1 style={heading}>Esperienze reali, prodotti verificati.</h1>
             <p style={copy}>Ogni recensione pubblicata resta collegata al prodotto ordinato e all’ordine completato.</p>
             <div className="grid grid-cols-3 gap-2 mt-6">
@@ -73,27 +76,39 @@ export function ReviewsPage({ reviews, onProductSelect }: Props) {
 
 function ReviewCard({ review, onProductSelect, compact = false }: { review: ReviewFeedback; onProductSelect: (productId: string) => void; compact?: boolean }) {
   return (
-    <article className="p-4" style={panel}>
+    <article className="p-4 relative overflow-hidden" style={reviewPanel}>
+      <div style={cardAccent} />
       <div className="flex items-start justify-between gap-3 mb-3">
-        <div className="min-w-0">
-          <div className="flex gap-1 mb-2" aria-label={`${review.rating} stelle`}>
+        <div className="min-w-0 flex items-center gap-3">
+          <div className="shrink-0 flex items-center justify-center" style={avatarCircle}>
+            {(review.username ?? 'S').slice(0, 1).toUpperCase()}
+          </div>
+          <div className="min-w-0">
+            <strong style={{ display: 'block' }}>@{review.username ?? 'membro'}</strong>
+            <div className="flex gap-1 mt-1" aria-label={`${review.rating} stelle`}>
             {Array.from({ length: 5 }, (_, index) => (
               <Star key={index} size={14} fill={index < review.rating ? '#D7FE55' : 'transparent'} style={{ color: index < review.rating ? '#D7FE55' : 'rgba(245,245,245,.28)' }} />
             ))}
+            </div>
           </div>
-          <strong style={{ display: 'block' }}>@{review.username ?? 'membro'}</strong>
         </div>
         <div className="text-right" style={subtle}>
           <div>{review.order.displayId}</div>
           <div>{formatDate(review.createdAt)}</div>
         </div>
       </div>
-      <p style={{ ...messageText, WebkitLineClamp: compact ? 4 : undefined }}>{review.message}</p>
+      <div className="flex items-center gap-2 mb-2" style={verifiedLine}>
+        <TicketCheck size={14} /> Ordine completato / {review.order.totalUnits} g
+      </div>
+      <div className="relative">
+        <Quote size={22} style={quoteMark} />
+        <p style={{ ...messageText, WebkitLineClamp: compact ? 4 : undefined }}>{review.message}</p>
+      </div>
       <div className="flex flex-wrap gap-2 mt-4">
-        {review.products.map(product => <ProductChip key={product.id} product={product} onProductSelect={onProductSelect} />)}
+        {review.products.map((product, index) => <ProductChip key={product.id ?? `${product.name}-${index}`} product={product} onProductSelect={onProductSelect} />)}
       </div>
       <div className="grid grid-cols-2 gap-2 mt-4">
-        <OrderFact label="Ordine" value={`${review.order.totalUnits} g`} />
+        <OrderFact label="Ordine" value={review.order.displayId} />
         <OrderFact label="Totale" value={`EUR ${formatMoney(review.order.total)}`} />
       </div>
     </article>
@@ -122,10 +137,23 @@ function ScreenshotCard({ item, onProductSelect }: { item: ReviewScreenshot; onP
 }
 
 function ProductChip({ product, onProductSelect }: { product: ReviewProduct; onProductSelect: (productId: string) => void }) {
-  return (
-    <button type="button" onClick={() => onProductSelect(product.id)} className="inline-flex items-center gap-2 px-3 py-2" style={productChip}>
+  const content = (
+    <>
       <PackageCheck size={14} />
       <span>{product.name}</span>
+      {product.variantLabels.length > 0 && <small>{product.variantLabels.join(', ')}</small>}
+    </>
+  )
+  if (!product.id) {
+    return (
+      <span className="inline-flex items-center gap-2 px-3 py-2" style={archivedProductChip} title="Prodotto non più presente nel catalogo">
+        {content}
+      </span>
+    )
+  }
+  return (
+    <button type="button" onClick={() => onProductSelect(product.id!)} className="inline-flex items-center gap-2 px-3 py-2" style={productChip}>
+      {content}
     </button>
   )
 }
@@ -149,6 +177,12 @@ function formatMoney(value: number) {
 const panel = { background: '#11181B', border: '1px solid rgba(126,156,168,.18)', borderRadius: 8 }
 const heroPanel = { ...panel, background: 'linear-gradient(135deg, rgba(17,24,27,.98), rgba(30,39,42,.98))' }
 const featurePanel = { ...panel, background: 'rgba(215,254,85,.055)' }
+const reviewPanel = { ...panel, boxShadow: '0 16px 42px rgba(0,0,0,.22)' }
+const cardAccent = { position: 'absolute' as const, left: 0, top: 0, bottom: 0, width: 3, background: '#D7FE55' }
+const heroBadge = { background: 'rgba(215,254,85,.08)', border: '1px solid rgba(215,254,85,.22)', color: '#D7FE55', borderRadius: 8, fontSize: 12, fontWeight: 700 }
+const avatarCircle = { width: 38, height: 38, borderRadius: 8, background: 'rgba(215,254,85,.12)', border: '1px solid rgba(215,254,85,.2)', color: '#D7FE55', fontFamily: 'Orbitron', fontWeight: 800 }
+const verifiedLine = { color: 'rgba(215,254,85,.82)', fontSize: 12, fontWeight: 700 }
+const quoteMark = { position: 'absolute' as const, right: 0, top: -4, color: 'rgba(215,254,85,.16)' }
 const heading = { fontFamily: 'Space Grotesk', fontSize: 'clamp(32px, 6vw, 58px)', lineHeight: 1, fontWeight: 800, letterSpacing: 0 }
 const sectionTitle = { fontFamily: 'Space Grotesk', fontSize: 24, fontWeight: 700 }
 const copy = { color: 'rgba(245,245,245,.63)', fontSize: 14, lineHeight: 1.65, marginTop: 14 }
@@ -157,3 +191,4 @@ const messageText = { color: 'rgba(245,245,245,.86)', fontSize: 14, lineHeight: 
 const metric = { background: 'rgba(8,12,14,.55)', border: '1px solid rgba(126,156,168,.18)', borderRadius: 8, color: 'rgba(245,245,245,.64)', fontSize: 12 }
 const fact = { background: '#080C0E', border: '1px solid rgba(126,156,168,.12)', borderRadius: 8, color: 'rgba(245,245,245,.52)', fontSize: 11 }
 const productChip = { background: 'rgba(215,254,85,.08)', border: '1px solid rgba(215,254,85,.2)', color: '#D7FE55', borderRadius: 8, fontSize: 12 }
+const archivedProductChip = { ...productChip, background: 'rgba(126,156,168,.08)', border: '1px solid rgba(126,156,168,.18)', color: 'rgba(245,245,245,.72)' }

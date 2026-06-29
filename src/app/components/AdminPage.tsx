@@ -1869,8 +1869,8 @@ function FeedbackAdmin({ feedback, screenshots, products, reload }: { feedback: 
       const productId = String(values.get('productId') ?? '')
       const { error } = await db.from('feedback_chat_screenshots').insert({
         product_id: productId || null,
-        customer_label: String(values.get('customerLabel') ?? '').trim(),
-        order_label: String(values.get('orderLabel') ?? '').trim(),
+        customer_label: '',
+        order_label: '',
         message: String(values.get('message') ?? '').trim(),
         storage_path: storagePath,
         status: values.get('publish') === 'on' ? 'published' : 'pending',
@@ -1908,8 +1908,6 @@ function FeedbackAdmin({ feedback, screenshots, products, reload }: { feedback: 
           <option value="">Prodotto collegato (opzionale)</option>
           {products.map(product => <option key={product.id} value={product.id}>{product.name}</option>)}
         </select>
-        <input name="customerLabel" placeholder="Cliente / username" style={input} />
-        <input name="orderLabel" placeholder="Ordine o ultimo acquisto" style={input} />
         <input name="message" placeholder="Nota breve visibile nella pagina" style={input} />
         <label style={{ ...smallButton, cursor: 'pointer', justifyContent: 'center' }}>
           Screenshot chat
@@ -1942,8 +1940,8 @@ function FeedbackAdmin({ feedback, screenshots, products, reload }: { feedback: 
           <div className="grid grid-cols-[92px_1fr] gap-3">
             <ReviewScreenshotPreview storagePath={item.storage_path} />
             <div className="min-w-0">
-              <strong>{item.customer_label || 'Cliente'}</strong>
-              <div style={muted}>{item.order_label || 'Ordine non indicato'} / {feedbackStatusLabel[item.status]}</div>
+              <strong>Screenshot chat</strong>
+              <div style={muted}>{feedbackStatusLabel[item.status]}</div>
               <div style={muted}>{item.products?.name ?? 'Prodotto non collegato'}{item.products?.categories?.name ? ` / ${item.products.categories.name}` : ''}</div>
               {item.message && <p style={{ marginTop: 7 }}>{item.message}</p>}
             </div>
