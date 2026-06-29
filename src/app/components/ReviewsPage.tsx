@@ -106,10 +106,6 @@ function ReviewCard({ review, onProductSelect, compact = false }: { review: Revi
       <div className="flex flex-wrap gap-2 mt-4">
         {review.products.map((product, index) => <ProductChip key={product.id ?? `${product.name}-${index}`} product={product} onProductSelect={onProductSelect} />)}
       </div>
-      <div className="grid grid-cols-2 gap-2 mt-4">
-        <OrderFact label="Ordine" value={review.order.displayId} />
-        <OrderFact label="Quantità" value={`${review.order.totalUnits} g`} />
-      </div>
     </article>
   )
 }
@@ -161,10 +157,6 @@ function Metric({ Icon, value, label }: { Icon: typeof Star; value: string | num
   return <div className="p-3" style={metric}><Icon size={16} style={{ color: '#D7FE55', marginBottom: 9 }} /><strong>{value}</strong><div>{label}</div></div>
 }
 
-function OrderFact({ label, value }: { label: string; value: string }) {
-  return <div className="p-3" style={fact}><span>{label}</span><strong>{value}</strong></div>
-}
-
 function formatDate(value: string) {
   return value ? new Date(value).toLocaleDateString('it-IT') : ''
 }
@@ -184,6 +176,5 @@ const copy = { color: 'rgba(245,245,245,.63)', fontSize: 14, lineHeight: 1.65, m
 const subtle = { color: 'rgba(245,245,245,.52)', fontSize: 12 }
 const messageText = { color: 'rgba(245,245,245,.86)', fontSize: 14, lineHeight: 1.62, whiteSpace: 'pre-wrap' as const, overflowWrap: 'anywhere' as const, display: '-webkit-box', WebkitBoxOrient: 'vertical' as const, overflow: 'hidden' }
 const metric = { background: 'rgba(8,12,14,.55)', border: '1px solid rgba(126,156,168,.18)', borderRadius: 8, color: 'rgba(245,245,245,.64)', fontSize: 12 }
-const fact = { background: '#080C0E', border: '1px solid rgba(126,156,168,.12)', borderRadius: 8, color: 'rgba(245,245,245,.52)', fontSize: 11 }
 const productChip = { background: 'rgba(215,254,85,.08)', border: '1px solid rgba(215,254,85,.2)', color: '#D7FE55', borderRadius: 8, fontSize: 12 }
 const archivedProductChip = { ...productChip, background: 'rgba(126,156,168,.08)', border: '1px solid rgba(126,156,168,.18)', color: 'rgba(245,245,245,.72)' }
